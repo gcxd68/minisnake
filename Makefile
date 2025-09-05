@@ -3,7 +3,7 @@ SRC =		minisnake_core.c \
 
 OBJ =		$(SRC:.c=.o)
 
-NAME =		snake
+NAME =		minisnake
 CC =		cc
 CFLAGS =	-Wall -Wextra -Werror
 
