@@ -1,17 +1,30 @@
-#ifndef SNAKE_H
-# define SNAKE_H
+#ifndef MINISNAKE_H
+# define MINISNAKE_H
 
+# include <fcntl.h>
+# include <signal.h>
 # include <stdio.h>
 # include <stdlib.h>
-# include <unistd.h>
-# include <termios.h>
-# include <fcntl.h>
-# include <time.h>
 # include <sys/ioctl.h>
+# include <termios.h>
+# include <time.h>
+# include <unistd.h>
 
 # define MAX_WIDTH 200
 # define MAX_HEIGHT 50
 # define DELAY 200000
+
+# define CLEAR_SCREEN "\033[2J"
+# define CURSOR_HOME "\033[H"
+# define CURSOR_HIDE "\033[?25l"
+# define CURSOR_SHOW "\033[?25h"
+# define CURSOR_POS "\033[%d;%dH"
+# define COLOR_RED "\033[31m"
+# define COLOR_RESET "\033[0m"
+
+# define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+extern struct termios	g_savedTerm;
 
 typedef enum e_dir {
 	STOP,
@@ -21,12 +34,11 @@ typedef enum e_dir {
 	DOWN
 }	t_dir;
 
-typedef struct s_snake {    
-	struct termios savedTerm;
-	int width, height, fruitX, fruitY, size, grow, score, gameOver;
-	float delay;
-	int x[10001], y[10001];
-	t_dir dir;
+typedef struct s_snake {
+	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
+	float	delay;
+	int		x[10001], y[10001];
+	t_dir	dir;
 }	t_snake;
 
 void	init_game(t_snake *s, char **argv);
