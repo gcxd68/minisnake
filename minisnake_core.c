@@ -4,11 +4,14 @@ struct termios	g_savedTerm;
 
 static void	updateDisplay(t_snake *s) {
 	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
+	const char *corner[] = {"▗", "▘"};
 
 	printf(CURSOR_POS " ", s->y[s->size] + 2, s->x[s->size] + 2);
 	printf(CURSOR_POS "@", s->fruitY + 2, s->fruitX + 2);
-	printf(CURSOR_POS "%s", s->y[0] + 2, s->x[0] + 2, head[s->dir]);
-	if (s->size > 1) printf(CURSOR_POS "▚", s->y[1] + 2, s->x[1] + 2);
+	printf(CURSOR_POS "%s", s->y[0] + 2, s->x[0] + 2, head[s->dir[0]]);
+	if (s->size > 1)
+		printf(CURSOR_POS "%s", s->y[1] + 2, s->x[1] + 2,
+			(s->dir[0] + s->dir[1] == 5) ? corner[(s->dir[0] % 2)] : "▚");
 	printf(CURSOR_POS "%d\n\n\n", s->height + 3, 8, s->score);
 	fflush(stdout);
 }
@@ -25,13 +28,14 @@ static int	kbhit(void) {
 }
 
 static void	handleInput(t_snake *s) {
+	s->dir[1] = s->dir[0];
 	if (!kbhit())
 		return;
 	char input = getchar();
-	if ((input == 'a' || input == 'A') && s->dir != RIGHT) s->dir = LEFT;
-	else if ((input == 'd' || input == 'D') && s->dir != LEFT) s->dir = RIGHT;
-	else if ((input == 'w' || input == 'W') && s->dir != DOWN) s->dir = UP;
-	else if ((input == 's' || input == 'S') && s->dir != UP) s->dir = DOWN;
+	if ((input == 'a' || input == 'A') && s->dir[0] != RIGHT) s->dir[0] = LEFT;
+	else if ((input == 'd' || input == 'D') && s->dir[0] != LEFT) s->dir[0] = RIGHT;
+	else if ((input == 'w' || input == 'W') && s->dir[0] != DOWN) s->dir[0] = UP;
+	else if ((input == 's' || input == 'S') && s->dir[0] != UP) s->dir[0] = DOWN;
 	else if (input == 'x' || input == 'X') s->gameOver = 1;
 }
 
@@ -42,8 +46,8 @@ static void	handleLogic(t_snake *s) {
 		s->x[i] = s->x[i - 1];
 		s->y[i] = s->y[i - 1];
 	}
-	s->x[0] += (s->dir == RIGHT) - (s->dir == LEFT);
-	s->y[0] += (s->dir == DOWN) - (s->dir == UP);
+	s->x[0] += (s->dir[0] == RIGHT) - (s->dir[0] == LEFT);
+	s->y[0] += (s->dir[0] == DOWN) - (s->dir[0] == UP);
 	if (s->x[0] < 0 || s->x[0] == s->width || s->y[0] < 0 || s->y[0] == s->height)
 		s->gameOver = 1;
 	for (int i = 1; i < s->size; i++)

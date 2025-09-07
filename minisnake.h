@@ -40,7 +40,7 @@ typedef struct s_snake {
 	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
 	int		x[10001], y[10001];
 	float	delay;
-	t_dir	dir;
+	t_dir	dir[2];
 }	t_snake;
 
 void	initGame(t_snake *s, char **argv);
