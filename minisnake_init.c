@@ -19,8 +19,8 @@ static void	init_snake(t_snake *s, char **argv) {
 		.delay = DELAY,
 		.size = 1
 	};
-	if (s->height <= 0 || s->width <= 0)
-		fprintf(stderr, "Error: width and height must be positive integers\n"), exit(2);
+	if (s->height < 2 || s->width < 2)
+		fprintf(stderr, "Error: dimensions must be positive integers greater than one\n"), exit(2);
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
 	s->width = MIN(MIN(s->width, ws.ws_col - 2), MAX_WIDTH);
 	s->height = MIN(MIN(s->height, ws.ws_row - 6), MAX_HEIGHT);
@@ -42,11 +42,11 @@ static void	init_terminal() {
 static void	init_display(t_snake *s) {
 	printf(CLEAR_SCREEN CURSOR_HOME CURSOR_HIDE);
 	for (int i = 0; i < s->width + 1; i++)
-		printf("█");
+		printf("░");
 	for (int i = 0; i < s->height * s->width; i++)
-		printf("%s ", (!(i % s->width)) ? "█\n█" : "");
+		printf("%s ", (!(i % s->width)) ? "░\n░" : "");
 	for (int i = 0; i < s->width + 2; i++)
-		printf("%s█", (!i) ? "█\n" : "");
+		printf("%s░", (!i) ? "░\n" : "");
 	printf("\nScore:\nUse WASD to move, X to quit");
 }
 

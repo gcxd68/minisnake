@@ -20,6 +20,7 @@
 # define CURSOR_SHOW "\033[?25h"
 # define CURSOR_POS "\033[%d;%dH"
 # define COLOR_RED "\033[31m"
+# define COLOR_GREEN "\033[32m"
 # define COLOR_RESET "\033[0m"
 
 # define MIN(a, b) ((a) < (b) ? (a) : (b))

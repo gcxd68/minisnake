@@ -9,7 +9,7 @@ static void	update_display(t_snake *s) {
 	printf(CURSOR_POS "@", s->fruitY + 2, s->fruitX + 2);
 	printf(CURSOR_POS "%s", s->y[0] + 2, s->x[0] + 2, head[s->dir]);
 	if (s->size > 1) printf(CURSOR_POS "▚", s->y[1] + 2, s->x[1] + 2);
-	printf(CURSOR_POS "%d\n", s->height + 3, 8, s->score);
+	printf(CURSOR_POS "%d\n\n\n", s->height + 3, 8, s->score);
 	fflush(stdout);
 }
 
@@ -51,10 +51,11 @@ static void	handle_logic(t_snake *s) {
 			s->gameOver = 1;
 	if (s->x[0] != s->fruitX || s->y[0] != s->fruitY)
 		return;
-	spawn_fruit(s);
+	if (s->size < s->width * s->height)
+		spawn_fruit(s);
 	s->grow++;
 	if (!((s->score += 10) % 100) && s->score)
-		s->delay *= 0.9f;
+		s->delay *= 0.8f;
 }
 
 int	main(int argc, char **argv) {
@@ -63,13 +64,14 @@ int	main(int argc, char **argv) {
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./snake width height\n"), 2);
 	init_game(&s, argv);
-	while (!s.gameOver) {
-		update_display(&s);
+	while (!s.gameOver && s.size < s.width * s.height) {
 		handle_input(&s);
 		handle_logic(&s);
+		update_display(&s);
 		usleep(s.delay);
 	}
-	printf(CURSOR_POS COLOR_RED "Game Over!\n" COLOR_RESET CURSOR_SHOW, s.height + 5, 1);
+	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET CURSOR_SHOW, s.height + 4, 1,
+		s.gameOver ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
 	return 0;
 }
