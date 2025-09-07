@@ -55,21 +55,12 @@ static void	handle_logic(t_snake *s) {
 		s->delay *= 0.9f;
 }
 
-static void	handle_sigint(int sig)
-{
-	(void)sig;
-	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
-	write(STDOUT_FILENO, CURSOR_SHOW, 6);
-	exit(1);
-}
-
 int	main(int argc, char **argv) {
 	t_snake	s;
 
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./snake width height\n"), 2);
 	init_game(&s, argv);
-	signal(SIGINT, handle_sigint);
 	while (!s.gameOver) {
 		update_display(&s);
 		handle_input(&s);
