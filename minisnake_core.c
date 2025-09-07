@@ -16,7 +16,7 @@ static void	updateDisplay(t_snake *s) {
 	fflush(stdout);
 }
 
-static int	kbhit(void) {
+static int	keyboardHit(void) {
 	int	ch, oldf;
 
 	oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
@@ -29,7 +29,7 @@ static int	kbhit(void) {
 
 static void	handleInput(t_snake *s) {
 	s->dir[1] = s->dir[0];
-	if (!kbhit())
+	if (!keyboardHit())
 		return;
 	char input = getchar();
 	if ((input == 'a' || input == 'A') && s->dir[0] != RIGHT) s->dir[0] = LEFT;
