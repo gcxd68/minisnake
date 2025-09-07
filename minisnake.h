@@ -36,14 +36,14 @@ typedef enum e_dir {
 	DOWN
 }	t_dir;
 
-typedef struct s_snake {
+typedef struct s_data {
 	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
 	int		x[10001], y[10001];
 	float	delay;
 	t_dir	dir[2];
-}	t_snake;
+}	t_data;
 
-void	initGame(t_snake *s, char **argv);
-void	spawnFruit(t_snake *s);
+void	initGame(t_data *d, char **argv);
+void	spawnFruit(t_data *d);
 
 #endif
