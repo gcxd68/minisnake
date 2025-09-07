@@ -65,7 +65,7 @@ int	main(int argc, char **argv) {
 	t_data d;
 
 	if (argc != 3)
-		return (fprintf(stderr, "Usage: ./snake width height\n"), 2);
+		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
 	initGame(&d, argv);
 	while (!d.gameOver && d.size < d.width * d.height) {
 		handleInput(&d);
