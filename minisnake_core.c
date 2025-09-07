@@ -3,10 +3,12 @@
 struct termios	g_savedTerm;
 
 static void	update_display(t_snake *s) {
+	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
+
 	printf(CURSOR_POS " ", s->y[s->size] + 2, s->x[s->size] + 2);
-	printf(CURSOR_POS "♦", s->fruitY + 2, s->fruitX + 2);
-	printf(CURSOR_POS "●", s->y[0] + 2, s->x[0] + 2);
-	if (s->size > 1) printf(CURSOR_POS "o", s->y[1] + 2, s->x[1] + 2);
+	printf(CURSOR_POS "@", s->fruitY + 2, s->fruitX + 2);
+	printf(CURSOR_POS "%s", s->y[0] + 2, s->x[0] + 2, head[s->dir]);
+	if (s->size > 1) printf(CURSOR_POS "▚", s->y[1] + 2, s->x[1] + 2);
 	printf(CURSOR_POS "%d\n", s->height + 3, 8, s->score);
 	fflush(stdout);
 }

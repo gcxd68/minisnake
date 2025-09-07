@@ -36,8 +36,8 @@ typedef enum e_dir {
 
 typedef struct s_snake {
 	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
-	float	delay;
 	int		x[10001], y[10001];
+	float	delay;
 	t_dir	dir;
 }	t_snake;
 
