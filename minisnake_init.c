@@ -1,6 +1,6 @@
 #include "minisnake.h"
 
-void	spawn_fruit(t_snake *s) {
+void	spawnFruit(t_snake *s) {
 	int	i;
 
 	do {
@@ -10,7 +10,7 @@ void	spawn_fruit(t_snake *s) {
 	} while (i < s->size);
 }
 
-static void	init_snake(t_snake *s, char **argv) {
+static void	initSnake(t_snake *s, char **argv) {
 	struct winsize	ws;
 
 	*s = (t_snake){
@@ -27,10 +27,10 @@ static void	init_snake(t_snake *s, char **argv) {
 	s->x[0] = s->width >> 1;
 	s->y[0] = s->height >> 1;
 	srand(time(NULL));
-	spawn_fruit(s);
+	spawnFruit(s);
 }
 
-static void	init_terminal() {
+static void	initTerminal() {
 	struct termios	gameMode;
 
 	tcgetattr(STDIN_FILENO, &g_savedTerm);
@@ -39,7 +39,7 @@ static void	init_terminal() {
 	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
 }
 
-static void	init_display(t_snake *s) {
+static void	initDisplay(t_snake *s) {
 	printf(CLEAR_SCREEN CURSOR_HOME CURSOR_HIDE);
 	for (int i = 0; i < s->width + 1; i++)
 		printf("░");
@@ -50,16 +50,16 @@ static void	init_display(t_snake *s) {
 	printf("\nScore:\nUse WASD to move, X to quit");
 }
 
-static void handle_sig(int sig) {
+static void handleSig(int sig) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
 	write(STDOUT_FILENO, CURSOR_SHOW, 6);
 	exit(128 + sig);
 }
 
-void	init_game(t_snake *s, char **argv) {
-	init_snake(s, argv);
-	init_display(s);
-	init_terminal();
+void	initGame(t_snake *s, char **argv) {
+	initSnake(s, argv);
+	initDisplay(s);
+	initTerminal();
 	for (size_t i = 0; i < 3; i++)
-		signal(((int[]){SIGINT, SIGQUIT, SIGTERM})[i], handle_sig);
+		signal(((int[]){SIGINT, SIGQUIT, SIGTERM})[i], handleSig);
 }

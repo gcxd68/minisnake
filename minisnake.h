@@ -12,7 +12,8 @@
 
 # define MAX_WIDTH 200
 # define MAX_HEIGHT 50
-# define DELAY 200000
+# define DELAY 250000
+# define SPEEDUP_FACTOR 0.985f
 
 # define CLEAR_SCREEN "\033[2J"
 # define CURSOR_HOME "\033[H"
@@ -42,7 +43,7 @@ typedef struct s_snake {
 	t_dir	dir;
 }	t_snake;
 
-void	init_game(t_snake *s, char **argv);
-void	spawn_fruit(t_snake *s);
+void	initGame(t_snake *s, char **argv);
+void	spawnFruit(t_snake *s);
 
 #endif

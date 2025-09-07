@@ -2,7 +2,7 @@
 
 struct termios	g_savedTerm;
 
-static void	update_display(t_snake *s) {
+static void	updateDisplay(t_snake *s) {
 	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
 
 	printf(CURSOR_POS " ", s->y[s->size] + 2, s->x[s->size] + 2);
@@ -24,7 +24,7 @@ static int	kbhit(void) {
 	return (ch != EOF) ? 1 : 0;
 }
 
-static void	handle_input(t_snake *s) {
+static void	handleInput(t_snake *s) {
 	if (!kbhit())
 		return;
 	char input = getchar();
@@ -35,7 +35,7 @@ static void	handle_input(t_snake *s) {
 	else if (input == 'x' || input == 'X') s->gameOver = 1;
 }
 
-static void	handle_logic(t_snake *s) {
+static void	handleLogic(t_snake *s) {
 	if (s->grow && s->grow--)
 		s->size++;
 	for (int i = s->size; i > 0; i--) {
@@ -52,10 +52,10 @@ static void	handle_logic(t_snake *s) {
 	if (s->x[0] != s->fruitX || s->y[0] != s->fruitY)
 		return;
 	if (s->size < s->width * s->height)
-		spawn_fruit(s);
+		spawnFruit(s);
 	s->grow++;
-	if (!((s->score += 10) % 100) && s->score)
-		s->delay *= 0.8f;
+	s->score += 10;
+	s->delay *= SPEEDUP_FACTOR;
 }
 
 int	main(int argc, char **argv) {
@@ -63,11 +63,11 @@ int	main(int argc, char **argv) {
 
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./snake width height\n"), 2);
-	init_game(&s, argv);
+	initGame(&s, argv);
 	while (!s.gameOver && s.size < s.width * s.height) {
-		handle_input(&s);
-		handle_logic(&s);
-		update_display(&s);
+		handleInput(&s);
+		handleLogic(&s);
+		updateDisplay(&s);
 		usleep(s.delay);
 	}
 	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET CURSOR_SHOW, s.height + 4, 1,
