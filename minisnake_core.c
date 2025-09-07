@@ -2,19 +2,6 @@
 
 struct termios	g_savedTerm;
 
-static void	updateDisplay(t_snake *s) {
-	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
-	const char *corner[] = {"▗", "▘"};
-
-	printf(CURSOR_POS " ", s->y[s->size] + 2, s->x[s->size] + 2);
-	printf(CURSOR_POS "@", s->fruitY + 2, s->fruitX + 2);
-	printf(CURSOR_POS "%s", s->y[0] + 2, s->x[0] + 2, head[s->dir[0]]);
-	if (s->size > 1) printf(CURSOR_POS "%s", s->y[1] + 2, s->x[1] + 2,
-		(s->dir[0] + s->dir[1] == 5) ? corner[(s->dir[0] % 2)] : "▚");
-	printf(CURSOR_POS "%d\n\n\n", s->height + 3, 8, s->score);
-	fflush(stdout);
-}
-
 static int	keyboardHit(void) {
 	int	ch, oldf;
 
@@ -59,6 +46,19 @@ static void	handleLogic(t_snake *s) {
 	s->grow++;
 	s->score += 10;
 	s->delay *= SPEEDUP_FACTOR;
+}
+
+static void	updateDisplay(t_snake *s) {
+	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
+	const char *corner[] = {"▗", "▘"};
+
+	printf(CURSOR_POS " ", s->y[s->size] + 2, s->x[s->size] + 2);
+	printf(CURSOR_POS "@", s->fruitY + 2, s->fruitX + 2);
+	printf(CURSOR_POS "%s", s->y[0] + 2, s->x[0] + 2, head[s->dir[0]]);
+	if (s->size > 1) printf(CURSOR_POS "%s", s->y[1] + 2, s->x[1] + 2,
+		(s->dir[0] + s->dir[1] == 5) ? corner[(s->dir[0] % 2)] : "▚");
+	printf(CURSOR_POS "%d\n\n\n", s->height + 3, 8, s->score);
+	fflush(stdout);
 }
 
 int	main(int argc, char **argv) {
