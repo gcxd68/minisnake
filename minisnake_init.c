@@ -41,7 +41,7 @@ static void	initTerminal() {
 
 static void	initDisplay(t_data *d) {
 	printf(CLEAR_SCREEN CURSOR_HOME CURSOR_HIDE);
-	for (int i = 0; i < d->width + 1; i++)
+	for (int i = 0; i <= d->width; i++)
 		printf("░");
 	for (int i = 0; i < d->height * d->width; i++)
 		printf("%s ", (!(i % d->width)) ? "░\n░" : "");
