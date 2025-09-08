@@ -9,16 +9,6 @@ static void	initTerminal() {
 	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
 }
 
-void	spawnFruit(t_data *d) {
-	int	i;
-
-	do {
-		d->fruitX = rand() % d->width;
-		d->fruitY = rand() % d->height;
-		for (i = 0; i < d->size && !(d->x[i] == d->fruitX && d->y[i] == d->fruitY); i++);
-	} while (i < d->size);
-}
-
 static void	initSnake(t_data *d, char **argv) {
 	struct winsize	ws;
 

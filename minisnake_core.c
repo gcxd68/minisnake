@@ -20,6 +20,16 @@ static void	handleInput(t_data *d) {
 	}
 }
 
+void	spawnFruit(t_data *d) {
+	int	i;
+
+	do {
+		d->fruitX = rand() % d->width;
+		d->fruitY = rand() % d->height;
+		for (i = 0; i < d->size && !(d->x[i] == d->fruitX && d->y[i] == d->fruitY); i++);
+	} while (i < d->size);
+}
+
 static void	handleLogic(t_data *d) {
 	if (d->grow && d->grow--)
 		d->size++;
