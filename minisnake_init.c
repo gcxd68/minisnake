@@ -1,5 +1,14 @@
 #include "minisnake.h"
 
+static void	initTerminal() {
+	struct termios	gameMode;
+
+	tcgetattr(STDIN_FILENO, &g_savedTerm);
+	gameMode = g_savedTerm;
+	gameMode.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
+}
+
 void	spawnFruit(t_data *d) {
 	int	i;
 
@@ -30,15 +39,6 @@ static void	initSnake(t_data *d, char **argv) {
 	spawnFruit(d);
 }
 
-static void	initTerminal() {
-	struct termios	gameMode;
-
-	tcgetattr(STDIN_FILENO, &g_savedTerm);
-	gameMode = g_savedTerm;
-	gameMode.c_lflag &= ~(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
-}
-
 static void	initDisplay(t_data *d) {
 	printf(CLEAR_SCREEN CURSOR_HOME CURSOR_HIDE);
 	for (int i = 0; i <= d->width; i++)
@@ -57,9 +57,9 @@ static void handleSig(int sig) {
 }
 
 void	initGame(t_data *d, char **argv) {
+	initTerminal();
 	initSnake(d, argv);
 	initDisplay(d);
-	initTerminal();
 	for (size_t i = 0; i < 3; i++)
 		signal(((int[]){SIGINT, SIGQUIT, SIGTERM})[i], handleSig);
 }
