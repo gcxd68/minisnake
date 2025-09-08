@@ -25,8 +25,8 @@ static void	initSnake(t_data *d, char **argv) {
 	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
 	d->height = MIN(MIN(d->height, ws.ws_row - 6), MAX_HEIGHT);
 	srand(time(NULL));
-	d->x[0] = (d->width >> 1) - rand() % (!(d->width % 2) + 1);
-	d->y[0] = (d->height >> 1) - rand() % (!(d->height % 2) + 1);
+	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
+	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
 	spawnFruit(d);
 }
 
