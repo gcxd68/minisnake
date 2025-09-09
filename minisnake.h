@@ -1,6 +1,7 @@
 #ifndef MINISNAKE_H
 # define MINISNAKE_H
 
+# include <ctype.h>
 # include <fcntl.h>
 # include <signal.h>
 # include <stdio.h>
@@ -38,8 +39,8 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
-	int		x[10001], y[10001];
+	int		width, height, qSize, fruitX, fruitY, sSize, grow, score, gameOver;
+	int		x[10001], y[10001], inputQueue[2];
 	float	delay;
 	t_dir	dir[2];
 }	t_data;

@@ -15,8 +15,9 @@ static void	initSnake(t_data *d, char **argv) {
 	*d = (t_data){
 		.width = atoi(argv[1]),
 		.height = atoi(argv[2]),
+		.inputQueue = {EOF, EOF},
 		.delay = DELAY,
-		.size = 1
+		.sSize = 1
 	};
 	if (d->height < 2 || d->width < 2)
 		fprintf(stderr, "Error: dimensions must be positive integers greater than one\n"), exit(2);
