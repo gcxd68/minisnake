@@ -3,26 +3,25 @@
 struct termios	g_savedTerm;
 
 static void	handleInput(t_data *d) {
-	int oldf = fcntl(STDIN_FILENO, F_GETFL, 0), c;
-	t_dir dirs[] = {LEFT, UP, RIGHT, DOWN};
-	char keys[] = "awds";
-	char *pos;
+	const char	keys[] = "adws";
+	char		*pos;
+	int			c;
 
 	d->dir[1] = d->dir[0];
+	int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
 	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
-	while ((c = getchar()) != EOF && d->qSize < 2)
-		if (tolower(c) == 'x' || strchr(keys, tolower(c)))
+	while ((c = getchar()) != EOF)
+		if (d->qSize < 2)
 			d->inputQueue[d->qSize++] = c;
-	while (getchar() != EOF);
 	fcntl(STDIN_FILENO, F_SETFL, oldf);
 	if (!d->qSize) return;
-	if (tolower(d->inputQueue[0]) == 'x')
+	if (tolower(*d->inputQueue) == 'x')
 		d->gameOver = 1;
-	else if ((pos = strchr(keys, tolower(d->inputQueue[0]))))
-		if ((dirs[pos - keys] + 1) >> 1 != (d->dir[0] + 1) >> 1)
-			d->dir[0] = dirs[pos - keys];
-	d->inputQueue[0] = d->inputQueue[1];
-	d->inputQueue[1] = EOF;
+	else if ((pos = strchr(keys, tolower(*d->inputQueue))))
+		if ((pos - keys + 2) >> 1 != (d->dir[0] + 1) >> 1)
+			d->dir[0] = (t_dir)(pos - keys + 1);
+	for (int i = 0; i < 2; i++)
+		d->inputQueue[i] = d->inputQueue[i + 1];
 	d->qSize--;
 }
 

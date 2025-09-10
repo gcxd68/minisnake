@@ -15,12 +15,12 @@ static void	initSnake(t_data *d, char **argv) {
 	*d = (t_data){
 		.width = atoi(argv[1]),
 		.height = atoi(argv[2]),
-		.inputQueue = {EOF, EOF},
 		.delay = DELAY,
 		.sSize = 1
 	};
 	if (d->height < 2 || d->width < 2)
 		fprintf(stderr, "Error: dimensions must be positive integers greater than one\n"), exit(2);
+	memset(d->inputQueue, EOF, sizeof(d->inputQueue));
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
 	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
 	d->height = MIN(MIN(d->height, ws.ws_row - 6), MAX_HEIGHT);
