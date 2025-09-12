@@ -27,7 +27,7 @@
 # define COLOR_GREEN "\033[32m"
 # define COLOR_RESET "\033[0m"
 
-# define MIN(a, b) ((a) < (b) ? (a) : (b))
+# define MIN(a, b) (a < b ? a : b)
 
 typedef enum e_dir {
 	STOP,
