@@ -14,7 +14,7 @@
 
 # define MAX_WIDTH 200
 # define MAX_HEIGHT 50
-# define DELAY 250000
+# define INITIAL_DELAY 250000
 # define SPEEDUP_FACTOR 0.985f
 # define INPUT_QUEUE_SIZE 2
 

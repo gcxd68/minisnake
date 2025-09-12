@@ -2,7 +2,7 @@
 
 static void	handleInput(t_data *d) {
 	const char	keys[] = "adws";
-	static char inputQ[INPUT_QUEUE_SIZE + 1] = {[INPUT_QUEUE_SIZE] = EOF};
+	static char	inputQ[INPUT_QUEUE_SIZE + 1] = {[INPUT_QUEUE_SIZE] = EOF};
 	static int	qSize = 0;
 	char		*pos;
 	int			c;

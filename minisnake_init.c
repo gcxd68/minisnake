@@ -1,7 +1,7 @@
 #include "minisnake.h"
 
 struct termios	g_savedTerm;
-int				g_savedFlags;
+int				g_savedStdinFlags;
 
 static void	initTerminal() {
 	struct termios	gameMode;
@@ -13,8 +13,8 @@ static void	initTerminal() {
 }
 
 static void	initInput() {
-	g_savedFlags = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, g_savedFlags | O_NONBLOCK);
+	g_savedStdinFlags = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags | O_NONBLOCK);
 }
 
 static void	initGame(t_data *d, char **argv) {
@@ -23,7 +23,7 @@ static void	initGame(t_data *d, char **argv) {
 	*d = (t_data){
 		.width = atoi(argv[1]),
 		.height = atoi(argv[2]),
-		.delay = DELAY,
+		.delay = INITIAL_DELAY,
 		.sSize = 1
 	};
 	if (d->height < 2 || d->width < 2)
@@ -50,7 +50,7 @@ static void	initDisplay(t_data *d) {
 
 void	cleanup(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
-	fcntl(STDIN_FILENO, F_SETFL, g_savedFlags);
+	fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags);
 	write(STDOUT_FILENO, CURSOR_SHOW, 6);
 }
 
