@@ -1,28 +1,24 @@
 #include "minisnake.h"
 
-struct termios	g_savedTerm;
-
 static void	handleInput(t_data *d) {
 	const char	keys[] = "adws";
+	static char inputQ[INPUT_QUEUE_SIZE + 1] = {[INPUT_QUEUE_SIZE] = EOF};
+	static int	qSize = 0;
 	char		*pos;
 	int			c;
 
 	d->dir[1] = d->dir[0];
-	int oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
 	while ((c = getchar()) != EOF)
-		if (d->qSize < 2)
-			d->inputQueue[d->qSize++] = c;
-	fcntl(STDIN_FILENO, F_SETFL, oldf);
-	if (!d->qSize) return;
-	if (tolower(*d->inputQueue) == 'x')
+		if (qSize < INPUT_QUEUE_SIZE)
+			inputQ[qSize++] = c;
+	if (!qSize) return;
+	if (tolower(*inputQ) == 'x')
 		d->gameOver = 1;
-	else if ((pos = strchr(keys, tolower(*d->inputQueue))))
+	else if ((pos = strchr(keys, tolower(*inputQ))))
 		if ((pos - keys + 2) >> 1 != (d->dir[0] + 1) >> 1)
 			d->dir[0] = (t_dir)(pos - keys + 1);
-	for (int i = 0; i < 2; i++)
-		d->inputQueue[i] = d->inputQueue[i + 1];
-	d->qSize--;
+	memmove(inputQ, inputQ + 1, INPUT_QUEUE_SIZE);
+	qSize--;
 }
 
 void	spawnFruit(t_data *d) {
@@ -36,7 +32,9 @@ void	spawnFruit(t_data *d) {
 }
 
 static void	handleLogic(t_data *d) {
-	if (d->grow && d->grow--)
+	static int	grow = 0;
+
+	if (grow && grow--)
 		d->sSize++;
 	for (int i = d->sSize; i; i--) {
 		d->x[i] = d->x[i - 1];
@@ -53,7 +51,7 @@ static void	handleLogic(t_data *d) {
 		return;
 	if (d->sSize < d->width * d->height)
 		spawnFruit(d);
-	d->grow++;
+	grow++;
 	d->score += 10;
 	d->delay *= SPEEDUP_FACTOR;
 }
@@ -73,19 +71,19 @@ static void	updateDisplay(t_data *d) {
 }
 
 int	main(int argc, char **argv) {
-	t_data d;
+	t_data	d;
 
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
-	initGame(&d, argv);
+	init(&d, argv);
 	while (!d.gameOver && d.sSize < d.width * d.height) {
 		handleInput(&d);
 		handleLogic(&d);
 		updateDisplay(&d);
 		usleep(d.delay);
 	}
-	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET CURSOR_SHOW, d.height + 4, 1,
+	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET, d.height + 4, 1,
 		d.gameOver ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
-	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
+	cleanup();
 	return 0;
 }

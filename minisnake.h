@@ -16,6 +16,7 @@
 # define MAX_HEIGHT 50
 # define DELAY 250000
 # define SPEEDUP_FACTOR 0.985f
+# define INPUT_QUEUE_SIZE 2
 
 # define CLEAR_SCREEN "\033[2J"
 # define CURSOR_HOME "\033[H"
@@ -28,8 +29,6 @@
 
 # define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-extern struct termios	g_savedTerm;
-
 typedef enum e_dir {
 	STOP,
 	LEFT,
@@ -39,13 +38,14 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int		width, height, qSize, fruitX, fruitY, sSize, grow, score, gameOver;
-	int		x[10001], y[10001], inputQueue[3];
+	int		width, height, fruitX, fruitY, sSize, score, gameOver;
+	int		x[10001], y[10001];
 	float	delay;
 	t_dir	dir[2];
 }	t_data;
 
-void	initGame(t_data *d, char **argv);
+void	init(t_data *d, char **argv);
 void	spawnFruit(t_data *d);
+void	cleanup(void);
 
 #endif

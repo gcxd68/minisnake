@@ -1,5 +1,8 @@
 #include "minisnake.h"
 
+struct termios	g_savedTerm;
+int				g_savedFlags;
+
 static void	initTerminal() {
 	struct termios	gameMode;
 
@@ -9,7 +12,12 @@ static void	initTerminal() {
 	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
 }
 
-static void	initSnake(t_data *d, char **argv) {
+static void	initInput() {
+	g_savedFlags = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, g_savedFlags | O_NONBLOCK);
+}
+
+static void	initGame(t_data *d, char **argv) {
 	struct winsize	ws;
 
 	*d = (t_data){
@@ -20,7 +28,6 @@ static void	initSnake(t_data *d, char **argv) {
 	};
 	if (d->height < 2 || d->width < 2)
 		fprintf(stderr, "Error: dimensions must be positive integers greater than one\n"), exit(2);
-	memset(d->inputQueue, EOF, sizeof(d->inputQueue));
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
 	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
 	d->height = MIN(MIN(d->height, ws.ws_row - 6), MAX_HEIGHT);
@@ -41,15 +48,21 @@ static void	initDisplay(t_data *d) {
 	printf("\nScore:\nUse WASD to move, X to quit");
 }
 
-static void handleSig(int sig) {
+void	cleanup(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
+	fcntl(STDIN_FILENO, F_SETFL, g_savedFlags);
 	write(STDOUT_FILENO, CURSOR_SHOW, 6);
+}
+
+static void handleSig(int sig) {
+	cleanup();
 	exit(128 + sig);
 }
 
-void	initGame(t_data *d, char **argv) {
+void	init(t_data *d, char **argv) {
 	initTerminal();
-	initSnake(d, argv);
+	initInput();
+	initGame(d, argv);
 	initDisplay(d);
 	for (size_t i = 0; i < 3; i++)
 		signal(((int[]){SIGINT, SIGQUIT, SIGTERM})[i], handleSig);
