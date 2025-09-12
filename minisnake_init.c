@@ -1,22 +1,5 @@
 #include "minisnake.h"
 
-struct termios	g_savedTerm;
-int				g_savedStdinFlags;
-
-static void	initTerminal() {
-	struct termios	gameMode;
-
-	tcgetattr(STDIN_FILENO, &g_savedTerm);
-	gameMode = g_savedTerm;
-	gameMode.c_lflag &= ~(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
-}
-
-static void	initInput() {
-	g_savedStdinFlags = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags | O_NONBLOCK);
-}
-
 static void	initGame(t_data *d, char **argv) {
 	struct winsize	ws;
 
@@ -35,6 +18,24 @@ static void	initGame(t_data *d, char **argv) {
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
 	spawnFruit(d);
+}
+
+struct termios	g_savedTerm;
+
+static void	initTerminal() {
+	struct termios	gameMode;
+
+	tcgetattr(STDIN_FILENO, &g_savedTerm);
+	gameMode = g_savedTerm;
+	gameMode.c_lflag &= ~(ICANON | ECHO);
+	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
+}
+
+int	g_savedStdinFlags;
+
+static void	initInput() {
+	g_savedStdinFlags = fcntl(STDIN_FILENO, F_GETFL, 0);
+	fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags | O_NONBLOCK);
 }
 
 static void	initDisplay(t_data *d) {
@@ -60,9 +61,9 @@ static void handleSig(int sig) {
 }
 
 void	init(t_data *d, char **argv) {
+	initGame(d, argv);
 	initTerminal();
 	initInput();
-	initGame(d, argv);
 	initDisplay(d);
 	for (size_t i = 0; i < 3; i++)
 		signal(((int[]){SIGINT, SIGQUIT, SIGTERM})[i], handleSig);
