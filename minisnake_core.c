@@ -2,23 +2,21 @@
 
 static void	handleInput(t_data *d) {
 	const char	keys[] = "adws";
-	static char	inputQ[INPUT_QUEUE_SIZE + 1] = {[INPUT_QUEUE_SIZE] = EOF};
-	static int	qSize = 0;
 	char		*pos;
-	int			c;
+	int			c, i;
 
 	d->dir[1] = d->dir[0];
+	for (i = 0; d->inputQ[i] != EOF; i++);
 	while ((c = getchar()) != EOF)
-		if (qSize < INPUT_QUEUE_SIZE)
-			inputQ[qSize++] = c;
-	if (!qSize) return;
-	if (tolower(*inputQ) == 'x')
+		if (i < INPUT_QUEUE_SIZE)
+			d->inputQ[i++] = c;
+	if (tolower(d->inputQ[0]) == 'x')
 		d->gameOver = 1;
-	else if ((pos = strchr(keys, tolower(*inputQ))))
+	else if ((pos = strchr(keys, tolower(d->inputQ[0]))))
 		if ((pos - keys + 2) >> 1 != (d->dir[0] + 1) >> 1)
-			d->dir[0] = (t_dir)(pos - keys + 1);
-	memmove(inputQ, inputQ + 1, INPUT_QUEUE_SIZE);
-	qSize--;
+			d->dir[0] = pos - keys + 1;
+	for (i = 0; i < INPUT_QUEUE_SIZE; i++)
+		d->inputQ[i] = d->inputQ[i + 1];
 }
 
 void	spawnFruit(t_data *d) {

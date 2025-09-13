@@ -23,6 +23,7 @@ static void	initGame(t_data *d) {
 
 	d->delay = INITIAL_DELAY;
 	d->sSize = 1;
+	memset(d->inputQ, EOF, sizeof(d->inputQ));
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
 	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
 	d->height = MIN(MIN(d->height, ws.ws_row - 6), MAX_HEIGHT);
