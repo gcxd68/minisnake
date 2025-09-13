@@ -34,10 +34,8 @@ static void	handleLogic(t_data *d) {
 
 	if (grow && grow--)
 		d->sSize++;
-	for (int i = d->sSize; i; i--) {
-		d->x[i] = d->x[i - 1];
-		d->y[i] = d->y[i - 1];
-	}
+	memmove(d->x + 1, d->x, d->sSize * sizeof(*d->x));
+	memmove(d->y + 1, d->y, d->sSize * sizeof(*d->y));
 	d->x[0] += (d->dir[0] == RIGHT) - (d->dir[0] == LEFT);
 	d->y[0] += (d->dir[0] == DOWN) - (d->dir[0] == UP);
 	if (d->x[0] < 0 || d->x[0] == d->width || d->y[0] < 0 || d->y[0] == d->height)

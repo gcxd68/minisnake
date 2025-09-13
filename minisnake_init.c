@@ -21,8 +21,8 @@ static void	initInput() {
 static void	initGame(t_data *d) {
 	struct winsize	ws;
 
-	d->delay = INITIAL_DELAY;
 	d->sSize = 1;
+	d->delay = INITIAL_DELAY;
 	memset(d->inputQ, EOF, sizeof(d->inputQ));
 	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
 	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
