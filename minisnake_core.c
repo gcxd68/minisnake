@@ -1,6 +1,6 @@
 #include "minisnake.h"
 
-static void	handleInput(t_data *d) {
+static void	processInput(t_data *d) {
 	const char	keys[] = "adws";
 	char		*pos;
 	int			c, i;
@@ -29,7 +29,7 @@ void	spawnFruit(t_data *d) {
 	} while (i < d->sSize);
 }
 
-static void	handleLogic(t_data *d) {
+static void	updateGame(t_data *d) {
 	static int	grow = 0;
 
 	if (grow && grow--)
@@ -52,7 +52,7 @@ static void	handleLogic(t_data *d) {
 	d->delay *= SPEEDUP_FACTOR;
 }
 
-static void	updateDisplay(t_data *d) {
+static void	render(t_data *d) {
 	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
 	const char *corner[] = {"▗", "▘"};
 
@@ -74,15 +74,15 @@ int	main(int argc, char **argv) {
 	d = (t_data){.width = atoi(argv[1]), .height = atoi(argv[2])};
 	if (d.height < 2 || d.width < 2)
 		return(fprintf(stderr, "Error: dimensions must be positive integers greater than 1\n"), 2);
-	init(&d);
+	initialize(&d);
 	while (!d.gameOver && d.sSize < d.width * d.height) {
-		handleInput(&d);
-		handleLogic(&d);
-		updateDisplay(&d);
+		processInput(&d);
+		updateGame(&d);
+		render(&d);
 		usleep(d.delay);
 	}
 	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET, d.height + 4, 1,
 		d.gameOver ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
-		cleanup();
+	cleanup();
 	return 0;
 }

@@ -44,7 +44,7 @@ typedef struct s_data {
 	t_dir	dir[2];
 }	t_data;
 
-void	init(t_data *d);
+void	initialize(t_data *d);
 void	spawnFruit(t_data *d);
 void	cleanup(void);
 
