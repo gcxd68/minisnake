@@ -75,7 +75,10 @@ int	main(int argc, char **argv) {
 
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
-	init(&d, argv);
+	d = (t_data){.width = atoi(argv[1]), .height = atoi(argv[2])};
+	if (d.height < 2 || d.width < 2)
+		return(fprintf(stderr, "Error: dimensions must be positive integers greater than 1\n"), 2);
+	init(&d);
 	while (!d.gameOver && d.sSize < d.width * d.height) {
 		handleInput(&d);
 		handleLogic(&d);
@@ -84,6 +87,6 @@ int	main(int argc, char **argv) {
 	}
 	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET, d.height + 4, 1,
 		d.gameOver ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
-	cleanup();
+		cleanup();
 	return 0;
 }
