@@ -24,7 +24,7 @@ static void adjustDimensions(t_data *d) {
 }
 
 static void	initGame(t_data *d) {
-	d->sSize = 1;
+	d->size = 1;
 	d->delay = INITIAL_DELAY;
 	memset(d->inputQ, EOF, sizeof(d->inputQ));
 	srand(time(NULL));

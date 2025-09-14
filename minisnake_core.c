@@ -25,29 +25,29 @@ void	spawnFruit(t_data *d) {
 	do {
 		d->fruitX = rand() % d->width;
 		d->fruitY = rand() % d->height;
-		for (i = 0; i < d->sSize && !(d->x[i] == d->fruitX && d->y[i] == d->fruitY); i++);
-	} while (i < d->sSize);
+		for (i = 0; i < d->size && !(d->x[i] == d->fruitX && d->y[i] == d->fruitY); i++);
+	} while (i < d->size);
 }
 
 static void	updateGame(t_data *d) {
 	static int	grow = 0;
 
 	if (grow && grow--)
-		d->sSize++;
-	memmove(d->x + 1, d->x, d->sSize * sizeof(*d->x));
-	memmove(d->y + 1, d->y, d->sSize * sizeof(*d->y));
+		d->size++;
+	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
+	memmove(d->y + 1, d->y, d->size * sizeof(*d->y));
 	d->x[0] += (d->dir[0] == RIGHT) - (d->dir[0] == LEFT);
 	d->y[0] += (d->dir[0] == DOWN) - (d->dir[0] == UP);
 	if (d->x[0] < 0 || d->x[0] == d->width || d->y[0] < 0 || d->y[0] == d->height)
 		d->gameOver = 1;
-	for (int i = 1; i < d->sSize; i++)
+	for (int i = 1; i < d->size; i++)
 		if (d->x[i] == d->x[0] && d->y[i] == d->y[0])
 			d->gameOver = 1;
 	if (d->x[0] != d->fruitX || d->y[0] != d->fruitY)
 		return;
-	if (d->sSize < d->width * d->height)
+	if (d->size < d->width * d->height)
 		spawnFruit(d);
-	grow++;
+	grow = 1;
 	d->score += 10;
 	d->delay *= SPEEDUP_FACTOR;
 }
@@ -56,9 +56,9 @@ static void	render(t_data *d) {
 	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
 	const char *corner[] = {"▗", "▘"};
 
-	printf(CURSOR_POS " ", d->y[d->sSize] + 2, d->x[d->sSize] + 2);
+	printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
 	printf(CURSOR_POS "@", d->fruitY + 2, d->fruitX + 2);
-	if (d->sSize > 1)
+	if (d->size > 1)
 		printf(CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? corner[(d->dir[0] % 2)] : "▚");
 	printf(CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, head[d->dir[0]]);
@@ -75,7 +75,7 @@ int	main(int argc, char **argv) {
 	if (d.height < 2 || d.width < 2)
 		return(fprintf(stderr, "Error: dimensions must be positive integers greater than 1\n"), 2);
 	initialize(&d);
-	while (!d.gameOver && d.sSize < d.width * d.height) {
+	while (!d.gameOver && d.size < d.width * d.height) {
 		processInput(&d);
 		updateGame(&d);
 		render(&d);

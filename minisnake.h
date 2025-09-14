@@ -38,7 +38,7 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int		width, height, fruitX, fruitY, sSize, score, gameOver;
+	int		width, height, fruitX, fruitY, size, score, gameOver;
 	int		x[10001], y[10001], inputQ[INPUT_QUEUE_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
