@@ -30,9 +30,7 @@ void	spawnFruit(t_data *d) {
 }
 
 static void	updateGame(t_data *d) {
-	static int	grow = 0;
-
-	if (grow && grow--)
+	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
 	memmove(d->y + 1, d->y, d->size * sizeof(*d->y));
@@ -47,23 +45,28 @@ static void	updateGame(t_data *d) {
 		return;
 	if (d->size < d->width * d->height)
 		spawnFruit(d);
-	grow = 1;
+	if (!d->dir[0])
+		return;
+	d->grow = 1;
 	d->score += 10;
 	d->delay *= SPEEDUP_FACTOR;
 }
 
 static void	render(t_data *d) {
-	const char *head[] = {"🭎", "🭨", "🭪", "🭩", "🭫"};
+	const char *head[] = {"🭨", "🭪", "🭩", "🭫"};
 	const char *corner[] = {"▗", "▘"};
 
+	if (!d->dir[0])
+		return;
 	printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
-	printf(CURSOR_POS "@", d->fruitY + 2, d->fruitX + 2);
 	if (d->size > 1)
 		printf(CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? corner[(d->dir[0] % 2)] : "▚");
-	printf(CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, head[d->dir[0]]);
-	printf(CURSOR_POS "%d\n\n\n", d->height + 3, 8, d->score);
-	fflush(stdout);
+	printf(CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, head[d->dir[0] - 1]);
+	if (d->grow)
+		printf(CURSOR_POS "@" CURSOR_POS "%d",
+			d->fruitY + 2, d->fruitX + 2, d->height + 3, 8, d->score);
+	printf(CURSOR_POS "\n", d->height + 4, 1);
 }
 
 int	main(int argc, char **argv) {

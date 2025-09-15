@@ -12,7 +12,7 @@ static void	setupIO() {
 	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
 	g_savedStdinFlags = fcntl(STDIN_FILENO, F_GETFL, 0);
 	fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags | O_NONBLOCK);
-	printf(CLEAR_SCREEN CURSOR_HOME CURSOR_HIDE);
+	printf(CLEAR_SCREEN CURSOR_HIDE);
 }
 
 static void adjustDimensions(t_data *d) {
@@ -34,13 +34,13 @@ static void	initGame(t_data *d) {
 }
 
 static void	setupDisplay(t_data *d) {
-	for (int i = 0; i <= d->width; i++)
-		printf("░");
-	for (int i = 0; i < d->height * d->width; i++)
-		printf("%s ", (!(i % d->width)) ? "░\n░" : "");
-	for (int i = 0; i < d->width + 2; i++)
-		printf("%s░", (!i) ? "░\n" : "");
-	printf("\nScore:\nUse WASD to move, X to quit");
+	printf(CURSOR_POS "@", d->fruitY + 2, d->fruitX + 2);
+	printf(CURSOR_POS "🭎", d->y[0] + 2, d->x[0] + 2);
+	for (int y = 2; y <= d->height + 1; y++)
+		printf(CURSOR_POS "░" CURSOR_POS "░", y, 1, y, d->width + 2);
+	for (int x = 1; x <= d->width + 2; x++)
+		printf(CURSOR_POS "░" CURSOR_POS "░", 1, x, d->height + 2, x);
+	printf("\nScore: 0\nUse WASD to move, X to quit\n");
 }
 
 void	cleanup(void) {

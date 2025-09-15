@@ -19,7 +19,6 @@
 # define INPUT_QUEUE_SIZE 2
 
 # define CLEAR_SCREEN "\033[2J"
-# define CURSOR_HOME "\033[H"
 # define CURSOR_HIDE "\033[?25l"
 # define CURSOR_SHOW "\033[?25h"
 # define CURSOR_POS "\033[%d;%dH"
@@ -38,7 +37,7 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int		width, height, fruitX, fruitY, size, score, gameOver;
+	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
 	int		x[10001], y[10001], inputQ[INPUT_QUEUE_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
