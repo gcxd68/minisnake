@@ -5,8 +5,8 @@ static void adjustDimensions(t_data *d) {
 
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
 		perror("minisnake: ioctl failed"), exit(EXIT_FAILURE);
-	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
-	d->height = MIN(MIN(d->height, ws.ws_row - 6), MAX_HEIGHT);
+	d->width = MIN(d->width, ws.ws_col - 2);
+	d->height = MIN(d->height, ws.ws_row - 6);
 }
 
 struct termios	g_savedTerm;

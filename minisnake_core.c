@@ -72,14 +72,20 @@ static void	render(t_data *d) {
 
 int	main(int argc, char **argv) {
 	t_data	d;
+	char	*endptr;
+	int		error = 0;
 
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
 	errno = 0;
-	char *end_w, *end_h;
-	long width = strtol(argv[1], &end_w, 10), height = strtol(argv[2], &end_h, 10);
-	if (*end_w || *end_h || errno == ERANGE	|| width > INT_MAX || height > INT_MAX || width < 2 || height < 2)
-		return (fprintf(stderr, "minisnake: dimensions must be positive integers greater than 1\n"), 2);
+	long width = strtol(argv[1], &endptr, 10);
+	if (*endptr || errno == ERANGE || width < 2 || width > MAX_WIDTH)
+		error = fprintf(stderr, "minisnake: width must be an integer between 2 and %d\n", MAX_WIDTH);
+	long height = strtol(argv[2], &endptr, 10);
+	if (*endptr || errno == ERANGE || height < 2 || height > MAX_HEIGHT)
+		error = fprintf(stderr, "minisnake: height must be an integer between 2 and %d\n", MAX_HEIGHT);
+	if (error)
+		return 2;
 	d = (t_data){.width = (int)width, .height = (int)height};
 	initialize(&d);
 	while (!d.gameOver && d.size < d.width * d.height) {
