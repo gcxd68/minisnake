@@ -58,14 +58,15 @@ static void	render(t_data *d) {
 
 	if (!d->dir[0])
 		return;
-	printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
+	if (d->x[d->size] != d->fruitX || d->y[d->size] != d->fruitY)
+		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
 	if (d->size > 1)
 		printf(CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? corner[(d->dir[0] % 2)] : "▚");
-	printf(CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, head[d->dir[0] - 1]);
 	if (d->grow)
 		printf(CURSOR_POS "@" CURSOR_POS "%d",
 			d->fruitY + 2, d->fruitX + 2, d->height + 3, 8, d->score);
+	printf(CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, head[d->dir[0] - 1]);
 	printf(CURSOR_POS "\n", d->height + 4, 1);
 }
 
@@ -74,9 +75,12 @@ int	main(int argc, char **argv) {
 
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
-	d = (t_data){.width = atoi(argv[1]), .height = atoi(argv[2])};
-	if (d.height < 2 || d.width < 2)
-		return(fprintf(stderr, "Error: dimensions must be positive integers greater than 1\n"), 2);
+	errno = 0;
+	char *end_w, *end_h;
+	long width = strtol(argv[1], &end_w, 10), height = strtol(argv[2], &end_h, 10);
+	if (*end_w || *end_h || errno == ERANGE	|| width > INT_MAX || height > INT_MAX || width < 2 || height < 2)
+		return (fprintf(stderr, "minisnake: dimensions must be positive integers greater than 1\n"), 2);
+	d = (t_data){.width = (int)width, .height = (int)height};
 	initialize(&d);
 	while (!d.gameOver && d.size < d.width * d.height) {
 		processInput(&d);
@@ -87,5 +91,5 @@ int	main(int argc, char **argv) {
 	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET, d.height + 4, 1,
 		d.gameOver ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
 	cleanup();
-	return 0;
+	return EXIT_SUCCESS;
 }

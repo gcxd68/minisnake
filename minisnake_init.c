@@ -1,26 +1,30 @@
 #include "minisnake.h"
 
+static void adjustDimensions(t_data *d) {
+	struct winsize	ws;
+
+	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
+		perror("minisnake: ioctl failed"), exit(EXIT_FAILURE);
+	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
+	d->height = MIN(MIN(d->height, ws.ws_row - 6), MAX_HEIGHT);
+}
+
 struct termios	g_savedTerm;
-int				g_savedStdinFlags;
+int				g_savedStdinFlags = -1;
 
 static void	setupIO() {
 	struct termios	gameMode;
 
-	tcgetattr(STDIN_FILENO, &g_savedTerm);
+	if (tcgetattr(STDIN_FILENO, &g_savedTerm) == -1)
+		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
 	gameMode = g_savedTerm;
 	gameMode.c_lflag &= ~(ICANON | ECHO);
-	tcsetattr(STDIN_FILENO, TCSANOW, &gameMode);
-	g_savedStdinFlags = fcntl(STDIN_FILENO, F_GETFL, 0);
-	fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags | O_NONBLOCK);
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &gameMode) == -1)
+		perror("minisnake: tcsetattr failed"), exit(EXIT_FAILURE);
+	if ((g_savedStdinFlags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
+		|| fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags | O_NONBLOCK) == -1)
+		perror("minisnake: fcntl failed"), cleanup(), exit(EXIT_FAILURE);
 	printf(CLEAR_SCREEN CURSOR_HIDE);
-}
-
-static void adjustDimensions(t_data *d) {
-	struct winsize	ws;
-
-	ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
-	d->width = MIN(MIN(d->width, ws.ws_col - 2), MAX_WIDTH);
-	d->height = MIN(MIN(d->height, ws.ws_row - 6), MAX_HEIGHT);
 }
 
 static void	initGame(t_data *d) {
@@ -45,8 +49,9 @@ static void	setupDisplay(t_data *d) {
 
 void	cleanup(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
-	fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags);
-	write(STDOUT_FILENO, CURSOR_SHOW, 6);
+	if (g_savedStdinFlags != -1)
+		fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags);
+	write(STDOUT_FILENO, CURSOR_SHOW, sizeof(CURSOR_SHOW) - 1);
 }
 
 static void handleSig(int sig) {
@@ -54,11 +59,26 @@ static void handleSig(int sig) {
 	exit(128 + sig);
 }
 
+static void setupSig() {
+	const int			signals[] = {SIGINT, SIGQUIT, SIGTERM};
+	struct sigaction	sa;
+
+	sa.sa_handler = handleSig;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	for (size_t i = 0; i < sizeof(signals) / sizeof(*signals); i++) {
+		if (sigaction(signals[i], &sa, NULL) == -1) {
+			perror("minisnake: sigaction failed");
+			cleanup();
+			exit(EXIT_FAILURE);
+		}
+	}
+}
+
 void	initialize(t_data *d) {
-	setupIO();
 	adjustDimensions(d);
+	setupIO();
 	initGame(d);
 	setupDisplay(d);
-	for (int i = 0; i < 3; i++)
-		signal(((int[]){SIGINT, SIGQUIT, SIGTERM})[i], handleSig);
+	setupSig();
 }

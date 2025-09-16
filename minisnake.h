@@ -2,7 +2,9 @@
 # define MINISNAKE_H
 
 # include <ctype.h>
+# include <errno.h>
 # include <fcntl.h>
+# include <limits.h>
 # include <signal.h>
 # include <stdio.h>
 # include <stdlib.h>
@@ -28,13 +30,7 @@
 
 # define MIN(a, b) (a < b ? a : b)
 
-typedef enum e_dir {
-	STOP,
-	LEFT,
-	RIGHT,
-	UP,
-	DOWN
-}	t_dir;
+typedef enum e_dir {STOP, LEFT, RIGHT, UP, DOWN} t_dir;
 
 typedef struct s_data {
 	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
@@ -45,6 +41,6 @@ typedef struct s_data {
 
 void	initialize(t_data *d);
 void	spawnFruit(t_data *d);
-void	cleanup(void);
+void	cleanup();
 
 #endif
