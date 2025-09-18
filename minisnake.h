@@ -13,11 +13,32 @@
 # include <time.h>
 # include <unistd.h>
 
+# define MIN_WIDTH 2
+# define MIN_HEIGHT 2
 # define MAX_WIDTH 200
 # define MAX_HEIGHT 50
 # define INITIAL_DELAY 250000
 # define SPEEDUP_FACTOR 0.985f
 # define INPUT_QUEUE_SIZE 2
+
+# if MIN_WIDTH < 2
+#  error "MIN_WIDTH must be >= 2"
+# endif
+# if MIN_HEIGHT < 2
+#  error "MIN_HEIGHT must be >= 2"
+# endif
+# if MAX_WIDTH < MIN_WIDTH
+#  error "MAX_WIDTH must be >= MIN_WIDTH"
+# endif
+# if MAX_HEIGHT < MIN_HEIGHT
+#  error "MAX_HEIGHT must be >= MIN_HEIGHT"
+# endif
+# if INITIAL_DELAY < 0
+#  error "INITIAL_DELAY must be >= 0"
+# endif
+# if INPUT_QUEUE_SIZE <= 0
+#  error "INPUT_QUEUE_SIZE must be > 0"
+# endif
 
 # define CLEAR_SCREEN "\033[2J"
 # define CURSOR_HIDE "\033[?25l"
@@ -40,6 +61,6 @@ typedef struct s_data {
 
 void	initialize(t_data *d);
 void	spawnFruit(t_data *d);
-void	cleanup();
+void	cleanup(void);
 
 #endif

@@ -44,14 +44,14 @@ static void	setupDisplay(t_data *d) {
 		printf(CURSOR_POS "░" CURSOR_POS "░", y, 1, y, d->width + 2);
 	for (int x = 1; x <= d->width + 2; x++)
 		printf(CURSOR_POS "░" CURSOR_POS "░", 1, x, d->height + 2, x);
-	printf("\nScore: 0\nUse WASD to move, X to quit\n");
+	printf("\nScore: 0\nUse WASD to move, X to quit\r");
 }
 
 void	cleanup(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
 	if (g_savedStdinFlags != -1)
 		fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags);
-	write(STDOUT_FILENO, CURSOR_SHOW, sizeof(CURSOR_SHOW) - 1);
+	printf(COLOR_RESET CURSOR_SHOW "\n");
 }
 
 static void handleSig(int sig) {

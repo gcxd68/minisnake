@@ -67,26 +67,25 @@ static void	render(t_data *d) {
 		printf(CURSOR_POS "@" CURSOR_POS "%d",
 			d->fruitY + 2, d->fruitX + 2, d->height + 3, 8, d->score);
 	printf(CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, head[d->dir[0] - 1]);
-	printf(CURSOR_POS "\n", d->height + 4, 1);
+	printf(CURSOR_POS "\n", d->height + 3, 1);
 }
 
 int	main(int argc, char **argv) {
-	t_data	d;
 	char	*endptr;
 	int		error = 0;
 
+	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f)
+		return (fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n"), EXIT_FAILURE);
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
-	errno = 0;
 	long width = strtol(argv[1], &endptr, 10);
-	if (*endptr || errno == ERANGE || width < 2 || width > MAX_WIDTH)
-		error = fprintf(stderr, "minisnake: width must be an integer between 2 and %d\n", MAX_WIDTH);
+	if (*endptr || width < 2 || width < MIN_WIDTH || width > MAX_WIDTH)
+		error += fprintf(stderr, "minisnake: width must be an integer between %d and %d\n", MIN_WIDTH, MAX_WIDTH);
 	long height = strtol(argv[2], &endptr, 10);
-	if (*endptr || errno == ERANGE || height < 2 || height > MAX_HEIGHT)
-		error = fprintf(stderr, "minisnake: height must be an integer between 2 and %d\n", MAX_HEIGHT);
-	if (error)
-		return 2;
-	d = (t_data){.width = (int)width, .height = (int)height};
+	if (*endptr || height < 2 || height < MIN_HEIGHT || height > MAX_HEIGHT)
+		error += fprintf(stderr, "minisnake: height must be an integer between %d and %d\n", MIN_HEIGHT, MAX_HEIGHT);
+	if (error) return 2;
+	t_data d = (t_data){.width = (int)width, .height = (int)height};
 	initialize(&d);
 	while (!d.gameOver && d.size < d.width * d.height) {
 		processInput(&d);
@@ -94,8 +93,7 @@ int	main(int argc, char **argv) {
 		render(&d);
 		usleep(d.delay);
 	}
-	printf(CURSOR_POS "%-32s\n\n" COLOR_RESET, d.height + 4, 1,
-		d.gameOver ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
+	printf("%-32s", d.gameOver ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
 	cleanup();
 	return EXIT_SUCCESS;
 }
