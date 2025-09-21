@@ -47,12 +47,12 @@ static void	setup_display(t_data *d) {
 	printf("\nScore: 0\nUse %s to move, X to quit\r", KEYS);
 }
 
-void	clean_exit(int exit_code) {
+void	clean_exit(int status) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
 	if (g_saved_stdin_flags != -1)
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
 	printf(COLOR_RESET CURSOR_SHOW "\n");
-	exit(exit_code);
+	exit(status);
 }
 
 static void handle_sig(int sig) {
