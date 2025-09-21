@@ -20,6 +20,7 @@
 # define INITIAL_DELAY 250000
 # define SPEEDUP_FACTOR 0.985f
 # define INPUT_QUEUE_SIZE 2
+# define KEYS "ADWS"
 
 # if MIN_WIDTH < 2
 #  error "MIN_WIDTH must be >= 2"
@@ -53,14 +54,14 @@
 typedef enum e_dir {STOP, LEFT, RIGHT, UP, DOWN} t_dir;
 
 typedef struct s_data {
-	int		width, height, fruitX, fruitY, size, grow, score, gameOver;
-	int		x[10001], y[10001], inputQ[INPUT_QUEUE_SIZE + 1];
+	int		width, height, fruit_x, fruit_y, size, grow, score, game_over;
+	int		x[10001], y[10001], input_q[INPUT_QUEUE_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
 }	t_data;
 
 void	initialize(t_data *d);
-void	spawnFruit(t_data *d);
-void	cleanup(void);
+void	spawn_fruit(t_data *d);
+void	clean_exit(int exit_code);
 
 #endif

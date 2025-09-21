@@ -1,6 +1,6 @@
 #include "minisnake.h"
 
-static void adjustDimensions(t_data *d) {
+static void adjust_dimensions(t_data *d) {
 	struct winsize	ws;
 
 	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
@@ -9,76 +9,75 @@ static void adjustDimensions(t_data *d) {
 	d->height = MIN(d->height, ws.ws_row - 6);
 }
 
-struct termios	g_savedTerm;
-int				g_savedStdinFlags = -1;
+struct termios	g_saved_term;
+int				g_saved_stdin_flags = -1;
 
-static void	setupIO() {
+static void	setup_io() {
 	struct termios	gameMode;
 
-	if (tcgetattr(STDIN_FILENO, &g_savedTerm) == -1)
+	if (tcgetattr(STDIN_FILENO, &g_saved_term) == -1)
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
-	gameMode = g_savedTerm;
+	gameMode = g_saved_term;
 	gameMode.c_lflag &= ~(ICANON | ECHO);
 	if (tcsetattr(STDIN_FILENO, TCSANOW, &gameMode) == -1)
 		perror("minisnake: tcsetattr failed"), exit(EXIT_FAILURE);
-	if ((g_savedStdinFlags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
-		|| fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags | O_NONBLOCK) == -1)
-		perror("minisnake: fcntl failed"), cleanup(), exit(EXIT_FAILURE);
+	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
+		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
+		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
 	printf(CLEAR_SCREEN CURSOR_HIDE);
 }
 
-static void	initGame(t_data *d) {
+static void	init_game(t_data *d) {
 	d->size = 1;
 	d->delay = INITIAL_DELAY;
-	memset(d->inputQ, EOF, sizeof(d->inputQ));
+	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
-	spawnFruit(d);
+	spawn_fruit(d);
 }
 
-static void	setupDisplay(t_data *d) {
-	printf(CURSOR_POS "@", d->fruitY + 2, d->fruitX + 2);
+static void	setup_display(t_data *d) {
+	printf(CURSOR_POS "@", d->fruit_y + 2, d->fruit_x + 2);
 	printf(CURSOR_POS "🭎", d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)
 		printf(CURSOR_POS "░" CURSOR_POS "░", y, 1, y, d->width + 2);
 	for (int x = 1; x <= d->width + 2; x++)
 		printf(CURSOR_POS "░" CURSOR_POS "░", 1, x, d->height + 2, x);
-	printf("\nScore: 0\nUse WASD to move, X to quit\r");
+	printf("\nScore: 0\nUse %s to move, X to quit\r", KEYS);
 }
 
-void	cleanup(void) {
-	tcsetattr(STDIN_FILENO, TCSANOW, &g_savedTerm);
-	if (g_savedStdinFlags != -1)
-		fcntl(STDIN_FILENO, F_SETFL, g_savedStdinFlags);
+void	clean_exit(int exit_code) {
+	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
+	if (g_saved_stdin_flags != -1)
+		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
 	printf(COLOR_RESET CURSOR_SHOW "\n");
+	exit(exit_code);
 }
 
-static void handleSig(int sig) {
-	cleanup();
-	exit(128 + sig);
+static void handle_sig(int sig) {
+	clean_exit(128 + sig);
 }
 
-static void setupSig() {
+static void setup_sig() {
 	const int			signals[] = {SIGINT, SIGQUIT, SIGTERM};
 	struct sigaction	sa;
 
-	sa.sa_handler = handleSig;
+	sa.sa_handler = handle_sig;
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
 	for (size_t i = 0; i < sizeof(signals) / sizeof(*signals); i++) {
 		if (sigaction(signals[i], &sa, NULL) == -1) {
 			perror("minisnake: sigaction failed");
-			cleanup();
-			exit(EXIT_FAILURE);
+			clean_exit(EXIT_FAILURE);
 		}
 	}
 }
 
 void	initialize(t_data *d) {
-	adjustDimensions(d);
-	setupIO();
-	initGame(d);
-	setupDisplay(d);
-	setupSig();
+	adjust_dimensions(d);
+	setup_io();
+	init_game(d);
+	setup_display(d);
+	setup_sig();
 }
