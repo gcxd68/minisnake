@@ -53,8 +53,8 @@ static void	update_game(t_data *d) {
 }
 
 static void	render(t_data *d) {
-	const char *head[] = {"🭨", "🭪", "🭩", "🭫"};
-	const char *corner[] = {"▗", "▘"};
+	const char	*head[] = {"🭨", "🭪", "🭩", "🭫"};
+	const char	*corner[] = {"▗", "▘"};
 
 	if (!d->dir[0])
 		return;
@@ -70,22 +70,25 @@ static void	render(t_data *d) {
 	printf(CURSOR_POS "\n", d->height + 3, 1);
 }
 
-int	main(int argc, char **argv) {
+static int parse_dimension(const char *str, int min, int max, const char *name) {
 	char	*endptr;
-	int		error = 0;
+	long	val = strtol(str, &endptr, 10);
 
+	if (!*endptr && val >= min && val <= max)
+		return (int)val;
+	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n", name, min, max);
+	exit(2);
+}
+
+int	main(int argc, char **argv) {
 	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f)
 		return (fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n"), EXIT_FAILURE);
 	if (argc != 3)
 		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
-	long width = strtol(argv[1], &endptr, 10);
-	if (*endptr || width < MIN_WIDTH || width > MAX_WIDTH)
-		error += fprintf(stderr, "minisnake: width must be an integer between %d and %d\n", MIN_WIDTH, MAX_WIDTH);
-	long height = strtol(argv[2], &endptr, 10);
-	if (*endptr || height < MIN_HEIGHT || height > MAX_HEIGHT)
-		error += fprintf(stderr, "minisnake: height must be an integer between %d and %d\n", MIN_HEIGHT, MAX_HEIGHT);
-	if (error) return 2;
-	t_data d = (t_data){.width = (int)width, .height = (int)height};
+	t_data d = {
+		.width = parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, "width"),
+		.height = parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, "height")
+	};
 	initialize(&d);
 	while (!d.game_over && d.size < d.width * d.height) {
 		process_input(&d);
