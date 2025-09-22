@@ -1,11 +1,12 @@
+NAME =		minisnake
+
+CC =		cc
+CFLAGS =	-Wall -Wextra -Werror
+
 SRC =		minisnake_core.c \
 			minisnake_init.c
 
 OBJ =		$(SRC:.c=.o)
-
-NAME =		minisnake
-CC =		cc
-CFLAGS =	-Wall -Wextra -Werror
 
 all:		$(NAME)
 
