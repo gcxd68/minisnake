@@ -45,8 +45,6 @@ static void	update_game(t_data *d) {
 		return;
 	if (d->size < d->width * d->height)
 		spawn_fruit(d);
-	if (!d->dir[0])
-		return;
 	d->grow = 1;
 	d->score += 10;
 	d->delay *= SPEEDUP_FACTOR;
