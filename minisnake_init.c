@@ -13,13 +13,13 @@ struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
 
 static void	setup_io() {
-	struct termios	gameMode;
+	struct termios	game_mode;
 
 	if (tcgetattr(STDIN_FILENO, &g_saved_term) == -1)
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
-	gameMode = g_saved_term;
-	gameMode.c_lflag &= ~(ICANON | ECHO);
-	if (tcsetattr(STDIN_FILENO, TCSANOW, &gameMode) == -1)
+	game_mode = g_saved_term;
+	game_mode.c_lflag &= ~(ICANON | ECHO);
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &game_mode) == -1)
 		perror("minisnake: tcsetattr failed"), exit(EXIT_FAILURE);
 	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
 		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
