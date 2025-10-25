@@ -56,7 +56,7 @@ Run the game with width and height arguments:
 
 ## Gameplay
 
-1. Guide the snake (🭎) to eat the fruit (@)
+1. Guide the snake to eat the fruit (@)
 2. Each fruit increases your score by 10 points
 3. The snake grows longer with each fruit eaten
 4. The game speeds up progressively
