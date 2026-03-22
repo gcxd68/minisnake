@@ -155,11 +155,16 @@ int	main(int argc, char **argv)
 		render(&d);
 		usleep(d.delay);
 	}
-	printf(CURSOR_POS "%s" COLOR_RESET, d.height + 3, d.width - 6, d.game_over
-		? COLOR_RED "GAME OVER" : COLOR_GREEN "YOU WON !");
+	const char *outcome = d.game_over ? MSG_LOSS : MSG_WIN;
+	int	col = MAX(d.width - strlen(outcome) + 3, sizeof(INSTRUCTIONS) - strlen(outcome));
+	printf(CURSOR_POS "%s%s" COLOR_RESET, d.height + 3, col, d.game_over
+		? COLOR_RED : COLOR_GREEN, outcome);
 	restore_terminal();
 	if (d.online)
 		ask_and_submit(&d);
+	printf(ERASE_LINE "Press Enter to close...");
+	fflush(stdout);
+	for (int c; (c = getchar()) != '\n' && c != EOF;);
 	clean_exit(EXIT_SUCCESS);
 	return (0);
 }

@@ -34,6 +34,9 @@
 # define SPEEDUP_FACTOR 0.985f
 # define INPUT_QUEUE_SIZE 2
 # define KEYS "ADWS"
+# define INSTRUCTIONS "Use " KEYS " to move, X to quit"
+# define MSG_LOSS "GAME OVER"
+# define MSG_WIN "YOU WON !"
 
 # if MIN_WIDTH < 2
 #  error "MIN_WIDTH must be >= 2"
@@ -64,6 +67,7 @@
 # define COLOR_RESET	"\033[0m"
 
 # define MIN(a, b) (a < b ? a : b)
+# define MAX(a, b) (a > b ? a : b)
 
 typedef enum e_dir
 {

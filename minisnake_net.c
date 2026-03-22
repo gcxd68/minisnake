@@ -142,9 +142,6 @@ void	ask_and_submit(t_data *d)
 	fflush(stdout);
 	dreamlo_submit(d, name);
 	dreamlo_show(d);
-	printf("Press Enter to close...");
-	fflush(stdout);
-	while ((i = getchar()) != '\n' && i != EOF);
 }
 
 # else

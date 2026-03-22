@@ -35,14 +35,14 @@ static void	setup_display(t_data *d) {
 		printf(CURSOR_POS "░" CURSOR_POS "░", y, 1, y, d->width + 2);
 	for (int x = 1; x <= d->width + 2; x++)
 		printf(CURSOR_POS "░" CURSOR_POS "░", 1, x, d->height + 2, x);
-	printf(CURSOR_POS "Score: 0" CURSOR_POS "Use %s to move, X to quit", d->height + 3, 1, d->height + 4, 1, KEYS);
+	printf(CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS, d->height + 3, 1, d->height + 4, 1);
 }
 
 void	restore_terminal(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
 	if (g_saved_stdin_flags != -1)
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
-	printf(COLOR_RESET CURSOR_SHOW);
+	printf(COLOR_RESET CURSOR_SHOW "\n");
 }
 
 void	clean_exit(int status) {
