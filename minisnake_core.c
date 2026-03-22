@@ -1,5 +1,71 @@
 #include "minisnake.h"
 
+static int	parse_dimension(const char *str, int min, int max, const char *name)
+{
+	char	*endptr;
+	long	val = strtol(str, &endptr, 10);
+
+	if (!*endptr && val >= min && val <= max)
+		return (int)val;
+	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n",
+		name, min, max);
+	exit(2);
+}
+
+static void	parse_args(int argc, char **argv, t_data *d)
+{
+	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f) {
+		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
+		exit(EXIT_FAILURE);
+	}
+	if (argc == 2 && strcmp(argv[1], "online") == 0)
+	{
+#ifndef ONLINE_BUILD
+		fprintf(stderr, "minisnake: online mode not available in this build\n");
+		exit(1);
+#endif
+		d->width = ONLINE_WIDTH;
+		d->height = ONLINE_HEIGHT;
+		d->online = 1;
+	}
+	else if (argc == 3)
+	{
+		d->width = parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, "width");
+		d->height = parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, "height");
+		d->online = 0;
+	}
+	else
+	{
+		fprintf(stderr, "Usage: ./minisnake online\n"
+			"       ./minisnake WIDTH HEIGHT\n");
+		exit(2);
+	}
+}
+
+static void	launch_terminal(int argc, char **argv, t_data *d)
+{
+	char	geom[32];
+	char	cmd[512];
+	char	*self;
+	char	*tty;
+	char	*args[] = {"gnome-terminal", "--wait", "--geometry", geom,
+		"--title", "minisnake", "--", "bash", "-c", cmd, NULL};
+
+	if (getenv("MINISNAKE_LAUNCHED"))
+		return ;
+	self = realpath("/proc/self/exe", NULL);
+	tty = ttyname(STDERR_FILENO);
+	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
+	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s",
+		self ? self : "./minisnake",
+		argc > 1 ? argv[1] : "",
+		argc > 2 ? argv[2] : "",
+		tty ? tty : "/dev/null");
+	setenv("MINISNAKE_LAUNCHED", "1", 1);
+	execvp("gnome-terminal", args);
+	free(self);
+}
+
 static void	process_input(t_data *d)
 {
 	const char	keys[] = KEYS;
@@ -75,45 +141,12 @@ static void	render(t_data *d)
 	printf(CURSOR_POS "\n", d->height + 3, 1);
 }
 
-static int	parse_dimension(const char *str, int min, int max, const char *name)
-{
-	char	*endptr;
-	long	val = strtol(str, &endptr, 10);
-
-	if (!*endptr && val >= min && val <= max)
-		return (int)val;
-	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n",
-		name, min, max);
-	exit(2);
-}
-
 int	main(int argc, char **argv)
 {
 	t_data	d = {0};
 
-	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f)
-		return (fprintf(stderr,
-			"Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n"), EXIT_FAILURE);
-	if (argc == 2 && strcmp(argv[1], "online") == 0)
-	{
-#ifndef ONLINE_BUILD
-		return (fprintf(stderr,
-			"minisnake: online mode not available in this build\n"), 1);
-#endif
-		d.width = ONLINE_WIDTH;
-		d.height = ONLINE_HEIGHT;
-		d.online = 1;
-	}
-	else if (argc == 3)
-	{
-		d.width = parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, "width");
-		d.height = parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, "height");
-		d.online = 0;
-	}
-	else
-		return (fprintf(stderr,
-			"Usage: ./minisnake online\n"
-			"       ./minisnake WIDTH HEIGHT\n"), 2);
+	parse_args(argc, argv, &d);
+	launch_terminal(argc, argv, &d);
 	initialize(&d);
 	while (!d.game_over && d.size < d.width * d.height)
 	{
