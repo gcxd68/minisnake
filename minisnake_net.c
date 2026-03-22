@@ -116,7 +116,7 @@ static void	dreamlo_show(t_data *d)
 		p_name = strtok_r(entry, "|", &p_save);
 		p_score = strtok_r(NULL, "|", &p_save);
 		if (p_name && p_score)
-			printf(CURSOR_POS "%2d. %-12s %8s", row++, 2, rank++, p_name, p_score);
+			printf(CURSOR_POS "%2d. %-12s %7s", row++, 2, rank++, p_name, p_score);
 		line = strtok_r(NULL, "\n", &saveptr);
 	}
 	printf(CURSOR_POS, d->height + 4, 1);
