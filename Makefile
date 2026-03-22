@@ -37,8 +37,9 @@ play.sh:
 	@printf '\techo "       ./play.sh WIDTH HEIGHT"\n' >> play.sh
 	@printf '\texit 1\n' >> play.sh
 	@printf 'fi\n' >> play.sh
-	@printf 'gnome-terminal --geometry=$${COLS}x$${ROWS} --title="minisnake" -- "$$(dirname "$$0")/$(NAME)" "$$@" &\n' >> play.sh
-	@printf 'disown && exit\n' >> play.sh
+	@printf 'DIR=$$(dirname "$$0")\n' >> play.sh
+	@printf 'TTY=$$(tty)\n' >> play.sh
+	@printf 'gnome-terminal --wait --geometry=$${COLS}x$${ROWS} --title="minisnake" -- bash -c "$$DIR/$(NAME) $$@ 2>$$TTY"\n' >> play.sh
 	@chmod +x play.sh
 	@echo "Generated play.sh"
 
