@@ -85,12 +85,23 @@ make
 
 ### Building with online mode
 
-Copy `keys.h.example` to `keys.h`, fill in your Dreamlo keys, then:
+1. Get your Dreamlo public and private keys from [dreamlo.com](http://dreamlo.com)
+2. Edit `obfuscator.py` and replace the placeholder keys with yours:
+   ```python
+   xor_string("OBS_PUB_KEY", "YOUR_PUBLIC_KEY_HERE")
+   xor_string("OBS_PRIV_KEY", "YOUR_PRIVATE_KEY_HERE")
+   ```
+3. Generate `keys.h`:
+   ```bash
+   python3 obfuscator.py > keys.h
+   ```
+4. Compile:
+   ```bash
+   make
+   ./minisnake online
+   ```
 
-```bash
-make
-./minisnake online
-```
+> Keys are XOR-obfuscated at compile time so they don't appear in plain text in the binary.
 
 ## Makefile targets
 
