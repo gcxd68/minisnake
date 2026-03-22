@@ -123,8 +123,7 @@ int	main(int argc, char **argv)
 		usleep(d.delay);
 	}
 	printf(CURSOR_POS "%s" COLOR_RESET, d.height + 3, d.width - 6, d.game_over
-		? COLOR_RED "GAME OVER"
-		: COLOR_GREEN "YOU WON !");
+		? COLOR_RED "GAME OVER" : COLOR_GREEN "YOU WON !");
 	restore_terminal();
 	if (d.online)
 		ask_and_submit(&d);

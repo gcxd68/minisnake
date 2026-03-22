@@ -62,25 +62,42 @@ static char	*skip_headers(char *response)
 	return (body ? body + (body[0] == '\r' ? 4 : 2) : response);
 }
 
+static void get_real_key(const unsigned char *obfuscated, char *out)
+{
+	int i = 0;
+	while (obfuscated[i] != 0x00)
+	{
+		out[i] = obfuscated[i] ^ XOR_KEY;
+		i++;
+	}
+	out[i] = '\0';
+}
+
 static void	dreamlo_submit(t_data *d, const char *name)
 {
-	char	path[256];
-	char	resp[4096];
+	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
+	char				priv_key[64];
+	char				path[256];
+	char				resp[4096];
 
-	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d", DREAMLO_PRIVATE_KEY, name, d->score);
+	get_real_key(obs_priv, priv_key);
+	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d", priv_key, name, d->score);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		fprintf(stderr, "Failed to submit score (network error)\n");
+	memset(priv_key, 0, sizeof(priv_key));
 }
 
 static void	dreamlo_show(t_data *d)
 {
-	const char	title[] = "LEADERBOARD";
-	const int	title_col = 2 + ((d->width - (int)sizeof(title) + 1) >> 1);
-	char		*body, *line, *saveptr;
-	char		path[256], resp[8192];
-	int			rank = 1, row = 3;
+	const unsigned char	obs_pub[] = OBS_PUB_KEY;
+	const char			title[] = "LEADERBOARD";
+	const int			title_col = 2 + ((d->width - (int)sizeof(title) + 1) >> 1);
+	char				*body, *line, *saveptr;
+	char				pub_key[64], path[256], resp[8192];
+	int					rank = 1, row = 3;
 
-	snprintf(path, sizeof(path), "/lb/%s/pipe/20", DREAMLO_PUBLIC_KEY);
+	get_real_key(obs_pub, pub_key);
+	snprintf(path, sizeof(path), "/lb/%s/pipe/20", pub_key);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 	{
 		fprintf(stderr, "Failed to fetch leaderboard (network error)\n");

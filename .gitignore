@@ -1,5 +1,6 @@
 # Secrets and sensitive data
 keys.h
+obfuscator.py
 
 # Build directories
 obj/
