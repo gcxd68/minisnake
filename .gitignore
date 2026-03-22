@@ -1,0 +1,72 @@
+# Secrets and sensitive data
+keys.h
+
+# Build directories
+obj/
+
+# Binaries and generated scripts
+minisnake
+play.sh
+
+# VS Code
+.vscode/
+
+# CLion / JetBrains
+.idea/
+
+# Valgrind
+vgcore.*
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug information files
+*.dwo
+
+# Temporary files
+*~
+*.swp
+*.swo
+*.tmp
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Core dumps
+core
+core.*
