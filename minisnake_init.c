@@ -1,14 +1,5 @@
 #include "minisnake.h"
 
-static void adjust_dimensions(t_data *d) {
-	struct winsize	ws;
-
-	if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1)
-		perror("minisnake: ioctl failed"), exit(EXIT_FAILURE);
-	d->width = MIN(d->width, ws.ws_col - 2);
-	d->height = MIN(d->height, ws.ws_row - 6);
-}
-
 struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
 
@@ -44,14 +35,18 @@ static void	setup_display(t_data *d) {
 		printf(CURSOR_POS "░" CURSOR_POS "░", y, 1, y, d->width + 2);
 	for (int x = 1; x <= d->width + 2; x++)
 		printf(CURSOR_POS "░" CURSOR_POS "░", 1, x, d->height + 2, x);
-	printf("\nScore: 0\nUse %s to move, X to quit\r", KEYS);
+	printf(CURSOR_POS "Score: 0" CURSOR_POS "Use %s to move, X to quit", d->height + 3, 1, d->height + 4, 1, KEYS);
 }
 
-void	clean_exit(int status) {
+void	restore_terminal(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
 	if (g_saved_stdin_flags != -1)
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
-	printf(COLOR_RESET CURSOR_SHOW "\n");
+	printf(COLOR_RESET CURSOR_SHOW);
+}
+
+void	clean_exit(int status) {
+	restore_terminal();
 	exit(status);
 }
 
@@ -75,7 +70,6 @@ static void setup_sig() {
 }
 
 void	initialize(t_data *d) {
-	adjust_dimensions(d);
 	setup_io();
 	init_game(d);
 	setup_display(d);

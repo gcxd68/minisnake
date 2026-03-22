@@ -1,6 +1,7 @@
 #include "minisnake.h"
 
-static void	process_input(t_data *d) {
+static void	process_input(t_data *d)
+{
 	const char	keys[] = KEYS;
 	char		*pos;
 	int			c, i;
@@ -19,30 +20,35 @@ static void	process_input(t_data *d) {
 		d->input_q[i] = d->input_q[i + 1];
 }
 
-void	spawn_fruit(t_data *d) {
+void	spawn_fruit(t_data *d)
+{
 	int	i;
 
 	do {
 		d->fruit_x = rand() % d->width;
 		d->fruit_y = rand() % d->height;
-		for (i = 0; i < d->size && !(d->x[i] == d->fruit_x && d->y[i] == d->fruit_y); i++);
+		for (i = 0;
+			i < d->size && !(d->x[i] == d->fruit_x && d->y[i] == d->fruit_y);
+			i++);
 	} while (i < d->size);
 }
 
-static void	update_game(t_data *d) {
+static void	update_game(t_data *d)
+{
 	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
 	memmove(d->y + 1, d->y, d->size * sizeof(*d->y));
 	d->x[0] += (d->dir[0] == RIGHT) - (d->dir[0] == LEFT);
 	d->y[0] += (d->dir[0] == DOWN) - (d->dir[0] == UP);
-	if (d->x[0] < 0 || d->x[0] == d->width || d->y[0] < 0 || d->y[0] == d->height)
+	if (d->x[0] < 0 || d->x[0] == d->width
+		|| d->y[0] < 0 || d->y[0] == d->height)
 		d->game_over = 1;
 	for (int i = 1; i < d->size; i++)
 		if (d->x[i] == d->x[0] && d->y[i] == d->y[0])
 			d->game_over = 1;
 	if (d->x[0] != d->fruit_x || d->y[0] != d->fruit_y)
-		return;
+		return ;
 	if (d->size < d->width * d->height)
 		spawn_fruit(d);
 	d->grow = 1;
@@ -50,12 +56,13 @@ static void	update_game(t_data *d) {
 	d->delay *= SPEEDUP_FACTOR;
 }
 
-static void	render(t_data *d) {
+static void	render(t_data *d)
+{
 	const char	*head[] = {"🭨", "🭪", "🭩", "🭫"};
 	const char	*corner[] = {"▗", "▘"};
 
 	if (!d->dir[0])
-		return;
+		return ;
 	if (d->x[d->size] != d->fruit_x || d->y[d->size] != d->fruit_y)
 		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
 	if (d->size > 1)
@@ -68,32 +75,59 @@ static void	render(t_data *d) {
 	printf(CURSOR_POS "\n", d->height + 3, 1);
 }
 
-static int parse_dimension(const char *str, int min, int max, const char *name) {
+static int	parse_dimension(const char *str, int min, int max, const char *name)
+{
 	char	*endptr;
 	long	val = strtol(str, &endptr, 10);
 
 	if (!*endptr && val >= min && val <= max)
 		return (int)val;
-	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n", name, min, max);
+	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n",
+		name, min, max);
 	exit(2);
 }
 
-int	main(int argc, char **argv) {
+int	main(int argc, char **argv)
+{
+	t_data	d = {0};
+
 	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f)
-		return (fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n"), EXIT_FAILURE);
-	if (argc != 3)
-		return (fprintf(stderr, "Usage: ./minisnake width height\n"), 2);
-	t_data d = {
-		.width = parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, "width"),
-		.height = parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, "height")
-	};
+		return (fprintf(stderr,
+			"Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n"), EXIT_FAILURE);
+	if (argc == 2 && strcmp(argv[1], "online") == 0)
+	{
+#ifndef ONLINE_BUILD
+		return (fprintf(stderr,
+			"minisnake: online mode not available in this build\n"), 1);
+#endif
+		d.width = ONLINE_WIDTH;
+		d.height = ONLINE_HEIGHT;
+		d.online = 1;
+	}
+	else if (argc == 3)
+	{
+		d.width = parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, "width");
+		d.height = parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, "height");
+		d.online = 0;
+	}
+	else
+		return (fprintf(stderr,
+			"Usage: ./minisnake online\n"
+			"       ./minisnake WIDTH HEIGHT\n"), 2);
 	initialize(&d);
-	while (!d.game_over && d.size < d.width * d.height) {
+	while (!d.game_over && d.size < d.width * d.height)
+	{
 		process_input(&d);
 		update_game(&d);
 		render(&d);
 		usleep(d.delay);
 	}
-	printf("%-32s", d.game_over ? COLOR_RED "GAME OVER" : COLOR_GREEN "CONGRATULATIONS! YOU WON!");
+	printf(CURSOR_POS "%s" COLOR_RESET, d.height + 3, d.width - 6, d.game_over
+		? COLOR_RED "GAME OVER"
+		: COLOR_GREEN "YOU WON !");
+	restore_terminal();
+	if (d.online)
+		ask_and_submit(&d);
 	clean_exit(EXIT_SUCCESS);
+	return (0);
 }

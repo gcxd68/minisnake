@@ -1,0 +1,7 @@
+#ifndef KEYS_H
+# define KEYS_H
+
+# define DREAMLO_PUBLIC_KEY  "YOUR_PUBLIC_KEY_HERE"
+# define DREAMLO_PRIVATE_KEY "YOUR_PRIVATE_KEY_HERE"
+
+#endif
