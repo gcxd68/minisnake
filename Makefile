@@ -5,6 +5,7 @@ SRCS          = minisnake_core.c minisnake_init.c minisnake_net.c
 OBJS          = $(SRCS:.c=.o)
 
 .PHONY: all clean fclean re
+
 .SILENT:
 
 all: $(NAME)
@@ -12,15 +13,13 @@ all: $(NAME)
 $(NAME): $(OBJS)
 	$(CC) $(CFLAGS) -o $(NAME) $(OBJS)
 
-# Generate keys.h if it doesn't exist or if obfuscator.py changed
-keys.h: obfuscator.py
-	if [ ! -f obfuscator.py ]; then \
-		echo "\033[31mError: obfuscator.py not found.\033[0m"; \
-		exit 1; \
+keys.h:
+	@if [ -f keys ]; then \
+		python3 obfuscator.py > keys.h; \
+	else \
+		echo "No 'keys' file found, building in offline mode."; \
 	fi
-	python3 obfuscator.py > keys.h
 
-# Compile objects with a dependency on keys.h
 %.o: %.c minisnake.h keys.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
