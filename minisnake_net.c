@@ -1,9 +1,33 @@
 #include "minisnake.h"
 
-#ifdef ONLINE_BUILD
+#ifndef ONLINE_BUILD
 
-# define DREAMLO_HOST "dreamlo.com"
-# define DREAMLO_PORT 80
+void	handle_leaderboard(t_data *d)
+{
+	(void)d;
+}
+
+#else
+
+/* --- Network & API Configuration --- */
+# define DREAMLO_HOST       "dreamlo.com"
+# define DREAMLO_PORT       80
+
+/* --- Buffer Sizes --- */
+# define BUF_RESP_LARGE     8192
+# define BUF_RESP_SMALL     4096
+# define BUF_REQ            512
+# define BUF_PATH           256
+# define BUF_ENTRY          256
+# define BUF_KEY            64
+
+/* --- Leaderboard UI Parameters --- */
+# define LB_MAX_SCORES      20
+# define LB_START_ROW       3
+# define LB_COL_OFFSET      2
+# define MAX_NAME_LEN       8
+# define UI_NAME_WIDTH      12
+# define UI_SCORE_WIDTH     7
 
 static int	dreamlo_connect(void)
 {
@@ -11,11 +35,9 @@ static int	dreamlo_connect(void)
 	struct hostent		*he;
 	int					fd;
 
-	he = gethostbyname(DREAMLO_HOST);
-	if (!he)
+	if (!(he = gethostbyname(DREAMLO_HOST)))
 		return (-1);
-	fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (fd < 0)
+	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		return (-1);
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(DREAMLO_PORT);
@@ -27,19 +49,14 @@ static int	dreamlo_connect(void)
 
 static int	http_get(const char *path, char *out, int out_size)
 {
-	char	req[512];
-	char	buf[4096];
-	int		fd, n, total;
+	char	req[BUF_REQ], buf[BUF_RESP_SMALL];
+	int		fd, n, total = 0;
 
-	fd = dreamlo_connect();
-	if (fd < 0)
+	if ((fd = dreamlo_connect()) < 0)
 		return (-1);
-	snprintf(req, sizeof(req),
-		"GET %s HTTP/1.0\r\nHost: " DREAMLO_HOST "\r\nConnection: close\r\n\r\n",
-		path);
+	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: " DREAMLO_HOST "\r\nConnection: close\r\n\r\n", path);
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
-	total = 0;
 	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
 	{
 		buf[n] = '\0';
@@ -49,6 +66,8 @@ static int	http_get(const char *path, char *out, int out_size)
 			total += n;
 		}
 	}
+	if (n < 0)
+		return (close(fd), -1);
 	out[total] = '\0';
 	close(fd);
 	return (total);
@@ -57,58 +76,57 @@ static int	http_get(const char *path, char *out, int out_size)
 static char	*skip_headers(char *response)
 {
 	char *body = strstr(response, "\r\n\r\n");
-	if (!body)
-		body = strstr(response, "\n\n");
-	return (body ? body + (body[0] == '\r' ? 4 : 2) : response);
+	if (body)
+		return (body + 4);
+	body = strstr(response, "\n\n");
+	if (body)
+		return (body + 2);
+	return (response);
 }
 
 static void get_real_key(const unsigned char *obfuscated, char *out, int len)
 {
-	int i = 0;
-	while (i < len - 1)
-	{
+	for (int i = 0; i < len - 1; i++)
 		out[i] = obfuscated[i] ^ XOR_KEY;
-		i++;
-	}
-	out[i] = '\0';
+	out[len - 1] = '\0';
 }
 
-static void	dreamlo_submit(t_data *d, const char *name)
+static int	dreamlo_submit(t_data *d, const char *name)
 {
 	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
-	char				priv_key[64];
-	char				path[256];
-	char				resp[4096];
+	char				priv_key[BUF_KEY];
+	char				path[BUF_PATH];
+	char				resp[BUF_RESP_SMALL];
 
+	printf(CLEAR_SCREEN "Submitting...");
+	fflush(stdout);
 	get_real_key(obs_priv, priv_key, sizeof(obs_priv));
 	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d", priv_key, name, d->score);
 	if (http_get(path, resp, sizeof(resp)) < 0)
-		fprintf(stderr, "Failed to submit score (network error)\n");
+		return (-1);
 	memset(priv_key, 0, sizeof(priv_key));
+	return (0);
 }
 
-static void	dreamlo_show(t_data *d)
+static int	dreamlo_show(t_data *d)
 {
 	const unsigned char	obs_pub[] = OBS_PUB_KEY;
 	const char			title[] = "LEADERBOARD";
-	const int			title_col = 2 + ((d->width - (int)sizeof(title) + 1) >> 1);
+	const int			title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 	char				*body, *line, *saveptr;
-	char				pub_key[64], path[256], resp[8192];
-	int					rank = 1, row = 3;
+	char				pub_key[BUF_KEY], path[BUF_PATH], resp[BUF_RESP_LARGE];
+	int					rank = 1, row = LB_START_ROW;
 
 	get_real_key(obs_pub, pub_key, sizeof(obs_pub));
-	snprintf(path, sizeof(path), "/lb/%s/pipe/20", pub_key);
+	snprintf(path, sizeof(path), "/lb/%s/pipe/%d", pub_key, LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
-	{
-		fprintf(stderr, "Failed to fetch leaderboard (network error)\n");
-		return ;
-	}
+		return (-1);
 	printf(ERASE_LINE CURSOR_POS "%s", 1, title_col, title);
 	body = skip_headers(resp);
 	line = strtok_r(body, "\n", &saveptr);
-	while (line && rank <= 20)
+	while (line && rank <= LB_MAX_SCORES)
 	{
-		char	entry[256];
+		char	entry[BUF_ENTRY];
 		char	*p_name, *p_score, *p_save;
 
 		strncpy(entry, line, sizeof(entry) - 1);
@@ -116,39 +134,36 @@ static void	dreamlo_show(t_data *d)
 		p_name = strtok_r(entry, "|", &p_save);
 		p_score = strtok_r(NULL, "|", &p_save);
 		if (p_name && p_score)
-			printf(CURSOR_POS "%2d. %-12s %7s", row++, 2, rank++, p_name, p_score);
+			printf(CURSOR_POS "%2d. %-*s %*s", row++, LB_COL_OFFSET, rank++, 
+                   UI_NAME_WIDTH, p_name, UI_SCORE_WIDTH, p_score);
 		line = strtok_r(NULL, "\n", &saveptr);
 	}
-	printf(CURSOR_POS, d->height + 4, 1);
+	return (0);
 }
 
-void	ask_and_submit(t_data *d)
+static int	read_name(char *name, size_t size)
 {
-	char	name[9];
-	int		i;
+	disable_raw_mode();
+	tcflush(STDIN_FILENO, TCIFLUSH);
+	if (!fgets(name, size, stdin) || name[0] == '\n')
+		name[0] = '\0';
+	else if (!strchr(name, '\n'))
+		for (int c; (c = getchar()) != '\n' && c != EOF;);
+	for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
+	enable_raw_mode();
+	return (name[0]);
+}
 
+void	handle_leaderboard(t_data *d)
+{
+	if (!d->online) return;
+	char name[MAX_NAME_LEN + 1];
 	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + 4, 1);
 	fflush(stdout);
-	tcflush(STDIN_FILENO, TCIFLUSH);
-	if (!fgets(name, sizeof(name), stdin) || name[0] == '\n')
-		return ;
-	if (!strchr(name, '\n'))
-		while ((i = getchar()) != '\n' && i != EOF);
-	for (i = strlen(name) - 1; i >= 0 && isspace((unsigned char)name[i]); i--);
-	name[i + 1] = '\0';
-	if (!name[0])
-		return ;
-	printf(CLEAR_SCREEN "Submitting...");
-	fflush(stdout);
-	dreamlo_submit(d, name);
-	dreamlo_show(d);
-}
-
-# else
-
-void	ask_and_submit(t_data *d)
-{
-	(void)d;
+	if (!read_name(name, sizeof(name)))
+    	return ;
+	if (dreamlo_submit(d, name) < 0 || dreamlo_show(d) < 0)
+		printf(CLEAR_SCREEN "Network error");
 }
 
 #endif

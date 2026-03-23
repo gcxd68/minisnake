@@ -1,69 +1,111 @@
 #include "minisnake.h"
 
-static int	parse_dimension(const char *str, int min, int max, const char *name)
+static int	parse_dimension(const char *str, int min, int max, int *out, const char *name)
 {
 	char	*endptr;
 	long	val = strtol(str, &endptr, 10);
 
-	if (!*endptr && val >= min && val <= max)
-		return (int)val;
-	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n",
-		name, min, max);
-	exit(2);
+	if (!*endptr && val >= min && val <= max) {
+		*out = (int)val;
+		return (0);
+	}
+	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n", name, min, max);
+	return (2);
 }
 
-static void	parse_args(int argc, char **argv, t_data *d)
+static int	parse_args(int argc, char **argv, t_data *d)
 {
 	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f) {
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
-		exit(EXIT_FAILURE);
+		return(EXIT_FAILURE);
 	}
-	if (argc == 2 && strcmp(argv[1], "online") == 0)
+	if (argc == 2 && !strcmp(argv[1], "online"))
 	{
 #ifndef ONLINE_BUILD
 		fprintf(stderr, "minisnake: online mode not available in this build\n");
-		exit(1);
+		return(EXIT_FAILURE);
 #endif
 		d->width = ONLINE_WIDTH;
 		d->height = ONLINE_HEIGHT;
 		d->online = 1;
+		return (0);
 	}
 	else if (argc == 3)
 	{
-		d->width = parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, "width");
-		d->height = parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, "height");
-		d->online = 0;
+		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
+			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))
+			return (2);
+		return (0);
 	}
-	else
+	fprintf(stderr, "Usage: ./minisnake online\n"
+					"       ./minisnake WIDTH HEIGHT\n");
+	return(2);
+}
+
+static int	install_gnome_terminal(void)
+{
+	int	c, ret;
+
+	printf("\ngnome-terminal is missing. Would you like to install it? (y/n): ");
+	fflush(stdout);
+	c = getchar();
+	while (getchar() != '\n' && !feof(stdin));
+	if (c == 'y' || c == 'Y')
 	{
-		fprintf(stderr, "Usage: ./minisnake online\n"
-			"       ./minisnake WIDTH HEIGHT\n");
-		exit(2);
+		printf("Running: sudo apt update && sudo apt install -y gnome-terminal\n");
+		ret = system("sudo apt update && sudo apt install -y gnome-terminal");
+		if (ret == 0)
+		{
+			printf("Installation successful! Restarting...\n");
+			return (1);
+		}
+		fprintf(stderr, "Installation failed. Please install it manually.\n");
+		return (0);
 	}
+	printf("Installation skipped. Running in current terminal instead...\n");
+	return (0);
 }
 
 static void	launch_terminal(int argc, char **argv, t_data *d)
 {
-	char	geom[32];
-	char	cmd[512];
-	char	*self;
-	char	*tty;
+	char	geom[BUF_GEOM], cmd[BUF_CMD];
+	char	*self, *tty;
 	char	*args[] = {"gnome-terminal", "--wait", "--geometry", geom,
-		"--title", "minisnake", "--", "bash", "-c", cmd, NULL};
+					   "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
 
-	if (getenv("MINISNAKE_LAUNCHED"))
+	if (getenv(ENV_VAR))
 		return ;
 	self = realpath("/proc/self/exe", NULL);
+	const char *exe_path = self ? self : DEFAULT_EXE;
 	tty = ttyname(STDERR_FILENO);
+	if (!tty)
+		tty = "/dev/null";
 	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
-	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s",
-		self ? self : "./minisnake",
-		argc > 1 ? argv[1] : "",
-		argc > 2 ? argv[2] : "",
-		tty ? tty : "/dev/null");
-	setenv("MINISNAKE_LAUNCHED", "1", 1);
-	execvp("gnome-terminal", args);
-	free(self);
+	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path, 
+			 (argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
+	setenv(ENV_VAR, "1", 1);
+	if (execvp(args[0], args) == -1)
+	{
+		if (errno == ENOENT)
+		{
+			if (install_gnome_terminal() == 1)
+			{
+				unsetenv(ENV_VAR);
+				execvp(exe_path, argv);
+				perror("minisnake: execvp restart failed");
+				if (self)
+					free(self);
+				exit(EXIT_FAILURE);
+			}
+			if (self)
+				free(self);
+			return ;
+		}
+		perror("minisnake: execvp failed");
+		if (self)
+			free(self);
+		exit(EXIT_FAILURE);
+	}
 }
 
 static void	process_input(t_data *d)
@@ -143,9 +185,9 @@ static void	render(t_data *d)
 
 int	main(int argc, char **argv)
 {
-	t_data	d = {0};
-
-	parse_args(argc, argv, &d);
+	t_data d = {0};
+	int	status = parse_args(argc, argv, &d);
+	if (status) return (status);
 	launch_terminal(argc, argv, &d);
 	initialize(&d);
 	while (!d.game_over && d.size < d.width * d.height)
@@ -155,16 +197,6 @@ int	main(int argc, char **argv)
 		render(&d);
 		usleep(d.delay);
 	}
-	const char *outcome = d.game_over ? MSG_LOSS : MSG_WIN;
-	int	col = MAX(d.width - strlen(outcome) + 3, sizeof(INSTRUCTIONS) - strlen(outcome));
-	printf(CURSOR_POS "%s%s" COLOR_RESET, d.height + 3, col, d.game_over
-		? COLOR_RED : COLOR_GREEN, outcome);
-	restore_terminal();
-	if (d.online)
-		ask_and_submit(&d);
-	printf(ERASE_LINE "Press Enter to close...");
-	fflush(stdout);
-	for (int c; (c = getchar()) != '\n' && c != EOF;);
-	clean_exit(EXIT_SUCCESS);
-	return (0);
+	finalize(&d);
+	return (EXIT_SUCCESS);
 }

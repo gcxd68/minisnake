@@ -1,6 +1,10 @@
 #ifndef MINISNAKE_H
 # define MINISNAKE_H
 
+// Unlock POSIX structures and functions (e.g. sigaction) for VS Code and GCC
+# define _DEFAULT_SOURCE
+# define _POSIX_C_SOURCE 200809L
+
 # include <ctype.h>
 # include <errno.h>
 # include <fcntl.h>
@@ -19,12 +23,18 @@
 # ifdef __has_include
 #  if __has_include("keys.h")
 #   include "keys.h"
-#   define ONLINE_BUILD 1
+#   define ONLINE_BUILD	1
 #  endif
 # endif
 
-# define ONLINE_WIDTH  25
+# define ONLINE_WIDTH 25
 # define ONLINE_HEIGHT 20
+
+# define BUF_GEOM 32
+# define BUF_CMD 512
+# define TERM_TITLE "minisnake"
+# define ENV_VAR "MINISNAKE_LAUNCHED"
+# define DEFAULT_EXE "./minisnake"
 
 # define MIN_WIDTH 2
 # define MIN_HEIGHT 2
@@ -57,14 +67,14 @@
 #  error "INPUT_QUEUE_SIZE must be > 0"
 # endif
 
-# define CLEAR_SCREEN	"\033[2J\033[3J\033[H"
-# define ERASE_LINE		"\033[2K"
-# define CURSOR_HIDE	"\033[?25l"
-# define CURSOR_SHOW	"\033[?25h"
-# define CURSOR_POS		"\033[%d;%dH"
-# define COLOR_RED		"\033[31m"
-# define COLOR_GREEN	"\033[32m"
-# define COLOR_RESET	"\033[0m"
+# define CLEAR_SCREEN "\033[2J\033[3J\033[H"
+# define ERASE_LINE "\033[2K"
+# define CURSOR_HIDE "\033[?25l"
+# define CURSOR_SHOW "\033[?25h"
+# define CURSOR_POS "\033[%d;%dH"
+# define COLOR_RED "\033[31m"
+# define COLOR_GREEN "\033[32m"
+# define COLOR_RESET "\033[0m"
 
 # define MIN(a, b) (a < b ? a : b)
 # define MAX(a, b) (a > b ? a : b)
@@ -85,8 +95,9 @@ typedef struct s_data
 
 void	initialize(t_data *d);
 void	spawn_fruit(t_data *d);
-void	restore_terminal(void);
-void	clean_exit(int exit_code);
-void	ask_and_submit(t_data *d);
+void	handle_leaderboard(t_data *d);
+void	enable_raw_mode(void);
+void	disable_raw_mode(void);
+void	finalize(t_data *d);
 
 #endif
