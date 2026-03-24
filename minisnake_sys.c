@@ -96,8 +96,9 @@ void	finalize(t_data *d)
 		? COLOR_RED : COLOR_GREEN, outcome);
 	restore_stdin_flags();
 	handle_leaderboard(d);
-	printf(CURSOR_POS ERASE_LINE "Press Enter to close...\n", d->height + 4, 1);
+	printf(CURSOR_POS ERASE_LINE "Press Enter to close...", d->height + 4, 1);
 	fflush(stdout);
 	for (int c; (c = getchar()) != '\n' && c != EOF;);
+	printf("\n");
 	disable_raw_mode();
 }

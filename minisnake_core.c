@@ -44,7 +44,7 @@ static int	parse_args(int argc, char **argv, t_data *d)
 
 static int	install_gnome_terminal(void)
 {
-	int	c, ret;
+	int	c;
 
 	printf("gnome-terminal is not installed.\n"
 		"It is recommended for a better user experience, but not required.\n"
@@ -52,10 +52,10 @@ static int	install_gnome_terminal(void)
 	fflush(stdout);
 	if ((c = getchar()) != '\n' && c != EOF)
 		while (getchar() != '\n' && !feof(stdin));
-	if (c == 'y' || c == 'Y')
+	if (tolower(c) == 'y')
 	{
 		printf("Installing gnome-terminal...\n");
-		if (!system("sudo apt update && sudo apt install -y gnome-terminal"))
+		if (system("sudo apt update && sudo apt install -y gnome-terminal") == 0)
 			return (1);
 		fprintf(stderr, "Installation failed. Please install it manually.\n");
 	}
@@ -65,43 +65,46 @@ static int	install_gnome_terminal(void)
 	fflush(stdout);
 	if ((c = getchar()) != '\n' && c != EOF)
 		while (getchar() != '\n' && !feof(stdin));
-	if (c != 'y' && c != 'Y')
-		exit(EXIT_SUCCESS);
+	if (tolower(c) != 'y')
+		return (-1);
 	return (0);
 }
 
-static void	launch_terminal(int argc, char **argv, t_data *d)
+static int	launch_terminal(int argc, char **argv, t_data *d)
 {
 	char	geom[BUF_GEOM], cmd[BUF_CMD];
 	char	*self, *tty;
-	char	*args[] = {"gnome-terminal", "--wait", "--geometry", geom,
-					   "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+	int		ret;
 
 	if (getenv(ENV_VAR))
-		return ;
+		return (0);
+	if (system("which gnome-terminal > /dev/null 2>&1") != 0)
+		if ((ret = install_gnome_terminal()) < 1)
+			return (ret);
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
-	tty = ttyname(STDERR_FILENO);
-	if (!tty)
+	if (!(tty = ttyname(STDERR_FILENO)))
 		tty = "/dev/null";
 	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path, 
 			 (argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
+	char *args[] = {"gnome-terminal", "--wait", "--geometry", geom,
+		"--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
 	setenv(ENV_VAR, "1", 1);
 	if (execvp(args[0], args) == -1)
 	{
-		if (errno == ENOENT)
-		{
-			if (!install_gnome_terminal()) {
-				if (self) free(self);
-				return ;
-			}
-			execvp(args[0], args);
-		}
 		perror("minisnake: execvp failed");
-		if (self) free(self);
-		exit(EXIT_FAILURE);
+		free(self);
+		printf("Would you like to use the current terminal instead? (y/n): ");
+		fflush(stdout);
+		int c;
+		if ((c = getchar()) != '\n' && c != EOF)
+			while (getchar() != '\n' && !feof(stdin));
+		if (tolower(c) != 'y')
+			exit(EXIT_FAILURE);
 	}
+	unsetenv(ENV_VAR);
+	return (0);
 }
 
 static void	process_input(t_data *d)
@@ -184,7 +187,8 @@ int	main(int argc, char **argv)
 	t_data d = {0};
 	int	status = parse_args(argc, argv, &d);
 	if (status) return (status);
-	launch_terminal(argc, argv, &d);
+	if (launch_terminal(argc, argv, &d) < 0)
+		return (EXIT_SUCCESS);
 	initialize(&d);
 	while (!d.game_over && d.size < d.width * d.height)
 	{
