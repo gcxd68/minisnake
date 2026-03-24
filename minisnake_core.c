@@ -46,23 +46,27 @@ static int	install_gnome_terminal(void)
 {
 	int	c, ret;
 
-	printf("\ngnome-terminal is missing. Would you like to install it? (y/n): ");
+	printf("gnome-terminal is not installed.\n"
+		"It is recommended for a better user experience, but not required.\n"
+		"Would you like to install it? (y/n): ");
 	fflush(stdout);
-	c = getchar();
-	while (getchar() != '\n' && !feof(stdin));
+	if ((c = getchar()) != '\n' && c != EOF)
+		while (getchar() != '\n' && !feof(stdin));
 	if (c == 'y' || c == 'Y')
 	{
-		printf("Running: sudo apt update && sudo apt install -y gnome-terminal\n");
-		ret = system("sudo apt update && sudo apt install -y gnome-terminal");
-		if (ret == 0)
-		{
-			printf("Installation successful! Restarting...\n");
+		printf("Installing gnome-terminal...\n");
+		if (!system("sudo apt update && sudo apt install -y gnome-terminal"))
 			return (1);
-		}
 		fprintf(stderr, "Installation failed. Please install it manually.\n");
-		return (0);
 	}
-	printf("Installation skipped. Running in current terminal instead...\n");
+	else
+		printf("Installation skipped.\n");
+	printf("Would you like to use the current terminal instead? (y/n): ");
+	fflush(stdout);
+	if ((c = getchar()) != '\n' && c != EOF)
+		while (getchar() != '\n' && !feof(stdin));
+	if (c != 'y' && c != 'Y')
+		exit(EXIT_SUCCESS);
 	return (0);
 }
 
@@ -88,22 +92,14 @@ static void	launch_terminal(int argc, char **argv, t_data *d)
 	{
 		if (errno == ENOENT)
 		{
-			if (install_gnome_terminal() == 1)
-			{
-				unsetenv(ENV_VAR);
-				execvp(exe_path, argv);
-				perror("minisnake: execvp restart failed");
-				if (self)
-					free(self);
-				exit(EXIT_FAILURE);
+			if (!install_gnome_terminal()) {
+				if (self) free(self);
+				return ;
 			}
-			if (self)
-				free(self);
-			return ;
+			execvp(args[0], args);
 		}
 		perror("minisnake: execvp failed");
-		if (self)
-			free(self);
+		if (self) free(self);
 		exit(EXIT_FAILURE);
 	}
 }
