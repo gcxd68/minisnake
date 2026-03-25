@@ -80,9 +80,7 @@
 # define MAX(a, b) (a > b ? a : b)
 
 typedef enum e_launch_result {
-	LAUNCH_LOCAL = 1,
-	LAUNCH_CANCEL = 2,
-	LAUNCH_FAILED = -1
+	LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4,
 }	t_launch_result;
 
 typedef enum e_dir
