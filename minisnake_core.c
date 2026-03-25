@@ -42,32 +42,39 @@ static int	parse_args(int argc, char **argv, t_data *d)
 	return(2);
 }
 
+static int	read_char(void)
+{
+	int c = getchar();
+	if (c != '\n' && c != EOF)
+		for (int next; (next = getchar()) != '\n' && next != EOF;);
+	return (c);
+}
+
+static int  ask_confirm(const char *question)
+{
+	printf("%s (y/n): ", question);
+	fflush(stdout);
+	int c = read_char();
+	return (c == 'y' || c == 'Y' || c == '\n');
+}
+
 static int	install_gnome_terminal(void)
 {
-	int	c;
-
-	printf("gnome-terminal is not installed.\n"
+	if (ask_confirm("gnome-terminal is not installed.\n"
 		"It is recommended for a better user experience, but not required.\n"
-		"Would you like to install it? (y/n): ");
-	fflush(stdout);
-	if ((c = getchar()) != '\n' && c != EOF)
-		while (getchar() != '\n' && !feof(stdin));
-	if (tolower(c) == 'y')
+		"Would you like to install it?"))
 	{
 		printf("Installing gnome-terminal...\n");
 		if (system("sudo apt update && sudo apt install -y gnome-terminal") == 0)
-			return (1);
+			return (0);
 		fprintf(stderr, "Installation failed. Please install it manually.\n");
 	}
 	else
 		printf("Installation skipped.\n");
-	printf("Would you like to use the current terminal instead? (y/n): ");
-	fflush(stdout);
-	if ((c = getchar()) != '\n' && c != EOF)
-		while (getchar() != '\n' && !feof(stdin));
-	if (tolower(c) != 'y')
-		return (-1);
-	return (0);
+	if (ask_confirm("Would you like to use the current terminal instead?"))
+		return (LAUNCH_LOCAL);
+	return (LAUNCH_CANCEL);
+	
 }
 
 static int	launch_terminal(int argc, char **argv, t_data *d)
@@ -77,9 +84,9 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 	int		ret;
 
 	if (getenv(ENV_VAR))
-		return (0);
+		return (LAUNCH_LOCAL);
 	if (system("which gnome-terminal > /dev/null 2>&1") != 0)
-		if ((ret = install_gnome_terminal()) < 1)
+		if ((ret = install_gnome_terminal()))
 			return (ret);
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
@@ -94,17 +101,13 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 	if (execvp(args[0], args) == -1)
 	{
 		perror("minisnake: execvp failed");
+		fprintf(stderr, "Failed to open a new terminal window.\n");
 		free(self);
-		printf("Would you like to use the current terminal instead? (y/n): ");
-		fflush(stdout);
-		int c;
-		if ((c = getchar()) != '\n' && c != EOF)
-			while (getchar() != '\n' && !feof(stdin));
-		if (tolower(c) != 'y')
+		if (!ask_confirm("Would you like to use the current terminal instead?"))
 			exit(EXIT_FAILURE);
 	}
 	unsetenv(ENV_VAR);
-	return (0);
+	return (LAUNCH_LOCAL);
 }
 
 static void	process_input(t_data *d)
@@ -187,8 +190,15 @@ int	main(int argc, char **argv)
 	t_data d = {0};
 	int	status = parse_args(argc, argv, &d);
 	if (status) return (status);
-	if (launch_terminal(argc, argv, &d) < 0)
-		return (EXIT_SUCCESS);
+
+	int res = launch_terminal(argc, argv, &d);
+    if (res != LAUNCH_LOCAL)
+    {
+        if (res == LAUNCH_FAILED)
+            return (EXIT_FAILURE);
+        return (EXIT_SUCCESS);
+    }
+
 	initialize(&d);
 	while (!d.game_over && d.size < d.width * d.height)
 	{
