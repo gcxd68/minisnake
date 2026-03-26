@@ -95,8 +95,8 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path, 
 			 (argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
-	char *args[] = {"gnome-terminal", "--wait", "--geometry", geom,
-		"--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+	char *args[] = {"gnome-terminal", "--wait", "--hide-menubar", "--geometry", geom,
+        "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
 	setenv(ENV_VAR, "1", 1);
 	if (execvp(args[0], args) == -1)
 	{

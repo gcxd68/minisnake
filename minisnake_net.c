@@ -10,24 +10,25 @@ void	handle_leaderboard(t_data *d)
 #else
 
 /* --- Network & API Configuration --- */
-# define DREAMLO_HOST       "dreamlo.com"
-# define DREAMLO_PORT       80
+# define DREAMLO_HOST		"dreamlo.com"
+# define DREAMLO_PORT		80
 
 /* --- Buffer Sizes --- */
-# define BUF_RESP_LARGE     8192
-# define BUF_RESP_SMALL     4096
-# define BUF_REQ            512
-# define BUF_PATH           256
-# define BUF_ENTRY          256
-# define BUF_KEY            64
+# define BUF_RESP_SUBMIT	512
+# define BUF_RESP_SCORES	8192
+# define BUF_READ			4096
+# define BUF_REQ			512
+# define BUF_PATH			256
+# define BUF_ENTRY			128
+# define BUF_KEY			128
 
 /* --- Leaderboard UI Parameters --- */
-# define LB_MAX_SCORES      20
-# define LB_START_ROW       3
-# define LB_COL_OFFSET      2
-# define MAX_NAME_LEN       8
-# define UI_NAME_WIDTH      12
-# define UI_SCORE_WIDTH     7
+# define LB_MAX_SCORES		20
+# define LB_START_ROW		3
+# define LB_COL_OFFSET		2
+# define MAX_NAME_LEN		8
+# define UI_NAME_WIDTH		12
+# define UI_SCORE_WIDTH		7
 
 static int	dreamlo_connect(void)
 {
@@ -49,7 +50,7 @@ static int	dreamlo_connect(void)
 
 static int	http_get(const char *path, char *out, int out_size)
 {
-	char	req[BUF_REQ], buf[BUF_RESP_SMALL];
+	char	req[BUF_REQ], buf[BUF_READ];
 	int		fd, n, total = 0;
 
 	if ((fd = dreamlo_connect()) < 0)
@@ -70,7 +71,7 @@ static int	http_get(const char *path, char *out, int out_size)
 		return (close(fd), -1);
 	out[total] = '\0';
 	close(fd);
-	return (total);
+	return (0);
 }
 
 static char	*skip_headers(char *response)
@@ -84,28 +85,35 @@ static char	*skip_headers(char *response)
 	return (response);
 }
 
-static void get_real_key(const unsigned char *obfuscated, char *out, int len)
+static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
 {
-	for (int i = 0; i < len - 1; i++)
+	for (size_t i = 0; i < len - 1; i++)
 		out[i] = obfuscated[i] ^ XOR_KEY;
 	out[len - 1] = '\0';
+}
+
+static void build_path(char *out, size_t size, const unsigned char *obs_key, size_t key_len, const char *fmt, ...)
+{
+	char    real_key[BUF_KEY], action[BUF_PATH];
+	va_list args;
+
+	get_real_key(obs_key, real_key, key_len);
+	va_start(args, fmt);
+	vsnprintf(action, sizeof(action), fmt, args);
+	va_end(args);
+	snprintf(out, size, "/lb/%s/%s", real_key, action);
+	memset(real_key, 0, sizeof(real_key));
 }
 
 static int	dreamlo_submit(t_data *d, const char *name)
 {
 	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
-	char				priv_key[BUF_KEY];
-	char				path[BUF_PATH];
-	char				resp[BUF_RESP_SMALL];
+	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
-	get_real_key(obs_priv, priv_key, sizeof(obs_priv));
-	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d", priv_key, name, d->score);
-	if (http_get(path, resp, sizeof(resp)) < 0)
-		return (-1);
-	memset(priv_key, 0, sizeof(priv_key));
-	return (0);
+	build_path(path, sizeof(path), obs_priv, sizeof(obs_priv), "add/%s/%d", name, d->score);
+	return (http_get(path, resp, sizeof(resp)));
 }
 
 static int	dreamlo_show(t_data *d)
@@ -114,11 +122,10 @@ static int	dreamlo_show(t_data *d)
 	const char			title[] = "LEADERBOARD";
 	const int			title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 	char				*body, *line, *saveptr;
-	char				pub_key[BUF_KEY], path[BUF_PATH], resp[BUF_RESP_LARGE];
+	char				path[BUF_PATH], resp[BUF_RESP_SCORES];
 	int					rank = 1, row = LB_START_ROW;
 
-	get_real_key(obs_pub, pub_key, sizeof(obs_pub));
-	snprintf(path, sizeof(path), "/lb/%s/pipe/%d", pub_key, LB_MAX_SCORES);
+	build_path(path, sizeof(path), obs_pub, sizeof(obs_pub), "pipe/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
 	printf(ERASE_LINE CURSOR_POS "%s", 1, title_col, title);
@@ -126,16 +133,14 @@ static int	dreamlo_show(t_data *d)
 	line = strtok_r(body, "\n", &saveptr);
 	while (line && rank <= LB_MAX_SCORES)
 	{
-		char	entry[BUF_ENTRY];
-		char	*p_name, *p_score, *p_save;
-
+		char entry[BUF_ENTRY], *p_name, *p_score, *p_save;
 		strncpy(entry, line, sizeof(entry) - 1);
 		entry[sizeof(entry) - 1] = '\0';
 		p_name = strtok_r(entry, "|", &p_save);
 		p_score = strtok_r(NULL, "|", &p_save);
 		if (p_name && p_score)
 			printf(CURSOR_POS "%2d. %-*s %*s", row++, LB_COL_OFFSET, rank++, 
-                   UI_NAME_WIDTH, p_name, UI_SCORE_WIDTH, p_score);
+				   UI_NAME_WIDTH, p_name, UI_SCORE_WIDTH, p_score);
 		line = strtok_r(NULL, "\n", &saveptr);
 	}
 	return (0);
@@ -161,7 +166,7 @@ void	handle_leaderboard(t_data *d)
 	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + 4, 1);
 	fflush(stdout);
 	if (!read_name(name, sizeof(name)))
-    	return ;
+		return ;
 	if (dreamlo_submit(d, name) < 0 || dreamlo_show(d) < 0)
 		printf(CLEAR_SCREEN "Network error");
 }
