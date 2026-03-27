@@ -84,10 +84,19 @@ static char	*skip_headers(char *response)
 	return (response);
 }
 
-static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
+static void format_network_payload(const unsigned char *raw_buffer, char *out, size_t len)
 {
+	volatile unsigned char tick = NET_TICK;
+	volatile unsigned char timeout = CONN_TIMEOUT;
+	volatile unsigned char align = PACKET_ALIGN;
+	unsigned char net_base = (tick ^ timeout) + align;
 	for (size_t i = 0; i < len - 1; i++)
-		out[i] = obfuscated[i] ^ XOR_KEY;
+	{
+		unsigned char c = raw_buffer[i];
+		c = c ^ PAYLOAD_SHIFT;
+		c = c - (unsigned char)(net_base + i);
+		out[i] = (char)c;
+	}
 	out[len - 1] = '\0';
 }
 
@@ -96,7 +105,7 @@ static void build_path(char *out, size_t size, const unsigned char *obs_key, siz
 	char    real_key[BUF_KEY], action[BUF_PATH];
 	va_list args;
 
-	get_real_key(obs_key, real_key, key_len);
+	format_network_payload(obs_key, real_key, key_len);
 	va_start(args, fmt);
 	vsnprintf(action, sizeof(action), fmt, args);
 	va_end(args);
@@ -106,8 +115,8 @@ static void build_path(char *out, size_t size, const unsigned char *obs_key, siz
 
 static int	dreamlo_submit(t_data *d, const char *name)
 {
-	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
-	char						path[BUF_PATH], resp[BUF_RESP_SUBMIT];
+	const unsigned char	obs_priv[] = NET_BUFFER_RX; 
+	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
@@ -117,7 +126,7 @@ static int	dreamlo_submit(t_data *d, const char *name)
 
 static int	dreamlo_show(t_data *d)
 {
-	const unsigned char	obs_pub[] = OBS_PUB_KEY;
+	const unsigned char	obs_pub[] = NET_BUFFER_TX;
 	const char			title[] = LDB_TITLE;
 	const int			title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 	char				*body, *line, *saveptr;
