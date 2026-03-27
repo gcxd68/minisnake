@@ -1,115 +1,5 @@
 #include "minisnake.h"
 
-static int	parse_dimension(const char *str, int min, int max, int *out, const char *name)
-{
-	char	*endptr;
-	long	val = strtol(str, &endptr, 10);
-
-	if (!*endptr && val >= min && val <= max) {
-		*out = (int)val;
-		return (0);
-	}
-	fprintf(stderr, "minisnake: %s must be an integer between %d and %d\n", name, min, max);
-	return (2);
-}
-
-static int	parse_args(int argc, char **argv, t_data *d)
-{
-	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f) {
-		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
-		return(EXIT_FAILURE);
-	}
-	if (argc == 2 && !strcmp(argv[1], "online"))
-	{
-#ifndef ONLINE_BUILD
-		fprintf(stderr, "minisnake: online mode not available in this build\n");
-		return(EXIT_FAILURE);
-#endif
-		d->width = ONLINE_WIDTH;
-		d->height = ONLINE_HEIGHT;
-		d->online = 1;
-		return (0);
-	}
-	else if (argc == 3)
-	{
-		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
-			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))
-			return (2);
-		return (0);
-	}
-	fprintf(stderr, "Usage: ./minisnake online\n"
-					"       ./minisnake WIDTH HEIGHT\n");
-	return(2);
-}
-
-static int	read_char(void)
-{
-	int c = getchar();
-	if (c != '\n' && c != EOF)
-		for (int next; (next = getchar()) != '\n' && next != EOF;);
-	return (c);
-}
-
-int  ask_confirm(const char *question)
-{
-	printf("%s", question);
-	fflush(stdout);
-	int c = read_char();
-	return (c == 'y' || c == 'Y');
-}
-
-static int	install_gnome_terminal(void)
-{
-	if (ask_confirm("gnome-terminal is not installed.\n"
-		"It is recommended for a better user experience, but not required.\n"
-		"Would you like to install it? (y/n): "))
-	{
-		printf("Installing gnome-terminal...\n");
-		if (system("sudo apt update && sudo apt install -y gnome-terminal") == 0)
-			return (LAUNCH_SPAWN);
-		fprintf(stderr, "Installation failed. Please install it manually.\n");
-	}
-	else
-		printf("Installation skipped.\n");
-	if (ask_confirm("Would you like to use the current terminal instead? (y/n): "))
-		return (LAUNCH_LOCAL);
-	return (EXIT_SUCCESS);	
-}
-
-static int	launch_terminal(int argc, char **argv, t_data *d)
-{
-	char	geom[BUF_GEOM], cmd[BUF_CMD];
-	char	*self, *tty;
-	int		ret;
-
-	if (getenv(ENV_VAR))
-		return (LAUNCH_LOCAL);
-	if (system("which gnome-terminal > /dev/null 2>&1") != 0)
-		if ((ret = install_gnome_terminal()) != LAUNCH_SPAWN)
-			return (ret);
-	self = realpath("/proc/self/exe", NULL);
-	const char *exe_path = self ? self : DEFAULT_EXE;
-	if (!(tty = ttyname(STDERR_FILENO)))
-		tty = "/dev/null";
-	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
-	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path, 
-		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
-	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
-		"--geometry", geom, "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
-	setenv("GTK_THEME", "Adwaita:dark", 1);
-	setenv(ENV_VAR, "1", 1);
-	if (execvp(args[0], args) == -1)
-	{
-		perror("minisnake: execvp failed");
-		fprintf(stderr, "Failed to open a new terminal window.\n");
-		free(self);
-		if (!ask_confirm("Would you like to use the current terminal instead? (y/n): "))
-			return(EXIT_FAILURE);
-	}
-	unsetenv(ENV_VAR);
-	return (LAUNCH_LOCAL);
-}
-
 static void	process_input(t_data *d)
 {
 	static const char	keys[] = MOVE_KEYS;
@@ -130,7 +20,7 @@ static void	process_input(t_data *d)
 		d->input_q[i] = d->input_q[i + 1];
 }
 
-void	spawn_fruit(t_data *d)
+static void	spawn_fruit(t_data *d)
 {
 	int	i;
 
@@ -159,7 +49,7 @@ static void	update_game(t_data *d)
 			d->game_over = 1;
 	if (d->x[0] != d->fruit_x || d->y[0] != d->fruit_y)
 		return ;
-	if (d->size < d->width * d->height)
+	if (d->size < d->width * d->height || !d->dir[1])
 		spawn_fruit(d);
 	d->grow = 1;
 	d->score += 10;
