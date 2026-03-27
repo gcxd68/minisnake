@@ -28,26 +28,13 @@
 #  endif
 # endif
 
-# define ONLINE_WIDTH 25
-# define ONLINE_HEIGHT 20
-
-# define BUF_GEOM 32
-# define BUF_CMD 512
-# define TERM_TITLE "minisnake"
-# define ENV_VAR "MINISNAKE_LAUNCHED"
-# define DEFAULT_EXE "./minisnake"
-
-# define MIN_WIDTH 2
-# define MIN_HEIGHT 2
-# define MAX_WIDTH 200
-# define MAX_HEIGHT 50
-# define INITIAL_DELAY 250000
-# define SPEEDUP_FACTOR 0.985f
-# define INPUT_QUEUE_SIZE 2
-# define KEYS "ADWS"
-# define INSTRUCTIONS "Use " KEYS " to move, X to quit"
-# define MSG_LOSS "GAME OVER"
-# define MSG_WIN "YOU WON !"
+# define MIN_WIDTH		2
+# define MIN_HEIGHT		2
+# define MAX_WIDTH		200
+# define MAX_HEIGHT		50
+# define INITIAL_DELAY	250000
+# define SPEEDUP_FACTOR	0.985f
+# define INPUT_Q_SIZE	2
 
 # if MIN_WIDTH < 2
 #  error "MIN_WIDTH must be >= 2"
@@ -64,19 +51,49 @@
 # if INITIAL_DELAY < 0
 #  error "INITIAL_DELAY must be >= 0"
 # endif
-# if INPUT_QUEUE_SIZE <= 0
-#  error "INPUT_QUEUE_SIZE must be > 0"
+# if INPUT_Q_SIZE <= 0
+#  error "INPUT_Q_SIZE must be > 0"
 # endif
 
-# define CLEAR_SCREEN "\033[2J\033[3J\033[H"
-# define ERASE_LINE "\033[2K"
-# define CURSOR_HIDE "\033[?25l"
-# define CURSOR_SHOW "\033[?25h"
-# define CURSOR_POS "\033[%d;%dH"
-# define COLOR_RED "\033[31m"
-# define COLOR_GREEN "\033[32m"
-# define COLOR_RESET "\033[0m"
+# define ONLINE_WIDTH	25
+# define ONLINE_HEIGHT	20
+# define BUF_GEOM		32
+# define BUF_CMD		512
+# define TERM_TITLE		"minisnake"
+# define ENV_VAR		"MINISNAKE_LAUNCHED"
+# define DEFAULT_EXE	"./minisnake"
 
+# define MOVE_KEYS		"ADWS"
+# define EXIT_KEY		"X"
+# define INSTRUCTIONS	"Use " MOVE_KEYS " to move, " EXIT_KEY " to quit"
+# define MSG_LOSS		"GAME OVER"
+# define MSG_WIN		"YOU WON !"
+
+# define CLEAR_SCREEN	"\033[2J\033[3J\033[H"
+# define ERASE_LINE		"\033[2K"
+# define CURSOR_HIDE	"\033[?25l"
+# define CURSOR_SHOW	"\033[?25h"
+# define CURSOR_POS		"\033[%d;%dH"
+# define COLOR_RED		"\033[31m"
+# define COLOR_GREEN	"\033[32m"
+# define COLOR_YELLOW	"\033[33m"
+# define COLOR_MAGENTA	"\033[35m"
+# define COLOR_CYAN		"\033[36m"
+# define COLOR_WHITE	"\033[37m"
+# define STYLE_BOLD		"\033[1m"
+# define STYLE_RESET	"\033[0m"
+
+# define WALL_CHAR		"░"
+# define WALL_COLOR		COLOR_WHITE
+# define SNAKE_IDLE		"🭎"
+# define SNAKE_HEADS	{ "🭨", "🭪", "🭩", "🭫" }
+# define SNAKE_BODY		"▚"
+# define SNAKE_BENDS	{ "▗", "▘" }
+# define SNAKE_COLOR	COLOR_GREEN
+# define FRUIT_CHAR		"@"
+# define FRUIT_PALETTE	{ COLOR_RED, COLOR_GREEN, COLOR_YELLOW, COLOR_MAGENTA, COLOR_CYAN, COLOR_WHITE }
+
+# define ARR_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 # define MIN(a, b) (a < b ? a : b)
 # define MAX(a, b) (a > b ? a : b)
 
@@ -92,7 +109,7 @@ typedef enum e_dir
 typedef struct s_data
 {
 	int		width, height, fruit_x, fruit_y, size, grow, score, game_over;
-	int		x[10001], y[10001], input_q[INPUT_QUEUE_SIZE + 1];
+	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
 	int		online;
@@ -104,5 +121,6 @@ void	handle_leaderboard(t_data *d);
 void	enable_raw_mode(void);
 void	disable_raw_mode(void);
 void	finalize(t_data *d);
+int		ask_confirm(const char *question);
 
 #endif

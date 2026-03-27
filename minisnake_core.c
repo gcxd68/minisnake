@@ -50,9 +50,9 @@ static int	read_char(void)
 	return (c);
 }
 
-static int  ask_confirm(const char *question)
+int  ask_confirm(const char *question)
 {
-	printf("%s (y/n): ", question);
+	printf("%s", question);
 	fflush(stdout);
 	int c = read_char();
 	return (c == 'y' || c == 'Y');
@@ -62,7 +62,7 @@ static int	install_gnome_terminal(void)
 {
 	if (ask_confirm("gnome-terminal is not installed.\n"
 		"It is recommended for a better user experience, but not required.\n"
-		"Would you like to install it?"))
+		"Would you like to install it? (y/n): "))
 	{
 		printf("Installing gnome-terminal...\n");
 		if (system("sudo apt update && sudo apt install -y gnome-terminal") == 0)
@@ -71,10 +71,9 @@ static int	install_gnome_terminal(void)
 	}
 	else
 		printf("Installation skipped.\n");
-	if (ask_confirm("Would you like to use the current terminal instead?"))
+	if (ask_confirm("Would you like to use the current terminal instead? (y/n): "))
 		return (LAUNCH_LOCAL);
-	return (EXIT_SUCCESS);
-	
+	return (EXIT_SUCCESS);	
 }
 
 static int	launch_terminal(int argc, char **argv, t_data *d)
@@ -94,16 +93,17 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 		tty = "/dev/null";
 	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path, 
-			 (argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
-	char *args[] = {"gnome-terminal", "--wait", "--hide-menubar", "--geometry", geom,
-        "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
+	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
+		"--geometry", geom, "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
 	if (execvp(args[0], args) == -1)
 	{
 		perror("minisnake: execvp failed");
 		fprintf(stderr, "Failed to open a new terminal window.\n");
 		free(self);
-		if (!ask_confirm("Would you like to use the current terminal instead?"))
+		if (!ask_confirm("Would you like to use the current terminal instead? (y/n): "))
 			return(EXIT_FAILURE);
 	}
 	unsetenv(ENV_VAR);
@@ -112,21 +112,21 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 
 static void	process_input(t_data *d)
 {
-	const char	keys[] = KEYS;
-	char		*pos;
-	int			c, i;
+	static const char	keys[] = MOVE_KEYS;
+	char				*pos;
+	int					c, i;
 
 	d->dir[1] = d->dir[0];
 	for (i = 0; d->input_q[i] != EOF; i++);
 	while ((c = getchar()) != EOF)
-		if (i < INPUT_QUEUE_SIZE)
+		if (i < INPUT_Q_SIZE)
 			d->input_q[i++] = c;
-	if (toupper(d->input_q[0]) == 'X')
+	if (toupper(d->input_q[0]) == *EXIT_KEY)
 		d->game_over = 1;
 	else if ((pos = strchr(keys, toupper(d->input_q[0]))))
 		if ((pos - keys + 2) >> 1 != (d->dir[0] + 1) >> 1)
 			d->dir[0] = pos - keys + 1;
-	for (i = 0; i < INPUT_QUEUE_SIZE; i++)
+	for (i = 0; i < INPUT_Q_SIZE; i++)
 		d->input_q[i] = d->input_q[i + 1];
 }
 
@@ -168,21 +168,23 @@ static void	update_game(t_data *d)
 
 static void	render(t_data *d)
 {
-	const char	*head[] = {"🭨", "🭪", "🭩", "🭫"};
-	const char	*corner[] = {"▗", "▘"};
+	static const char	*heads[] = SNAKE_HEADS;
+	static const char	*bends[] = SNAKE_BENDS;
+	static const char	*fruit_palette[] = FRUIT_PALETTE;
+	const char			*fruit_color = fruit_palette[rand() % ARR_SIZE(fruit_palette)];
 
 	if (!d->dir[0])
 		return ;
 	if (d->x[d->size] != d->fruit_x || d->y[d->size] != d->fruit_y)
 		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
 	if (d->size > 1)
-		printf(CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
-			(d->dir[0] + d->dir[1] == 5) ? corner[(d->dir[0] % 2)] : "▚");
-	if (d->grow)
-		printf(CURSOR_POS "@" CURSOR_POS "%d",
-			d->fruit_y + 2, d->fruit_x + 2, d->height + 3, 8, d->score);
-	printf(CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, head[d->dir[0] - 1]);
-	printf(CURSOR_POS "\n", d->height + 3, 1);
+		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
+			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
+	if (d->grow || !d->dir[1])
+		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET CURSOR_POS "%d",
+			d->fruit_y + 2, d->fruit_x + 2, fruit_color, d->height + 3, 8, d->score);
+	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
+	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }
 
 int	main(int argc, char **argv)

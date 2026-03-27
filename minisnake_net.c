@@ -9,11 +9,9 @@ void	handle_leaderboard(t_data *d)
 
 #else
 
-/* --- Network & API Configuration --- */
 # define DREAMLO_HOST		"dreamlo.com"
 # define DREAMLO_PORT		80
 
-/* --- Buffer Sizes --- */
 # define BUF_RESP_SUBMIT	512
 # define BUF_RESP_SCORES	8192
 # define BUF_READ			4096
@@ -22,13 +20,14 @@ void	handle_leaderboard(t_data *d)
 # define BUF_ENTRY			128
 # define BUF_KEY			128
 
-/* --- Leaderboard UI Parameters --- */
 # define LB_MAX_SCORES		20
 # define LB_START_ROW		3
 # define LB_COL_OFFSET		2
 # define MAX_NAME_LEN		8
 # define UI_NAME_WIDTH		12
 # define UI_SCORE_WIDTH		7
+
+# define LDB_TITLE			"--- LEADERBOARD ---"
 
 static int	dreamlo_connect(void)
 {
@@ -108,7 +107,7 @@ static void build_path(char *out, size_t size, const unsigned char *obs_key, siz
 static int	dreamlo_submit(t_data *d, const char *name)
 {
 	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
-	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
+	char						path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
@@ -119,7 +118,7 @@ static int	dreamlo_submit(t_data *d, const char *name)
 static int	dreamlo_show(t_data *d)
 {
 	const unsigned char	obs_pub[] = OBS_PUB_KEY;
-	const char			title[] = "LEADERBOARD";
+	const char			title[] = LDB_TITLE;
 	const int			title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 	char				*body, *line, *saveptr;
 	char				path[BUF_PATH], resp[BUF_RESP_SCORES];
@@ -128,7 +127,7 @@ static int	dreamlo_show(t_data *d)
 	build_path(path, sizeof(path), obs_pub, sizeof(obs_pub), "pipe/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
-	printf(ERASE_LINE CURSOR_POS "%s", 1, title_col, title);
+	printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, 1, title_col, title);
 	body = skip_headers(resp);
 	line = strtok_r(body, "\n", &saveptr);
 	while (line && rank <= LB_MAX_SCORES)

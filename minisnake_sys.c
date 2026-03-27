@@ -52,13 +52,12 @@ static void	init_game(t_data *d) {
 }
 
 static void	setup_display(t_data *d) {
-	printf(CURSOR_POS "@", d->fruit_y + 2, d->fruit_x + 2);
-	printf(CURSOR_POS "🭎", d->y[0] + 2, d->x[0] + 2);
+	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)
-		printf(CURSOR_POS "░" CURSOR_POS "░", y, 1, y, d->width + 2);
+		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, y, 1, y, d->width + 2);
 	for (int x = 1; x <= d->width + 2; x++)
-		printf(CURSOR_POS "░" CURSOR_POS "░", 1, x, d->height + 2, x);
-	printf(CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS, d->height + 3, 1, d->height + 4, 1);
+		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, 1, x, d->height + 2, x);
+	printf(STYLE_RESET CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS, d->height + 3, 1, d->height + 4, 1);
 }
 
 static void	handle_sig(int sig) {
@@ -92,13 +91,12 @@ void	finalize(t_data *d)
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
 	const int col = MAX(d->width - (int)strlen(outcome) + 3, (int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
-	printf(CURSOR_POS "%s%s" COLOR_RESET, d->height + 3, col, d->game_over
+	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
 		? COLOR_RED : COLOR_GREEN, outcome);
 	restore_stdin_flags();
 	handle_leaderboard(d);
-	printf(CURSOR_POS ERASE_LINE "Press Enter to close...", d->height + 4, 1);
-	fflush(stdout);
-	for (int c; (c = getchar()) != '\n' && c != EOF;);
+	printf(CURSOR_POS ERASE_LINE, d->height + 4, 1);
+	ask_confirm("Press Enter to close...");
 	printf("\n");
 	disable_raw_mode();
 }
