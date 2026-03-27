@@ -16,16 +16,16 @@ A lightweight, terminal-based Snake game written in C with minimal dependencies.
 - Make
 - GCC or any C compiler
 - POSIX-compliant system (Linux)
-- gnome-terminal
-- Terminal with Unicode support
+- Terminal with Unicode support (gnome-terminal recommended)
 
 ## Usage
 
 ### Online mode (pre-built release only)
 
-Download the binary from the [latest release](../../releases/latest) and run:
+Download the binary from the [latest release](../../releases/latest). Before running it, ensure it has execution permissions:
 
 ```bash
+chmod +x minisnake
 ./minisnake online
 ```
 
@@ -86,16 +86,16 @@ make
 ### Building with online mode
 
 1. Get your Dreamlo public and private keys from [dreamlo.com](http://dreamlo.com)
-2. Edit `obfuscator.py` and replace the placeholder keys with yours:
-   ```python
-   xor_string("OBS_PUB_KEY", "YOUR_PUBLIC_KEY_HERE")
-   xor_string("OBS_PRIV_KEY", "YOUR_PRIVATE_KEY_HERE")
-   ```
-3. Generate `keys.h`:
+2. Create a `keys` file in the root directory (you can use `keys.example` as a template) and add your credentials:
+   ```text
+   PUBLIC_KEY=YOUR_PUBLIC_KEY_HERE
+   PRIVATE_KEY=YOUR_PRIVATE_KEY_HERE
+3. (Optional) Choose an XOR key for obfuscation and set it in obfuscator.py (default is 0x42).
+4. Generate `keys.h`:
    ```bash
    python3 obfuscator.py > keys.h
    ```
-4. Compile:
+5. Compile:
    ```bash
    make
    ./minisnake online
@@ -116,10 +116,24 @@ make
 
 You can modify these constants in `minisnake.h`:
 
-- `INITIAL_DELAY` — Starting game speed (microseconds)
-- `SPEEDUP_FACTOR` — Speed multiplier per fruit (default: 0.985)
-- `INPUT_QUEUE_SIZE` — Number of inputs buffered (default: 2)
+**Gameplay & Board:**
+- `INITIAL_DELAY` — Starting game speed in microseconds (default: 250000)
+- `SPEEDUP_FACTOR` — Speed multiplier per fruit (default: 0.985f)
+- `INPUT_Q_SIZE` — Number of inputs buffered (default: 2)
+- `MIN_WIDTH` / `MAX_WIDTH` — Allowed board width range (default: 2 to 200)
+- `MIN_HEIGHT` / `MAX_HEIGHT` — Allowed board height range (default: 2 to 50)
 - `ONLINE_WIDTH` / `ONLINE_HEIGHT` — Online mode board dimensions (default: 25x20)
+
+**Controls & Text:**
+- `MOVE_KEYS` — Movement controls (default: "ADWS")
+- `EXIT_KEY` — Key to exit the game (default: "X")
+- `TERM_TITLE` — Terminal window title (default: "minisnake")
+- `MSG_LOSS` / `MSG_WIN` — End-game messages
+
+**Visuals & Aesthetics:**
+- `WALL_CHAR` / `WALL_COLOR` — Wall appearance
+- `SNAKE_COLOR` / `SNAKE_BODY` / `SNAKE_HEADS` / `SNAKE_BENDS` — Snake appearance
+- `FRUIT_CHAR` / `FRUIT_PALETTE` — Fruit character and color variations
 
 ## License
 
