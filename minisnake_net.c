@@ -2,8 +2,7 @@
 
 #ifndef ONLINE_BUILD
 
-void	handle_leaderboard(t_data *d)
-{
+void	handle_leaderboard(t_data *d) {
 	(void)d;
 }
 
@@ -20,6 +19,7 @@ void	handle_leaderboard(t_data *d)
 # define BUF_ENTRY			128
 # define BUF_KEY			128
 
+# define LB_TITLE			"--- LEADERBOARD ---"
 # define LB_MAX_SCORES		20
 # define LB_START_ROW		3
 # define LB_COL_OFFSET		2
@@ -27,10 +27,7 @@ void	handle_leaderboard(t_data *d)
 # define UI_NAME_WIDTH		12
 # define UI_SCORE_WIDTH		7
 
-# define LDB_TITLE			"--- LEADERBOARD ---"
-
-static int	dreamlo_connect(void)
-{
+static int	dreamlo_connect(void) {
 	struct sockaddr_in	addr;
 	struct hostent		*he;
 	int					fd;
@@ -47,8 +44,7 @@ static int	dreamlo_connect(void)
 	return (fd);
 }
 
-static int	http_get(const char *path, char *out, int out_size)
-{
+static int	http_get(const char *path, char *out, int out_size) {
 	char	req[BUF_REQ], buf[BUF_READ];
 	int		fd, n, total = 0;
 
@@ -57,11 +53,9 @@ static int	http_get(const char *path, char *out, int out_size)
 	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: " DREAMLO_HOST "\r\nConnection: close\r\n\r\n", path);
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
-	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
-	{
+	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
 		buf[n] = '\0';
-		if (total + n < out_size - 1)
-		{
+		if (total + n < out_size - 1) {
 			memcpy(out + total, buf, n);
 			total += n;
 		}
@@ -73,8 +67,7 @@ static int	http_get(const char *path, char *out, int out_size)
 	return (0);
 }
 
-static char	*skip_headers(char *response)
-{
+static char	*skip_headers(char *response) {
 	char *body = strstr(response, "\r\n\r\n");
 	if (body)
 		return (body + 4);
@@ -84,14 +77,12 @@ static char	*skip_headers(char *response)
 	return (response);
 }
 
-static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
-{
+static void get_real_key(const unsigned char *obfuscated, char *out, size_t len) {
 	volatile unsigned char part_a = KEY_PART_A;
 	volatile unsigned char part_b = KEY_PART_B;
 	volatile unsigned char part_c = KEY_PART_C;
 	unsigned char base_key = (part_a ^ part_b) + part_c;
-	for (size_t i = 0; i < len - 1; i++)
-	{
+	for (size_t i = 0; i < len - 1; i++) {
 		unsigned char c = obfuscated[i];
 		c = c ^ KEY_SALT;
 		c = c - (unsigned char)(base_key + i);
@@ -100,8 +91,7 @@ static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
 	out[len - 1] = '\0';
 }
 
-static void build_path(char *out, size_t size, const unsigned char *obs_key, size_t key_len, const char *fmt, ...)
-{
+static void build_path(char *out, size_t size, const unsigned char *obs_key, size_t key_len, const char *fmt, ...) {
 	char    real_key[BUF_KEY], action[BUF_PATH];
 	va_list args;
 
@@ -113,8 +103,7 @@ static void build_path(char *out, size_t size, const unsigned char *obs_key, siz
 	memset(real_key, 0, sizeof(real_key));
 }
 
-static int	dreamlo_submit(t_data *d, const char *name)
-{
+static int	dreamlo_submit(t_data *d, const char *name) {
 	const unsigned char	obs_priv[] = OBS_PRIV_KEY; 
 	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
@@ -124,10 +113,9 @@ static int	dreamlo_submit(t_data *d, const char *name)
 	return (http_get(path, resp, sizeof(resp)));
 }
 
-static int	dreamlo_show(t_data *d)
-{
+static int	dreamlo_show(t_data *d) {
 	const unsigned char	obs_pub[] = OBS_PUB_KEY;
-	const char			title[] = LDB_TITLE;
+	const char			title[] = LB_TITLE;
 	const int			title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 	char				*body, *line, *saveptr;
 	char				path[BUF_PATH], resp[BUF_RESP_SCORES];
@@ -139,8 +127,7 @@ static int	dreamlo_show(t_data *d)
 	printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, 1, title_col, title);
 	body = skip_headers(resp);
 	line = strtok_r(body, "\n", &saveptr);
-	while (line && rank <= LB_MAX_SCORES)
-	{
+	while (line && rank <= LB_MAX_SCORES) {
 		char entry[BUF_ENTRY], *p_name, *p_score, *p_save;
 		strncpy(entry, line, sizeof(entry) - 1);
 		entry[sizeof(entry) - 1] = '\0';
@@ -154,8 +141,7 @@ static int	dreamlo_show(t_data *d)
 	return (0);
 }
 
-static int	read_name(char *name, size_t size)
-{
+static int	read_name(char *name, size_t size) {
 	disable_raw_mode();
 	tcflush(STDIN_FILENO, TCIFLUSH);
 	if (!fgets(name, size, stdin) || name[0] == '\n')
@@ -167,8 +153,7 @@ static int	read_name(char *name, size_t size)
 	return (name[0]);
 }
 
-void	handle_leaderboard(t_data *d)
-{
+void	handle_leaderboard(t_data *d) {
 	if (!d->online) return;
 	char name[MAX_NAME_LEN + 1];
 	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + 4, 1);

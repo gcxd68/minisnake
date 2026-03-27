@@ -1,8 +1,8 @@
-NAME          = minisnake
-CC            = cc
-CFLAGS        = -Wall -Wextra -Werror
-SRCS          = minisnake_core.c minisnake_sys.c minisnake_net.c
-OBJS          = $(SRCS:.c=.o)
+NAME	= minisnake
+CC		= cc
+CFLAGS	= -Wall -Wextra -Werror
+SRCS	= minisnake_core.c minisnake_sys.c minisnake_net.c
+OBJS	= $(SRCS:.c=.o)
 
 .PHONY: all clean fclean re
 

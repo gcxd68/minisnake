@@ -1,7 +1,6 @@
 #include "minisnake.h"
 
-static void	process_input(t_data *d)
-{
+static void	process_input(t_data *d) {
 	static const char	keys[] = MOVE_KEYS;
 	char				*pos;
 	int					c, i;
@@ -16,25 +15,22 @@ static void	process_input(t_data *d)
 	else if ((pos = strchr(keys, toupper(d->input_q[0]))))
 		if ((pos - keys + 2) >> 1 != (d->dir[0] + 1) >> 1)
 			d->dir[0] = pos - keys + 1;
-	for (i = 0; i < INPUT_Q_SIZE; i++)
-		d->input_q[i] = d->input_q[i + 1];
+	memmove(d->input_q, d->input_q + 1, INPUT_Q_SIZE * sizeof(*d->input_q));
 }
 
-static void	spawn_fruit(t_data *d)
-{
+static void	spawn_fruit(t_data *d) {
 	int	i;
 
 	do {
 		d->fruit_x = rand() % d->width;
 		d->fruit_y = rand() % d->height;
-		for (i = 0;
-			i < d->size && !(d->x[i] == d->fruit_x && d->y[i] == d->fruit_y);
-			i++);
+		for (i = 0; i < d->size; i++)
+			if (d->x[i] == d->fruit_x && d->y[i] == d->fruit_y)
+				break;
 	} while (i < d->size);
 }
 
-static void	update_game(t_data *d)
-{
+static void	update_game(t_data *d) {
 	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
@@ -56,8 +52,7 @@ static void	update_game(t_data *d)
 	d->delay *= SPEEDUP_FACTOR;
 }
 
-static void	render(t_data *d)
-{
+static void	render(t_data *d) {
 	static const char	*heads[] = SNAKE_HEADS;
 	static const char	*bends[] = SNAKE_BENDS;
 	static const char	*fruit_palette[] = FRUIT_PALETTE;
@@ -77,16 +72,14 @@ static void	render(t_data *d)
 	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }
 
-int	main(int argc, char **argv)
-{
+int	main(int argc, char **argv) {
 	t_data d = {0};
 	int	ret = parse_args(argc, argv, &d);
 	if (ret) return (ret);
 	ret = launch_terminal(argc, argv, &d);
 	if (ret != LAUNCH_LOCAL) return ret;
 	initialize(&d);
-	while (!d.game_over && d.size < d.width * d.height)
-	{
+	while (!d.game_over && d.size < d.width * d.height) {
 		process_input(&d);
 		update_game(&d);
 		render(&d);

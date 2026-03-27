@@ -1,10 +1,6 @@
 #ifndef MINISNAKE_H
 # define MINISNAKE_H
 
-// Unlock POSIX structures and functions (e.g. sigaction) for VS Code and GCC
-# define _DEFAULT_SOURCE
-# define _POSIX_C_SOURCE 200809L
-
 # include <ctype.h>
 # include <errno.h>
 # include <fcntl.h>
