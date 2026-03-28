@@ -13,6 +13,7 @@
 # include <string.h>
 # include <sys/ioctl.h>
 # include <sys/socket.h>
+# include <sys/ptrace.h>
 # include <termios.h>
 # include <time.h>
 # include <unistd.h>

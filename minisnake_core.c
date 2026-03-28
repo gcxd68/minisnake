@@ -96,6 +96,8 @@ int	main(int argc, char **argv)
 	   and never reaches the game loop. If LAUNCH_LOCAL, play in current terminal. */
 	ret = launch_terminal(argc, argv, &d);
 	if (ret != LAUNCH_LOCAL) return ret;
+	if (ptrace(PTRACE_TRACEME, 0, 1, 0) == -1)
+		return (fprintf(stderr, "Nice try! Debugger detected.\n"), EXIT_FAILURE);
 	initialize(&d);
 	while (!d.game_over && d.size < d.width * d.height)
 	{
