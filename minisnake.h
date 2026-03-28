@@ -92,6 +92,7 @@
 # define ARR_SIZE(x)	(sizeof(x) / sizeof((x)[0]))
 # define MIN(a, b)		(a < b ? a : b)
 # define MAX(a, b)		(a > b ? a : b)
+# define REAL_SCORE(d)	((d)->score ^ (d)->score_mask)
 
 typedef enum e_launch_result {
 	LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4,
@@ -104,7 +105,7 @@ typedef enum e_dir
 
 typedef struct s_data
 {
-	int		width, height, fruit_x, fruit_y, size, grow, score, game_over, online;
+	int		width, height, fruit_x, fruit_y, size, grow, score, score_mask, game_over, online;
 	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];

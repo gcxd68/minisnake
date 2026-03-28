@@ -175,6 +175,10 @@ static void	init_game(t_data *d) {
 	d->delay = INITIAL_DELAY;
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
+	/* Score is stored XOR'd with a random mask to prevent simple RAM scanners
+	   (e.g. Cheat Engine) from finding and modifying it directly in memory. */
+	d->score_mask = rand();
+	d->score = 0 ^ d->score_mask;
 	/* Place snake head near center, with a small random offset on even dimensions */
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
