@@ -173,6 +173,7 @@ static void	setup_io(void) {
 static void	init_game(t_data *d) {
 	d->size = 1;
 	d->delay = INITIAL_DELAY;
+	d->last_frame = time(NULL);
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
 	/* Score is stored XOR'd with a random mask to prevent simple RAM scanners

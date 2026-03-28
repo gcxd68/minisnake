@@ -110,6 +110,7 @@ typedef struct s_data
 	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
+	time_t	last_frame;
 }	t_data;
 
 int		parse_args(int argc, char **argv, t_data *d);

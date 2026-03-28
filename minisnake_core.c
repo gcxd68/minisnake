@@ -1,5 +1,14 @@
 #include "minisnake.h"
 
+static void	anticheat(t_data *d)
+{
+	const time_t	now = time(NULL);
+
+	if (now - d->last_frame > 2)
+		d->online = 0;
+	d->last_frame = now;
+}
+
 static void	process_input(t_data *d)
 {
 	static const char	keys[] = MOVE_KEYS;
@@ -108,6 +117,7 @@ int	main(int argc, char **argv)
 	initialize(&d);
 	while (!d.game_over && d.size < d.width * d.height)
 	{
+		anticheat(&d);
 		process_input(&d);
 		update_game(&d);
 		render(&d);
