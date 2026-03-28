@@ -104,7 +104,7 @@ int	launch_terminal(int argc, char **argv, t_data *d)
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path,
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
 	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
-		"--geometry", geom, "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
 	/* Dark theme for a better visual experience */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
