@@ -117,6 +117,8 @@ int		launch_terminal(int argc, char **argv, t_data *d);
 void	enable_raw_mode(void);
 void	disable_raw_mode(void);
 void	initialize(t_data *d);
+void	spawn_fruit(t_data *d);
+void	draw_fruit(t_data *d);
 void	handle_leaderboard(t_data *d);
 void	finalize(t_data *d);
 

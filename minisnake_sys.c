@@ -182,9 +182,11 @@ static void	init_game(t_data *d) {
 	/* Place snake head near center, with a small random offset on even dimensions */
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
+	spawn_fruit(d);
 }
 
 static void	setup_display(t_data *d) {
+	draw_fruit(d);
 	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)
 		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, y, 1, y, d->width + 2);

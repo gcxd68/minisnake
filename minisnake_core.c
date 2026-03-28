@@ -22,7 +22,7 @@ static void	process_input(t_data *d)
 		d->input_q[i] = d->input_q[i + 1];
 }
 
-static void	spawn_fruit(t_data *d)
+void	spawn_fruit(t_data *d)
 {
 	int	i;
 
@@ -53,8 +53,7 @@ static void	update_game(t_data *d)
 			d->game_over = 1;
 	if (d->x[0] != d->fruit_x || d->y[0] != d->fruit_y)
 		return ;
-	/* !d->dir[1]: also spawn on first fruit eat before snake has moved */
-	if (d->size < d->width * d->height || !d->dir[1])
+	if (d->size < d->width * d->height)
 		spawn_fruit(d);
 	d->grow = 1;
 	/* Decode, increment, re-encode score in one expression */
@@ -62,12 +61,19 @@ static void	update_game(t_data *d)
 	d->delay *= SPEEDUP_FACTOR;
 }
 
+void draw_fruit(t_data *d)
+{
+	static const char	*fruit_palette[] = FRUIT_PALETTE;
+	const char			*fruit_color = fruit_palette[rand() % ARR_SIZE(fruit_palette)];
+
+	printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
+		   d->fruit_y + 2, d->fruit_x + 2, fruit_color);
+}
+
 static void	render(t_data *d)
 {
 	static const char	*heads[] = SNAKE_HEADS;
 	static const char	*bends[] = SNAKE_BENDS;
-	static const char	*fruit_palette[] = FRUIT_PALETTE;
-	const char			*fruit_color = fruit_palette[rand() % ARR_SIZE(fruit_palette)];
 
 	if (!d->dir[0])
 		return ;
@@ -78,10 +84,11 @@ static void	render(t_data *d)
 	if (d->size > 1)
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
-	/* Redraw fruit and score only when the snake just ate (grow flag set) or on first frame */
-	if (d->grow || !d->dir[1])
-		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET CURSOR_POS "%d",
-			d->fruit_y + 2, d->fruit_x + 2, fruit_color, d->height + 3, 8, REAL_SCORE(d));
+	/* Redraw fruit and score only when the snake just ate (grow flag set) */
+	if (d->grow) {
+		draw_fruit(d);
+		printf(CURSOR_POS "%d", d->height + 3, 8, REAL_SCORE(d));
+	}
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
 	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }
