@@ -1,6 +1,7 @@
 #include "minisnake.h"
 
-static void	process_input(t_data *d) {
+static void	process_input(t_data *d)
+{
 	static const char	keys[] = MOVE_KEYS;
 	char				*pos;
 	int					c, i;
@@ -13,26 +14,33 @@ static void	process_input(t_data *d) {
 	if (toupper(d->input_q[0]) == *EXIT_KEY)
 		d->game_over = 1;
 	else if ((pos = strchr(keys, toupper(d->input_q[0]))))
+		/* Bitshift trick: group directions into pairs (LEFT/RIGHT = 1, UP/DOWN = 2)
+		   to prevent reversing direction (e.g. LEFT while going RIGHT) */
 		if ((pos - keys + 2) >> 1 != (d->dir[0] + 1) >> 1)
 			d->dir[0] = pos - keys + 1;
-	memmove(d->input_q, d->input_q + 1, INPUT_Q_SIZE * sizeof(*d->input_q));
+	for (i = 0; i < INPUT_Q_SIZE; i++)
+		d->input_q[i] = d->input_q[i + 1];
 }
 
-static void	spawn_fruit(t_data *d) {
+static void	spawn_fruit(t_data *d)
+{
 	int	i;
 
+	/* Keep re-rolling until the fruit lands on an empty cell */
 	do {
 		d->fruit_x = rand() % d->width;
 		d->fruit_y = rand() % d->height;
-		for (i = 0; i < d->size; i++)
-			if (d->x[i] == d->fruit_x && d->y[i] == d->fruit_y)
-				break;
+		for (i = 0;
+			i < d->size && !(d->x[i] == d->fruit_x && d->y[i] == d->fruit_y);
+			i++);
 	} while (i < d->size);
 }
 
-static void	update_game(t_data *d) {
+static void	update_game(t_data *d)
+{
 	if (d->grow && d->grow--)
 		d->size++;
+	/* Shift the body segments forward to make room for the new head position */
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
 	memmove(d->y + 1, d->y, d->size * sizeof(*d->y));
 	d->x[0] += (d->dir[0] == RIGHT) - (d->dir[0] == LEFT);
@@ -45,6 +53,7 @@ static void	update_game(t_data *d) {
 			d->game_over = 1;
 	if (d->x[0] != d->fruit_x || d->y[0] != d->fruit_y)
 		return ;
+	/* !d->dir[1]: also spawn on first fruit eat before snake has moved */
 	if (d->size < d->width * d->height || !d->dir[1])
 		spawn_fruit(d);
 	d->grow = 1;
@@ -52,7 +61,8 @@ static void	update_game(t_data *d) {
 	d->delay *= SPEEDUP_FACTOR;
 }
 
-static void	render(t_data *d) {
+static void	render(t_data *d)
+{
 	static const char	*heads[] = SNAKE_HEADS;
 	static const char	*bends[] = SNAKE_BENDS;
 	static const char	*fruit_palette[] = FRUIT_PALETTE;
@@ -60,11 +70,14 @@ static void	render(t_data *d) {
 
 	if (!d->dir[0])
 		return ;
+	/* Erase the tail cell unless the fruit happens to be there */
 	if (d->x[d->size] != d->fruit_x || d->y[d->size] != d->fruit_y)
 		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
+	/* Draw the second segment as a bend or straight body piece */
 	if (d->size > 1)
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
+	/* Redraw fruit and score only when the snake just ate (grow flag set) or on first frame */
 	if (d->grow || !d->dir[1])
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET CURSOR_POS "%d",
 			d->fruit_y + 2, d->fruit_x + 2, fruit_color, d->height + 3, 8, d->score);
@@ -72,14 +85,19 @@ static void	render(t_data *d) {
 	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }
 
-int	main(int argc, char **argv) {
+int	main(int argc, char **argv)
+{
 	t_data d = {0};
 	int	ret = parse_args(argc, argv, &d);
 	if (ret) return (ret);
+	/* Try to spawn a dedicated gnome-terminal window.
+	   If successful (LAUNCH_SPAWN), the current process is replaced by execvp
+	   and never reaches the game loop. If LAUNCH_LOCAL, play in current terminal. */
 	ret = launch_terminal(argc, argv, &d);
 	if (ret != LAUNCH_LOCAL) return ret;
 	initialize(&d);
-	while (!d.game_over && d.size < d.width * d.height) {
+	while (!d.game_over && d.size < d.width * d.height)
+	{
 		process_input(&d);
 		update_game(&d);
 		render(&d);

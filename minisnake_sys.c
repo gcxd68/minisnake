@@ -1,6 +1,7 @@
 #include "minisnake.h"
 
-static int	parse_dimension(const char *str, int min, int max, int *out, const char *name) {
+static int	parse_dimension(const char *str, int min, int max, int *out, const char *name)
+{
 	char	*endptr;
 	long	val = strtol(str, &endptr, 10);
 
@@ -12,12 +13,16 @@ static int	parse_dimension(const char *str, int min, int max, int *out, const ch
 	return (2);
 }
 
-int	parse_args(int argc, char **argv, t_data *d) {
+int	parse_args(int argc, char **argv, t_data *d)
+{
+	/* Validate compile-time constant at runtime in case someone changes it incorrectly */
 	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f) {
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
 		return(EXIT_FAILURE);
 	}
-	if (argc == 2 && !strcmp(argv[1], "online")) {
+	if (argc == 2 && !strcmp(argv[1], "online"))
+	{
+		/* ONLINE_BUILD is only defined when keys.h was generated from obfuscator.py */
 #ifndef ONLINE_BUILD
 		fprintf(stderr, "minisnake: online mode not available in this build\n");
 		return(EXIT_FAILURE);
@@ -26,7 +31,9 @@ int	parse_args(int argc, char **argv, t_data *d) {
 		d->height = ONLINE_HEIGHT;
 		d->online = 1;
 		return (0);
-	} else if (argc == 3) {
+	}
+	else if (argc == 3)
+	{
 		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
 			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))
 			return (2);
@@ -37,40 +44,51 @@ int	parse_args(int argc, char **argv, t_data *d) {
 	return(2);
 }
 
-static int	read_char(void) {
+/* Read a single character and flush the rest of the line to avoid
+   leftover input polluting subsequent reads */
+static int	read_char(void)
+{
 	int c = getchar();
 	if (c != '\n' && c != EOF)
 		for (int next; (next = getchar()) != '\n' && next != EOF;);
 	return (c);
 }
 
-static int  ask_confirm(const char *question) {
+static int	ask_confirm(const char *question)
+{
 	printf("%s", question);
 	fflush(stdout);
 	int c = read_char();
 	return (c == 'y' || c == 'Y');
 }
 
-static int	install_gnome_terminal(void) {
+static int	install_gnome_terminal(void)
+{
 	if (ask_confirm("gnome-terminal is not installed.\n"
 		"It is recommended for a better user experience, but not required.\n"
-		"Would you like to install it? (y/n): ")) {
+		"Would you like to install it? (y/n): "))
+	{
 		printf("Installing gnome-terminal...\n");
 		if (system("sudo apt update && sudo apt install -y gnome-terminal") == 0)
 			return (LAUNCH_SPAWN);
 		fprintf(stderr, "Installation failed. Please install it manually.\n");
-	} else
+	}
+	else
 		printf("Installation skipped.\n");
+	/* Fall back to running in the current terminal if the user agrees */
 	if (ask_confirm("Would you like to use the current terminal instead? (y/n): "))
 		return (LAUNCH_LOCAL);
-	return (EXIT_SUCCESS);	
+	return (EXIT_SUCCESS);
 }
 
-int	launch_terminal(int argc, char **argv, t_data *d) {
+int	launch_terminal(int argc, char **argv, t_data *d)
+{
 	char	geom[BUF_GEOM], cmd[BUF_CMD];
 	char	*self, *tty;
 	int		ret;
 
+	/* ENV_VAR is set before execvp so the child process knows it's already
+	   running inside the dedicated terminal and skips re-launching */
 	if (getenv(ENV_VAR))
 		return (LAUNCH_LOCAL);
 	if (system("which gnome-terminal > /dev/null 2>&1") != 0)
@@ -78,31 +96,40 @@ int	launch_terminal(int argc, char **argv, t_data *d) {
 			return (ret);
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
+	/* Redirect stderr to the parent tty so error messages remain visible
+	   even after the new gnome-terminal window takes over stdout */
 	if (!(tty = ttyname(STDERR_FILENO)))
 		tty = "/dev/null";
-	int term_width = MAX(d->width + 2, (int)strlen(INSTRUCTIONS));
-	snprintf(geom, sizeof(geom), "%dx%d", term_width, d->height + 4);
-	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path, 
+	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
+	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path,
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
 	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
 		"--geometry", geom, "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+	/* Dark theme for a better visual experience */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
-	if (execvp(args[0], args) == -1) {
+	if (execvp(args[0], args) == -1)
+	{
+		/* execvp only returns on failure — offer to continue in the current terminal */
 		perror("minisnake: execvp failed");
 		fprintf(stderr, "Failed to open a new terminal window.\n");
 		free(self);
 		if (!ask_confirm("Would you like to use the current terminal instead? (y/n): "))
 			return(EXIT_FAILURE);
 	}
+	/* Reached only if execvp failed and user chose current terminal */
 	unsetenv(ENV_VAR);
 	return (LAUNCH_LOCAL);
 }
 
+/* Saved terminal state — restored on exit to leave the shell intact */
 struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
 
-void	enable_raw_mode(void) {
+/* Switch stdin to raw mode: disable line buffering (ICANON) and echo.
+   This lets the game read keypresses instantly without waiting for Enter. */
+void	enable_raw_mode(void)
+{
 	struct termios	raw;
 
 	raw = g_saved_term;
@@ -112,11 +139,14 @@ void	enable_raw_mode(void) {
 	printf(CURSOR_HIDE);
 }
 
+/* Restore the terminal to its original state and show the cursor */
 void	disable_raw_mode(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
 	printf(CURSOR_SHOW);
 }
 
+/* Restore the O_NONBLOCK flag on stdin to its original value.
+   Called before blocking reads (fgets, getchar) so they wait for input. */
 static void	restore_stdin_flags(void) {
 	if (g_saved_stdin_flags != -1)
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
@@ -128,10 +158,12 @@ static void	clean_exit(int status) {
 	exit(status);
 }
 
-static void	setup_io() {
+static void	setup_io(void) {
 	if (tcgetattr(STDIN_FILENO, &g_saved_term) == -1)
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
 	enable_raw_mode();
+	/* O_NONBLOCK on stdin prevents getchar() from blocking during the game loop,
+	   allowing usleep() to control timing instead of waiting for keypresses */
 	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
 		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
@@ -143,6 +175,7 @@ static void	init_game(t_data *d) {
 	d->delay = INITIAL_DELAY;
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
+	/* Place snake head near center, with a small random offset on even dimensions */
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
 }
@@ -160,7 +193,7 @@ static void	handle_sig(int sig) {
 	clean_exit(128 + sig);
 }
 
-static void	setup_sig() {
+static void	setup_sig(void) {
 	const int			signals[] = {SIGINT, SIGQUIT, SIGTERM};
 	struct sigaction	sa;
 
@@ -182,11 +215,17 @@ void	initialize(t_data *d) {
 	setup_sig();
 }
 
-void	finalize(t_data *d) {
+void	finalize(t_data *d)
+{
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
-	const int col = MAX(d->width - (int)strlen(outcome) + 3, (int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
+	/* Align outcome message to the right of the score line,
+	   but never to the left of the INSTRUCTIONS string start */
+	const int col = MAX(d->width - (int)strlen(outcome) + 3,
+		(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
-	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over ? COLOR_RED : COLOR_GREEN, outcome);
+	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
+		? COLOR_RED : COLOR_GREEN, outcome);
+	/* Restore blocking stdin before any user-facing read operations */
 	restore_stdin_flags();
 	handle_leaderboard(d);
 	printf(CURSOR_POS ERASE_LINE, d->height + 4, 1);
