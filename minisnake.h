@@ -13,7 +13,6 @@
 # include <string.h>
 # include <sys/ioctl.h>
 # include <sys/socket.h>
-# include <sys/ptrace.h>
 # include <termios.h>
 # include <time.h>
 # include <unistd.h>
@@ -111,7 +110,7 @@ typedef struct s_data
 	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
-	time_t	last_frame;
+	long	last_frame;
 }	t_data;
 
 void	enable_raw_mode(void);

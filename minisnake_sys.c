@@ -126,15 +126,6 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 	return (LAUNCH_LOCAL);
 }
 
-static int	check_debugger(void)
-{
-	int	ret = ptrace(PTRACE_TRACEME, 0, 1, 0);
-
-	if (!ret) return (0);
-	fprintf(stderr, "Nice try! Debugger detected.\n");
-	return (EXIT_FAILURE);
-}
-
 /* Saved terminal state — restored on exit to leave the shell intact */
 struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
@@ -186,7 +177,6 @@ static void	setup_io(void) {
 static void	init_game(t_data *d) {
 	d->size = 1;
 	d->delay = INITIAL_DELAY;
-	d->last_frame = time(NULL);
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
 	/* Score is stored XOR'd with a random mask to prevent simple RAM scanners
@@ -261,8 +251,6 @@ int	main(int argc, char **argv)
 	if (ret) return (ret);
 	ret = launch_terminal(argc, argv, &d);
 	if (ret != LAUNCH_LOCAL) return ret;
-	ret = check_debugger();
-	if (ret) return (ret);
 	initialize(&d);
 	game_loop(&d);
 	finalize(&d);

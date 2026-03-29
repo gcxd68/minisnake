@@ -10,13 +10,44 @@ static void	anticheat(t_data *d)
 
 #else
 
-static void	anticheat(t_data *d)
+static long get_ms(void)
 {
-	const time_t	now = time(NULL);
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+}
 
-	if (now - d->last_frame > 2)
+static void anticheat(t_data *d)
+{
+	static int	counter = 0;
+	long		now = get_ms();
+
+	if (d->cheat) return;
+	if (!d->last_frame)
+	{
+		d->last_frame = now;
+		return;
+	}
+	if (now - d->last_frame > 5000)
 		d->cheat = 1;
 	d->last_frame = now;
+	if (!d->cheat && (counter++ % 10 == 0))
+	{
+		FILE	*f = fopen("/proc/self/status", "r");
+		char	buf[256];
+
+		if (!f) return;
+		while (fgets(buf, sizeof(buf), f))
+		{
+			if (!strncmp(buf, "TracerPid:", 10))
+			{
+				if (atoi(buf + 10) != 0)
+					d->cheat = 1;
+				break;
+			}
+		}
+		fclose(f);
+	}
 }
 
 static void	process_input(t_data *d)
