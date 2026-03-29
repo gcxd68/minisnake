@@ -103,7 +103,8 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 	   even after the new gnome-terminal window takes over stdout */
 	if (!(tty = ttyname(STDERR_FILENO)))
 		tty = "/dev/null";
-	snprintf(geom, sizeof(geom), "%dx%d", d->width + 2, d->height + 4);
+	int width = MAX(d->width + 2, (int)strlen(INSTRUCTIONS));
+	snprintf(geom, sizeof(geom), "%dx%d", width, d->height + 4);
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path,
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
 	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
