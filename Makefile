@@ -5,7 +5,7 @@ CC		= cc
 # -flto                 : link-time optimization across translation units
 # -s                    : strip debug symbols from the binary (hardens against reverse engineering)
 CFLAGS	= -Wall -Wextra -Werror -O3 -flto -s
-SRCS	= minisnake_core.c minisnake_sys.c minisnake_net.c
+SRCS	= minisnake_game.c minisnake_sys.c minisnake_net.c
 OBJS	= $(SRCS:.c=.o)
 
 .PHONY: all clean fclean re

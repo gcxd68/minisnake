@@ -1,11 +1,21 @@
 #include "minisnake.h"
 
+#ifndef ONLINE_BUILD
+
+/* Stub: anticheat is disabled in offline builds */
+static void	anticheat(t_data *d)
+{
+	(void)d;
+}
+
+#else
+
 static void	anticheat(t_data *d)
 {
 	const time_t	now = time(NULL);
 
 	if (now - d->last_frame > 2)
-		d->online = 0;
+		d->cheat = 1;
 	d->last_frame = now;
 }
 
@@ -66,7 +76,7 @@ static void	update_game(t_data *d)
 		spawn_fruit(d);
 	d->grow = 1;
 	/* Decode, increment, re-encode score in one expression */
-	d->score = (REAL_SCORE(d) + 10) ^ d->score_mask;
+	d->score = MASK_SCORE((REAL_SCORE + 10));
 	d->delay *= SPEEDUP_FACTOR;
 }
 
@@ -96,33 +106,22 @@ static void	render(t_data *d)
 	/* Redraw fruit and score only when the snake just ate (grow flag set) */
 	if (d->grow) {
 		draw_fruit(d);
-		printf(CURSOR_POS "%d", d->height + 3, 8, REAL_SCORE(d));
+		printf(CURSOR_POS "%d", d->height + 3, 8, REAL_SCORE);
 	}
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
 	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }
 
-int	main(int argc, char **argv)
+void	game_loop(t_data *d)
 {
-	t_data d = {0};
-	int	ret = parse_args(argc, argv, &d);
-	if (ret) return (ret);
-	/* Try to spawn a dedicated gnome-terminal window.
-	   If successful (LAUNCH_SPAWN), the current process is replaced by execvp
-	   and never reaches the game loop. If LAUNCH_LOCAL, play in current terminal. */
-	ret = launch_terminal(argc, argv, &d);
-	if (ret != LAUNCH_LOCAL) return ret;
-	if (ptrace(PTRACE_TRACEME, 0, 1, 0) == -1)
-		return (fprintf(stderr, "Nice try! Debugger detected.\n"), EXIT_FAILURE);
-	initialize(&d);
-	while (!d.game_over && d.size < d.width * d.height)
+	while (!d->game_over && d->size < d->width * d->height)
 	{
-		anticheat(&d);
-		process_input(&d);
-		update_game(&d);
-		render(&d);
-		usleep(d.delay);
+		anticheat(d);
+		process_input(d);
+		update_game(d);
+		render(d);
+		usleep(d->delay);
 	}
-	finalize(&d);
-	return (EXIT_SUCCESS);
 }
+
+#endif

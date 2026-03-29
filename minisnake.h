@@ -90,10 +90,11 @@
 # define FRUIT_CHAR		"@"
 # define FRUIT_PALETTE	{ COLOR_RED, COLOR_GREEN, COLOR_YELLOW, COLOR_MAGENTA, COLOR_CYAN, COLOR_WHITE }
 
-# define ARR_SIZE(x)	(sizeof(x) / sizeof((x)[0]))
+# define ARR_SIZE(x)	(sizeof(x) / sizeof(x[0]))
 # define MIN(a, b)		(a < b ? a : b)
 # define MAX(a, b)		(a > b ? a : b)
-# define REAL_SCORE(d)	((d)->score ^ (d)->score_mask)
+# define REAL_SCORE		(d->score ^ d->score_mask)
+# define MASK_SCORE(s)	(s ^ d->score_mask)
 
 typedef enum e_launch_result {
 	LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4,
@@ -106,21 +107,18 @@ typedef enum e_dir
 
 typedef struct s_data
 {
-	int		width, height, fruit_x, fruit_y, size, grow, score, score_mask, game_over, online;
+	int		width, height, fruit_x, fruit_y, size, grow, score, score_mask, game_over, online, cheat;
 	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
 	time_t	last_frame;
 }	t_data;
 
-int		parse_args(int argc, char **argv, t_data *d);
-int		launch_terminal(int argc, char **argv, t_data *d);
 void	enable_raw_mode(void);
 void	disable_raw_mode(void);
-void	initialize(t_data *d);
+void	game_loop(t_data *d);
 void	spawn_fruit(t_data *d);
 void	draw_fruit(t_data *d);
 void	handle_leaderboard(t_data *d);
-void	finalize(t_data *d);
 
 #endif

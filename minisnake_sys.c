@@ -13,7 +13,7 @@ static int	parse_dimension(const char *str, int min, int max, int *out, const ch
 	return (2);
 }
 
-int	parse_args(int argc, char **argv, t_data *d)
+static int	parse_args(int argc, char **argv, t_data *d)
 {
 	/* Validate compile-time constant at runtime in case someone changes it incorrectly */
 	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f) {
@@ -81,7 +81,10 @@ static int	install_gnome_terminal(void)
 	return (EXIT_SUCCESS);
 }
 
-int	launch_terminal(int argc, char **argv, t_data *d)
+/* Try to spawn a dedicated gnome-terminal window.
+   If successful (LAUNCH_SPAWN), the current process is replaced by execvp
+   and never reaches the game loop. If LAUNCH_LOCAL, play in current terminal. */
+static int	launch_terminal(int argc, char **argv, t_data *d)
 {
 	char	geom[BUF_GEOM], cmd[BUF_CMD];
 	char	*self, *tty;
@@ -120,6 +123,15 @@ int	launch_terminal(int argc, char **argv, t_data *d)
 	/* Reached only if execvp failed and user chose current terminal */
 	unsetenv(ENV_VAR);
 	return (LAUNCH_LOCAL);
+}
+
+static int	check_debugger(void)
+{
+	int	ret = ptrace(PTRACE_TRACEME, 0, 1, 0);
+
+	if (!ret) return (0);
+	fprintf(stderr, "Nice try! Debugger detected.\n");
+	return (EXIT_FAILURE);
 }
 
 /* Saved terminal state — restored on exit to leave the shell intact */
@@ -179,7 +191,7 @@ static void	init_game(t_data *d) {
 	/* Score is stored XOR'd with a random mask to prevent simple RAM scanners
 	   (e.g. Cheat Engine) from finding and modifying it directly in memory. */
 	d->score_mask = rand();
-	d->score = 0 ^ d->score_mask;
+	d->score = MASK_SCORE(0);
 	/* Place snake head near center, with a small random offset on even dimensions */
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
@@ -215,14 +227,14 @@ static void	setup_sig(void) {
 	}
 }
 
-void	initialize(t_data *d) {
+static void	initialize(t_data *d) {
 	setup_io();
 	init_game(d);
 	setup_display(d);
 	setup_sig();
 }
 
-void	finalize(t_data *d)
+static void	finalize(t_data *d)
 {
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
 	/* Align outcome message to the right of the score line,
@@ -239,4 +251,19 @@ void	finalize(t_data *d)
 	ask_confirm("Press Enter to close...");
 	printf("\n");
 	disable_raw_mode();
+}
+
+int	main(int argc, char **argv)
+{
+	t_data d = {0};
+	int	ret = parse_args(argc, argv, &d);
+	if (ret) return (ret);
+	ret = launch_terminal(argc, argv, &d);
+	if (ret != LAUNCH_LOCAL) return ret;
+	ret = check_debugger();
+	if (ret) return (ret);
+	initialize(&d);
+	game_loop(&d);
+	finalize(&d);
+	return (EXIT_SUCCESS);
 }
