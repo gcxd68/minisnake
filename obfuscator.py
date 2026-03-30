@@ -27,7 +27,7 @@ def obfuscate_string(name, text):
     print(f"# define {name} {{{array_str}}}")
 
 # Read keys and configuration from the local 'net' file (never committed to git)
-net_config = {}
+net = {}
 try:
     with open('net') as f:
         for line in f:
@@ -35,38 +35,38 @@ try:
             # Ignore empty lines and comments
             if line and '=' in line and not line.startswith('#'):
                 k, v = line.split('=', 1)
-                net_config[k.strip()] = v.strip()
+                net[k.strip()] = v.strip()
 except FileNotFoundError:
     print("Error: 'net' file not found.", file=sys.stderr)
-    print("Copy 'net.example' to 'net' and fill in your net_config.", file=sys.stderr)
+    print("Copy 'net.example' to 'net' and fill in your net configuration.", file=sys.stderr)
     sys.exit(1)
 
 # Ensure essential Dreamlo/VPS keys are present
-if not net_config.get("PUBLIC_KEY") or not net_config.get("PRIVATE_KEY"):
-    print("Error: PUBLIC_KEY or PRIVATE_KEY missing from 'net' file.", file=sys.stderr)
+if not net.get("VPS_PUBLIC_KEY") or not net.get("VPS_PRIVATE_KEY"):
+    print("Error: VPS_PUBLIC_KEY or VPS_PRIVATE_KEY missing from 'net' file.", file=sys.stderr)
     sys.exit(1)
 
 # Default networking values if not specified in the net file
-vps_host = net_config.get("VPS_HOST", "dreamlo.com")
-vps_port = net_config.get("VPS_PORT", "80")
+vps_host = net.get("VPS_HOST", "dreamlo.com")
+vps_port = net.get("VPS_PORT", "80")
 
 # Output a fresh net.h each time — constants are re-randomized on every run
 # so the binary changes even if the keys don't (polymorphic obfuscation)
 print("/* Auto-generated polymorphic file - DO NOT EDIT */")
 print("#ifndef NET_H")
-print("# define NET_H\\n")
+print("# define NET_H\n")
 
 print(f"# define KEY_PART_A 0x{PART_A:02x}")
 print(f"# define KEY_PART_B 0x{PART_B:02x}")
 print(f"# define KEY_PART_C 0x{PART_C:02x}")
-print(f"# define KEY_SALT   0x{SALT:02x}\\n")
+print(f"# define KEY_SALT   0x{SALT:02x}\n")
 
 # Network configuration defines
 print(f'# define SERVER_HOST    "{vps_host}"')
-print(f'# define SERVER_PORT    {vps_port}\\n')
+print(f'# define SERVER_PORT    {vps_port}\n')
 
 # Obfuscate the keys into byte arrays
-obfuscate_string("OBS_PUB_KEY", net_config["PUBLIC_KEY"])
-obfuscate_string("OBS_PRIV_KEY", net_config["PRIVATE_KEY"])
+obfuscate_string("OBS_PUB_KEY", net["VPS_PUBLIC_KEY"])
+obfuscate_string("OBS_PRIV_KEY", net["VPS_PRIVATE_KEY"])
 
-print("\\n#endif")
+print("\n#endif")
