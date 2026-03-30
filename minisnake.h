@@ -136,11 +136,11 @@ typedef struct s_data
 	t_dir	dir[2];
 }	t_data;
 
-void	enable_raw_mode(void);
-void	disable_raw_mode(void);
-void	game_loop(t_data *d);
-void	spawn_fruit(t_data *d);
-void	draw_fruit(t_data *d);
-void	handle_leaderboard(t_data *d);
+void		enable_raw_mode(void);
+void		disable_raw_mode(void);
+void		game_loop(t_data *d);
+void		spawn_fruit(t_data *d);
+const char	*draw_fruit(t_data *d);
+void		handle_leaderboard(t_data *d);
 
 #endif

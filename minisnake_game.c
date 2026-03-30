@@ -126,13 +126,15 @@ static void	update_game(t_data *d)
 	d->delay *= SPEEDUP_FACTOR;
 }
 
-void draw_fruit(t_data *d)
+const char *draw_fruit(t_data *d)
 {
-	static const char	*fruit_palette[] = FRUIT_PALETTE;
-	const char			*fruit_color = fruit_palette[rand() % ARR_SIZE(fruit_palette)];
+	static char			buf[64];
+	static const char	*palette[] = FRUIT_PALETTE;
+	const char			*color = palette[rand() % ARR_SIZE(palette)];
 
-	printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
-		   d->fruit_y + 2, d->fruit_x + 2, fruit_color);
+	snprintf(buf, sizeof(buf), CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
+			 d->fruit_y + 2, d->fruit_x + 2, color);
+	return (buf);
 }
 
 static void	render(t_data *d)
@@ -150,10 +152,8 @@ static void	render(t_data *d)
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
 	/* Redraw fruit and score only when the snake just ate (grow flag set) */
-	if (d->grow) {
-		draw_fruit(d);
-		printf(CURSOR_POS "%d", d->height + 3, 8, REAL_SCORE);
-	}
+	if (d->grow)
+		printf("%s" CURSOR_POS "%d", draw_fruit(d), d->height + 3, 8, REAL_SCORE);
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
 	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }
