@@ -63,6 +63,8 @@ static void anticheat(t_data *d)
 	}
 }
 
+#endif
+
 static void	process_input(t_data *d)
 {
 	static const char	keys[] = MOVE_KEYS;
@@ -167,5 +169,3 @@ void	game_loop(t_data *d)
 		usleep(d->delay);
 	}
 }
-
-#endif

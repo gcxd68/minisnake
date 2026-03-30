@@ -10,7 +10,7 @@ void	handle_leaderboard(t_data *d)
 
 #else
 
-# define SERVER_HOST		"dreamlo.com"
+# define SERVER_HOST		"server_ip_address"
 # define SERVER_PORT		80
 
 # define BUF_RESP_SUBMIT	512		/* Small buffer: submit response is just "OK" */
@@ -155,15 +155,35 @@ static void build_path(char *out, size_t size, const unsigned char *obs_key,
 	memset(real_key, 0, sizeof(real_key));
 }
 
+/* Compute a 32-bit djb2 hash to sign the submit request.
+   This cleanly hides the exact PRIVATE_KEY from packet sniffers. */
+static void generate_signature(const char *key, const char *name, int score, long ts, char *out_sig)
+{
+	char			buf[256];
+	unsigned int	hash = 5381;
+
+	snprintf(buf, sizeof(buf), "%s%s%d%ld", key, name, score, ts);
+	for (int i = 0; buf[i]; i++)
+		hash = ((hash << 5) + hash) + buf[i];
+	snprintf(out_sig, 32, "%08x", hash);
+}
+
 static int	dreamlo_submit(t_data *d, const char *name)
 {
 	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
 	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
+	char				real_key[BUF_KEY], sig[32];
+	int					score = d->cheat ? XOR_SCORE(0) : REAL_SCORE;
+	long				ts = (long)time(NULL);
 
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
-	build_path(path, sizeof(path), obs_priv, sizeof(obs_priv), "add/%s/%d",
-		name, d->cheat ? XOR_SCORE(0) : REAL_SCORE);
+
+	get_real_key(obs_priv, real_key, sizeof(obs_priv));
+	generate_signature(real_key, name, score, ts, sig);
+	memset(real_key, 0, sizeof(real_key));
+
+	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d/%ld", sig, name, score, ts);
 	return (http_get(path, resp, sizeof(resp)));
 }
 
