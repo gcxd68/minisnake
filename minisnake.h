@@ -30,9 +30,14 @@
 # define MAX_HEIGHT			50
 # define INITIAL_DELAY		250000
 # define SPEEDUP_FACTOR		0.985f
-# define POINTS_PER_FRUIT	10
 # define INPUT_Q_SIZE		2
+# define POINTS_PER_FRUIT	10
 # define CHEAT_TIMEOUT		5000
+# define ONLINE_WIDTH		25
+# define ONLINE_HEIGHT		20
+# define BUF_GEOM			32
+# define BUF_CHEAT			256
+# define BUF_CMD			512
 
 # if MIN_WIDTH < 2
 #  error "MIN_WIDTH must be >= 2"
@@ -52,11 +57,28 @@
 # if INPUT_Q_SIZE <= 0
 #  error "INPUT_Q_SIZE must be > 0"
 # endif
+# if POINTS_PER_FRUIT <= 0
+#  error "POINTS_PER_FRUIT must be > 0"
+# endif
+# if CHEAT_TIMEOUT < 0
+#  error "CHEAT_TIMEOUT must be >= 0"
+# endif
+# if MIN_WIDTH * MIN_HEIGHT > 10000
+#  error "Minimum board size exceeds maximum snake capacity (10000)"
+# endif
+# if MAX_WIDTH * MAX_HEIGHT > 10000
+#  error "Maximum board size exceeds maximum snake capacity (10000)"
+# endif
+# if ONLINE_WIDTH < MIN_WIDTH || ONLINE_WIDTH > MAX_WIDTH
+#  error "ONLINE_WIDTH must be between MIN_WIDTH and MAX_WIDTH"
+# endif
+# if ONLINE_HEIGHT < MIN_HEIGHT || ONLINE_HEIGHT > MAX_HEIGHT
+#  error "ONLINE_HEIGHT must be between MIN_HEIGHT and MAX_HEIGHT"
+# endif
+# if BUF_GEOM <= 0 || BUF_CHEAT <= 0 || BUF_CMD <= 0
+#  error "Buffer sizes must be strictly positive"
+# endif
 
-# define ONLINE_WIDTH		25
-# define ONLINE_HEIGHT		20
-# define BUF_GEOM			32
-# define BUF_CMD			512
 # define TERM_TITLE			"minisnake"
 # define ENV_VAR			"MINISNAKE_LAUNCHED"
 # define DEFAULT_EXE		"./minisnake"

@@ -44,8 +44,7 @@ static int	parse_args(int argc, char **argv, t_data *d)
 	return(2);
 }
 
-/* Read a single character and flush the rest of the line to avoid
-   leftover input polluting subsequent reads */
+/* Read a single character and flush the rest of the line */
 static int	read_char(void)
 {
 	int c = getchar();
@@ -75,6 +74,7 @@ static int	install_gnome_terminal(void)
 	}
 	else
 		printf("Installation skipped.\n");
+
 	/* Fall back to running in the current terminal if the user agrees */
 	if (ask_confirm("Would you like to use the current terminal instead? (y/n): "))
 		return (LAUNCH_LOCAL);
@@ -90,8 +90,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 	char	*self, *tty;
 	int		ret;
 
-	/* ENV_VAR is set before execvp so the child process knows it's already
-	   running inside the dedicated terminal and skips re-launching */
+	/* ENV_VAR is set before execvp so the child process knows it's already in the dedicated terminal */
 	if (getenv(ENV_VAR))
 		return (LAUNCH_LOCAL);
 	if (system("which gnome-terminal > /dev/null 2>&1") != 0)
@@ -99,6 +98,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 			return (ret);
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
+
 	/* Redirect stderr to the parent tty so error messages remain visible
 	   even after the new gnome-terminal window takes over stdout */
 	if (!(tty = ttyname(STDERR_FILENO)))
@@ -109,6 +109,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
 	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
 		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+
 	/* Dark theme for a better visual experience */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
@@ -121,6 +122,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 		if (!ask_confirm("Would you like to use the current terminal instead? (y/n): "))
 			return(EXIT_FAILURE);
 	}
+
 	/* Reached only if execvp failed and user chose current terminal */
 	unsetenv(ENV_VAR);
 	return (LAUNCH_LOCAL);
@@ -130,8 +132,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
 
-/* Switch stdin to raw mode: disable line buffering (ICANON) and echo.
-   This lets the game read keypresses instantly without waiting for Enter. */
+/* Raw mode disables line buffering (ICANON) and echo so keypresses are instantly read without waiting for Enter */
 void	enable_raw_mode(void)
 {
 	struct termios	raw;
@@ -149,8 +150,7 @@ void	disable_raw_mode(void) {
 	printf(CURSOR_SHOW);
 }
 
-/* Restore the O_NONBLOCK flag on stdin to its original value.
-   Called before blocking reads (fgets, getchar) so they wait for input. */
+/* Restore the O_NONBLOCK flag so fgets and getchar wait for input. */
 static void	restore_stdin_flags(void) {
 	if (g_saved_stdin_flags != -1)
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
@@ -166,8 +166,8 @@ static void	setup_io(void) {
 	if (tcgetattr(STDIN_FILENO, &g_saved_term) == -1)
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
 	enable_raw_mode();
-	/* O_NONBLOCK on stdin prevents getchar() from blocking during the game loop,
-	   allowing usleep() to control timing instead of waiting for keypresses */
+
+	/* O_NONBLOCK on stdin prevents getchar() from blocking during the game loop */
 	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
 		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
@@ -179,10 +179,11 @@ static void	init_game(t_data *d) {
 	d->delay = INITIAL_DELAY;
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
-	/* Score is stored XOR'd with a random mask to prevent simple RAM scanners
-	   (e.g. Cheat Engine) from finding and modifying it directly in memory. */
+
+	/* Score is stored XOR'd with a random mask to prevent cheating */
 	d->score_mask = rand();
 	d->score = XOR_SCORE(0);
+
 	/* Place snake head near center, with a small random offset on even dimensions */
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
@@ -228,13 +229,14 @@ static void	initialize(t_data *d) {
 static void	finalize(t_data *d)
 {
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
-	/* Align outcome message to the right of the score line,
-	   but never to the left of the INSTRUCTIONS string start */
+
+	/* Align outcome message to the right of the score line */
 	const int col = MAX(d->width - (int)strlen(outcome) + 3,
 		(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
 	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
 		? COLOR_RED : COLOR_GREEN, outcome);
+
 	/* Restore blocking stdin before any user-facing read operations */
 	restore_stdin_flags();
 	handle_leaderboard(d);

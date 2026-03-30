@@ -28,6 +28,28 @@ void	handle_leaderboard(t_data *d)
 # define UI_NAME_WIDTH		12		/* Column width for player name display */
 # define UI_SCORE_WIDTH		7		/* Column width for score display */
 
+# if DREAMLO_PORT <= 0 || DREAMLO_PORT > 65535
+#  error "DREAMLO_PORT must be a valid port number (1-65535)"
+# endif
+# if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0 || BUF_KEY <= 0
+#  error "Buffer sizes must be strictly positive"
+# endif
+# if LB_MAX_SCORES <= 0
+#  error "LB_MAX_SCORES must be strictly positive"
+# endif
+# if LB_START_ROW < 0 || LB_COL_OFFSET < 0
+#  error "UI offsets must be positive or zero"
+# endif
+# if MAX_NAME_LEN <= 0
+#  error "MAX_NAME_LEN must be strictly positive"
+# endif
+# if UI_NAME_WIDTH < MAX_NAME_LEN
+#  error "UI_NAME_WIDTH must be >= MAX_NAME_LEN"
+# endif
+# if UI_SCORE_WIDTH <= 0
+#  error "UI_SCORE_WIDTH must be strictly positive"
+# endif
+
 # define LDB_TITLE			"--- LEADERBOARD ---"
 
 static int	dreamlo_connect(void)
@@ -69,11 +91,16 @@ static int	http_get(const char *path, char *out, int out_size)
 			total += n;
 		}
 	}
+
 	/* n < 0 means read() failed (e.g. connection reset) */
 	if (n < 0)
 		return (close(fd), -1);
 	out[total] = '\0';
 	close(fd);
+
+	/* Check if the HTTP response is exactly HTTP/1.x 200 OK */
+	if (total < 12 || strncmp(out, "HTTP/1.", 7) != 0 || strncmp(out + 8, " 200", 4) != 0)
+		return (-1);
 	return (0);
 }
 
@@ -123,6 +150,7 @@ static void build_path(char *out, size_t size, const unsigned char *obs_key,
 	vsnprintf(action, sizeof(action), fmt, args);
 	va_end(args);
 	snprintf(out, size, "/lb/%s/%s", real_key, action);
+
 	/* Wipe the decoded key so it doesn't linger in stack memory */
 	memset(real_key, 0, sizeof(real_key));
 }
@@ -154,6 +182,7 @@ static int	dreamlo_show(t_data *d)
 		return (-1);
 	printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, 1, title_col, title);
 	body = skip_headers(resp);
+
 	/* Dreamlo pipe format: name|score|seconds|extras\n per entry */
 	line = strtok_r(body, "\n", &saveptr);
 	while (line && rank <= LB_MAX_SCORES)
@@ -184,6 +213,7 @@ static int	read_name(char *name, size_t size)
 	else if (!strchr(name, '\n'))
 		/* fgets filled the buffer without hitting '\n': drain the rest of the line */
 		for (int c; (c = getchar()) != '\n' && c != EOF;);
+
 	/* Trim trailing whitespace in-place */
 	for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
 	enable_raw_mode();
