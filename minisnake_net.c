@@ -10,23 +10,23 @@ void	handle_leaderboard(t_data *d)
 
 #else
 
-# define SERVER_HOST		"dreamlo.com"
-# define SERVER_PORT		80
+# define SERVER_HOST		"XXX.XXX.XXX.XXX"	/* VPS IP address */
+# define SERVER_PORT		80					/* VPS Port */
 
-# define BUF_RESP_SUBMIT	512		/* Small buffer: submit response is just "OK" */
-# define BUF_RESP_SCORES	8192	/* Large buffer: up to 20 leaderboard entries */
-# define BUF_READ			4096	/* Internal read() chunk size in http_get */
-# define BUF_REQ			512		/* HTTP request line */
-# define BUF_PATH			256		/* Dreamlo API endpoint path */
-# define BUF_ENTRY			128		/* One parsed leaderboard line */
-# define BUF_KEY			128		/* Decoded Dreamlo key (public or private) */
+# define BUF_RESP_SUBMIT	512					/* Small buffer: submit response is just "OK" */
+# define BUF_RESP_SCORES	8192				/* Large buffer: up to 20 leaderboard entries */
+# define BUF_READ			4096				/* Internal read() chunk size in http_get */
+# define BUF_REQ			512					/* HTTP request line */
+# define BUF_PATH			256					/* Dreamlo API endpoint path */
+# define BUF_ENTRY			128					/* One parsed leaderboard line */
+# define BUF_KEY			128					/* Decoded Dreamlo key (public or private) */
 
 # define LB_MAX_SCORES		20
-# define LB_START_ROW		3		/* First row inside the game frame */
-# define LB_COL_OFFSET		2		/* Left margin inside the frame */
+# define LB_START_ROW		3					/* First row inside the game frame */
+# define LB_COL_OFFSET		2					/* Left margin inside the frame */
 # define MAX_NAME_LEN		8
-# define UI_NAME_WIDTH		12		/* Column width for player name display */
-# define UI_SCORE_WIDTH		7		/* Column width for score display */
+# define UI_NAME_WIDTH		12					/* Column width for player name display */
+# define UI_SCORE_WIDTH		7					/* Column width for score display */
 
 # if SERVER_PORT <= 0 || SERVER_PORT > 65535
 #  error "SERVER_PORT must be a valid port number (1-65535)"
