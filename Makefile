@@ -24,20 +24,20 @@ all: $(NAME)
 $(NAME): $(OBJS)
 	$(CC) $(OBJS) $(LDFLAGS) -o $(NAME)
 
-keys.h:
-	@if [ -f keys ]; then \
-		python3 obfuscator.py > keys.h; \
+net.h:
+	@if [ -f net ]; then \
+		python3 obfuscator.py > net.h; \
 	else \
-		echo "No 'keys' file found, building in offline mode."; \
+		echo "No 'net' file found, building in offline mode."; \
 	fi
 
-%.o: %.c minisnake.h keys.h
+%.o: %.c minisnake.h net.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
 	rm -f $(OBJS)
 
 fclean: clean
-	rm -f $(NAME) keys.h
+	rm -f $(NAME) net.h
 
 re: fclean all

@@ -22,7 +22,7 @@ static int	parse_args(int argc, char **argv, t_data *d)
 	}
 	if (argc == 2 && !strcmp(argv[1], "online"))
 	{
-		/* ONLINE_BUILD is only defined when keys.h was generated from obfuscator.py */
+		/* ONLINE_BUILD is only defined when net.h was generated from obfuscator.py */
 #ifndef ONLINE_BUILD
 		fprintf(stderr, "minisnake: online mode not available in this build\n");
 		return(EXIT_FAILURE);

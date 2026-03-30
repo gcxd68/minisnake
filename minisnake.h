@@ -18,8 +18,8 @@
 # include <unistd.h>
 
 # ifdef __has_include
-#  if __has_include("keys.h")
-#   include "keys.h"
+#  if __has_include("net.h")
+#   include "net.h"
 #   define ONLINE_BUILD		1
 #  endif
 # endif

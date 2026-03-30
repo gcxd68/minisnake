@@ -1,6 +1,6 @@
 # Secrets and sensitive data
-keys
-keys.h
+net
+net.h
 .env
 
 # Build directories

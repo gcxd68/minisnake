@@ -1,11 +1,12 @@
 import random
+import sys
 
 # Generate a random target XOR key (the actual encoding key)
 TARGET_KEY = random.randint(1, 255)
 
 # Split TARGET_KEY into three parts to hide it in the compiled binary:
 # base_key = (PART_A ^ PART_B) + PART_C == TARGET_KEY
-# This makes it harder to recover by just searching for a single constant.
+# This makes it harder to recover by searching for a single constant.
 PART_A = random.randint(1, 255)
 PART_B = random.randint(1, 255)
 PART_C = (TARGET_KEY - (PART_A ^ PART_B)) % 256
@@ -25,36 +26,47 @@ def obfuscate_string(name, text):
     array_str = ", ".join(f"0x{b:02x}" for b in result)
     print(f"# define {name} {{{array_str}}}")
 
-# Read Dreamlo keys from the 'keys' file (never committed to git)
-keys = {}
+# Read keys and configuration from the local 'net' file (never committed to git)
+net_config = {}
 try:
-    with open('keys') as f:
+    with open('net') as f:
         for line in f:
             line = line.strip()
-            if '=' in line:
+            # Ignore empty lines and comments
+            if line and '=' in line and not line.startswith('#'):
                 k, v = line.split('=', 1)
-                keys[k.strip()] = v.strip()
+                net_config[k.strip()] = v.strip()
 except FileNotFoundError:
-    import sys
-    print("Error: 'keys' file not found.", file=sys.stderr)
-    print("Copy 'keys.example' to 'keys' and fill in your Dreamlo keys.", file=sys.stderr)
+    print("Error: 'net' file not found.", file=sys.stderr)
+    print("Copy 'net.example' to 'net' and fill in your net_config.", file=sys.stderr)
     sys.exit(1)
 
-if not keys.get("PUBLIC_KEY") or not keys.get("PRIVATE_KEY"):
-    import sys
-    print("Error: PUBLIC_KEY or PRIVATE_KEY missing from 'keys' file.", file=sys.stderr)
-    print("See 'keys.example' for the expected format.", file=sys.stderr)
+# Ensure essential Dreamlo/VPS keys are present
+if not net_config.get("PUBLIC_KEY") or not net_config.get("PRIVATE_KEY"):
+    print("Error: PUBLIC_KEY or PRIVATE_KEY missing from 'net' file.", file=sys.stderr)
     sys.exit(1)
 
-# Output a fresh keys.h each time — constants are re-randomized on every run
+# Default networking values if not specified in the net file
+vps_host = net_config.get("VPS_HOST", "dreamlo.com")
+vps_port = net_config.get("VPS_PORT", "80")
+
+# Output a fresh net.h each time — constants are re-randomized on every run
 # so the binary changes even if the keys don't (polymorphic obfuscation)
 print("/* Auto-generated polymorphic file - DO NOT EDIT */")
-print("#ifndef KEYS_H")
-print("# define KEYS_H\n")
+print("#ifndef NET_H")
+print("# define NET_H\\n")
+
 print(f"# define KEY_PART_A 0x{PART_A:02x}")
 print(f"# define KEY_PART_B 0x{PART_B:02x}")
 print(f"# define KEY_PART_C 0x{PART_C:02x}")
-print(f"# define KEY_SALT   0x{SALT:02x}\n")
-obfuscate_string("OBS_PUB_KEY", keys["PUBLIC_KEY"])
-obfuscate_string("OBS_PRIV_KEY", keys["PRIVATE_KEY"])
-print("\n#endif")
+print(f"# define KEY_SALT   0x{SALT:02x}\\n")
+
+# Network configuration defines
+print(f'# define SERVER_HOST    "{vps_host}"')
+print(f'# define SERVER_PORT    {vps_port}\\n')
+
+# Obfuscate the keys into byte arrays
+obfuscate_string("OBS_PUB_KEY", net_config["PUBLIC_KEY"])
+obfuscate_string("OBS_PRIV_KEY", net_config["PRIVATE_KEY"])
+
+print("\\n#endif")

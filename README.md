@@ -31,7 +31,7 @@ chmod +x minisnake
 
 Launches a dedicated gnome-terminal window with a fixed 25x20 board. After the game, enter your login to submit your score to the global leaderboard.
 
-> **Note:** Online mode is only available in pre-built releases. If you compile from source without `keys.h`, online mode will not be available.
+> **Note:** Online mode is only available in pre-built releases. If you compile from source without `net.h`, online mode will not be available.
 
 ### Custom mode
 
@@ -105,15 +105,15 @@ Direct connection to Dreamlo is no longer possible. Due to the implementation of
    ```
 
 #### 2. Client Setup (Game)
-1. Create a `keys` file in the root directory (you can use `keys.example` as a template) and add the **VPS keys** you defined earlier:
+1. Create a `net` file in the root directory (you can use `net.example` as a template) and add the **VPS keys** you defined earlier:
    ```text
    PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
    PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
    ```
 2. Make sure your C client points to your VPS IP instead of "dreamlo.com" in `minisnake_net.c` (`# define DREAMLO_HOST`).
-3. Generate `keys.h`:
+3. Generate `net.h`:
    ```bash
-   python3 obfuscator.py > keys.h
+   python3 obfuscator.py > net.h
    ```
 4. Compile:
    ```bash
