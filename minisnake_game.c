@@ -19,26 +19,39 @@ static long get_ms(void)
 
 static void anticheat(t_data *d)
 {
-	static int	counter = 0;
-	long		now = get_ms();
+	static int  counter = 0;
+	static int  last_score = 0;
+	static long	last_frame = 0;
+	long        now = get_ms();
 
 	if (d->cheat) return;
-	if (!d->last_frame)
+
+	// Initialize on the first frame
+	if (!last_frame)
+		last_frame = now;
+
+	// Validate score progression, physical board limits, and timing consistency
+	if ((d->score != last_score && REAL_SCORE != XOR_SCORE(last_score) + POINTS_PER_FRUIT)
+		|| REAL_SCORE > (d->width * d->height * POINTS_PER_FRUIT)
+		|| now - last_frame > CHEAT_TIMEOUT)
 	{
-		d->last_frame = now;
+		d->cheat = 1;
 		return;
 	}
-	if (now - d->last_frame > 5000)
-		d->cheat = 1;
-	d->last_frame = now;
-	if (!d->cheat && (counter++ % 10 == 0))
-	{
-		FILE	*f = fopen("/proc/self/status", "r");
-		char	buf[256];
+	last_score = d->score;
+	last_frame = now;
 
+	// External Debugger Detection
+	if (++counter > 10)
+	{
+		FILE    *f = fopen("/proc/self/status", "r");
+		char    buf[256];
+
+		counter = 0;
 		if (!f) return;
 		while (fgets(buf, sizeof(buf), f))
 		{
+			// TracerPid is non-zero if the process is being traced/debugged
 			if (!strncmp(buf, "TracerPid:", 10))
 			{
 				if (atoi(buf + 10) != 0)
@@ -107,7 +120,7 @@ static void	update_game(t_data *d)
 		spawn_fruit(d);
 	d->grow = 1;
 	/* Decode, increment, re-encode score in one expression */
-	d->score = MASK_SCORE((REAL_SCORE + 10));
+	d->score = XOR_SCORE(REAL_SCORE + POINTS_PER_FRUIT);
 	d->delay *= SPEEDUP_FACTOR;
 }
 

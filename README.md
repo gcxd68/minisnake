@@ -85,17 +85,37 @@ make
 
 ### Building with online mode
 
-1. Get your Dreamlo public and private keys from [dreamlo.com](http://dreamlo.com)
-2. Create a `keys` file in the root directory (you can use `keys.example` as a template) and add your credentials:
+The online mode now uses a custom proxy server to hide your true Dreamlo keys and prevent cheating.
+
+#### 1. Server Setup (VPS)
+1. Go to the `server/` directory and install the dependencies:
+   ```bash
+   pip install flask requests python-dotenv
+   ```
+2. Create an `.env` file based on `.env.example` and fill in your actual Dreamlo keys, as well as generate new custom keys for your VPS:
    ```text
-   PUBLIC_KEY=YOUR_PUBLIC_KEY_HERE
-   PRIVATE_KEY=YOUR_PRIVATE_KEY_HERE
-3. (Optional) Choose an XOR key for obfuscation and set it in obfuscator.py (default is 0x42).
-4. Generate `keys.h`:
+   VPS_PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
+   VPS_PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
+   DREAMLO_PRIVATE_KEY=YOUR_DREAMLO_PRIVATE_KEY
+   DREAMLO_PUBLIC_KEY=YOUR_DREAMLO_PUBLIC_KEY
+   ```
+3. Run the server (default port 80):
+   ```bash
+   sudo python3 server.py
+   ```
+
+#### 2. Client Setup (Game)
+1. Create a `keys` file in the root directory (you can use `keys.example` as a template) and add the **VPS keys** you defined earlier:
+   ```text
+   PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
+   PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
+   ```
+2. Make sure your C client points to your VPS IP instead of "dreamlo.com" in `minisnake_net.c` (`# define DREAMLO_HOST`).
+3. Generate `keys.h`:
    ```bash
    python3 obfuscator.py > keys.h
    ```
-5. Compile:
+4. Compile:
    ```bash
    make
    ./minisnake online

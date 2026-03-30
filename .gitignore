@@ -1,6 +1,7 @@
 # Secrets and sensitive data
 keys
 keys.h
+.env
 
 # Build directories
 obj/

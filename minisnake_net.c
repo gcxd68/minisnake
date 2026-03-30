@@ -135,7 +135,7 @@ static int	dreamlo_submit(t_data *d, const char *name)
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
 	build_path(path, sizeof(path), obs_priv, sizeof(obs_priv), "add/%s/%d",
-		name, d->cheat ? MASK_SCORE(0) : REAL_SCORE);
+		name, d->cheat ? XOR_SCORE(0) : REAL_SCORE);
 	return (http_get(path, resp, sizeof(resp)));
 }
 
