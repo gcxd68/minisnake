@@ -10,7 +10,7 @@ void	handle_leaderboard(t_data *d)
 
 #else
 
-# define SERVER_HOST		"server_ip_address"
+# define SERVER_HOST		"dreamlo.com"
 # define SERVER_PORT		80
 
 # define BUF_RESP_SUBMIT	512		/* Small buffer: submit response is just "OK" */

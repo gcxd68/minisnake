@@ -117,7 +117,7 @@
 # define MIN(a, b)			(a < b ? a : b)
 # define MAX(a, b)			(a > b ? a : b)
 # define REAL_SCORE			(d->score ^ d->score_mask)
-# define XOR_SCORE(s)		(s ^ d->score_mask)
+# define XOR_SCORE(s)		((s) ^ d->score_mask)
 
 typedef enum e_launch_result {
 	LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4,
@@ -140,7 +140,7 @@ void		enable_raw_mode(void);
 void		disable_raw_mode(void);
 void		game_loop(t_data *d);
 void		spawn_fruit(t_data *d);
-const char	*draw_fruit(t_data *d);
+const char	*fruit_color(void);
 void		handle_leaderboard(t_data *d);
 
 #endif

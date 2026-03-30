@@ -85,7 +85,7 @@ make
 
 ### Building with online mode
 
-The online mode now uses a custom proxy server to hide your true Dreamlo keys and prevent cheating.
+Direct connection to Dreamlo is no longer possible. Due to the implementation of the djb2 hash and the requirement to keep Dreamlo private keys secure, you are now required to set up a VPS acting as a proxy server. This is the only safe solution, as any API key embedded in the client-side binary could be extracted.
 
 #### 1. Server Setup (VPS)
 1. Go to the `server/` directory and install the dependencies:
