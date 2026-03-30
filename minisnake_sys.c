@@ -30,18 +30,26 @@ static int	parse_args(int argc, char **argv, t_data *d)
 		d->width = ONLINE_WIDTH;
 		d->height = ONLINE_HEIGHT;
 		d->online = 1;
-		return (0);
 	}
 	else if (argc == 3)
 	{
 		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
 			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))
 			return (2);
-		return (0);
 	}
-	fprintf(stderr, "Usage: ./minisnake online\n"
-					"       ./minisnake WIDTH HEIGHT\n");
-	return(2);
+	else {
+		fprintf(stderr, "Usage: ./minisnake online\n"
+						"       ./minisnake WIDTH HEIGHT\n");
+		return(2);
+	}
+	if ((d->width * d->height) % 2 != 0)
+	{
+		fprintf(stderr, "minisnake: board area (%dx%d = %d) must be even.\n", 
+				d->width, d->height, d->width * d->height);
+		fprintf(stderr, "A perfect game is mathematically impossible on odd grids.\n");
+		return (2);
+	}
+	return (0);
 }
 
 /* Read a single character and flush the rest of the line */

@@ -10,8 +10,8 @@ void	handle_leaderboard(t_data *d)
 
 #else
 
-# define DREAMLO_HOST		"dreamlo.com"
-# define DREAMLO_PORT		80
+# define SERVER_HOST		"dreamlo.com"
+# define SERVER_PORT		80
 
 # define BUF_RESP_SUBMIT	512		/* Small buffer: submit response is just "OK" */
 # define BUF_RESP_SCORES	8192	/* Large buffer: up to 20 leaderboard entries */
@@ -28,8 +28,8 @@ void	handle_leaderboard(t_data *d)
 # define UI_NAME_WIDTH		12		/* Column width for player name display */
 # define UI_SCORE_WIDTH		7		/* Column width for score display */
 
-# if DREAMLO_PORT <= 0 || DREAMLO_PORT > 65535
-#  error "DREAMLO_PORT must be a valid port number (1-65535)"
+# if SERVER_PORT <= 0 || SERVER_PORT > 65535
+#  error "SERVER_PORT must be a valid port number (1-65535)"
 # endif
 # if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0 || BUF_KEY <= 0
 #  error "Buffer sizes must be strictly positive"
@@ -58,12 +58,12 @@ static int	dreamlo_connect(void)
 	struct hostent		*he;
 	int					fd;
 
-	if (!(he = gethostbyname(DREAMLO_HOST)))
+	if (!(he = gethostbyname(SERVER_HOST)))
 		return (-1);
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		return (-1);
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(DREAMLO_PORT);
+	addr.sin_port = htons(SERVER_PORT);
 	addr.sin_addr = *(struct in_addr *)he->h_addr;
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 		return (close(fd), -1);
@@ -79,7 +79,7 @@ static int	http_get(const char *path, char *out, int out_size)
 
 	if ((fd = dreamlo_connect()) < 0)
 		return (-1);
-	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: " DREAMLO_HOST "\r\nConnection: close\r\n\r\n", path);
+	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: " SERVER_HOST "\r\nConnection: close\r\n\r\n", path);
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
 	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
