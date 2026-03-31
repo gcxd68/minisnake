@@ -8,6 +8,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
+VPS_PORT = int(os.environ.get("VPS_PORT", 80))
 VPS_PRIVATE_KEY = os.environ.get("VPS_PRIVATE_KEY")
 VPS_PUBLIC_KEY  = os.environ.get("VPS_PUBLIC_KEY")
 DREAMLO_PRIVATE_KEY = os.environ.get("DREAMLO_PRIVATE_KEY")
@@ -71,4 +72,4 @@ def get_scores(key, limit):
         return "Backend Error", 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=80)
+    app.run(host='0.0.0.0', port=VPS_PORT)
