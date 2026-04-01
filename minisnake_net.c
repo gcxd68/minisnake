@@ -49,19 +49,54 @@ void	handle_leaderboard(t_data *d)
 
 # define LDB_TITLE			"--- LEADERBOARD ---"
 
+/* Decode an obfuscated key using a three-part XOR+offset scheme.
+   The actual key is reconstructed as: base_key = (PART_A ^ PART_B) + PART_C
+   Each byte was encoded as: (plaintext + base_key + index) % 256 ^ SALT
+   so decoding reverses: c ^ SALT - (base_key + i) */
+static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
+{
+	volatile unsigned char part_a = KEY_PART_A;
+	volatile unsigned char part_b = KEY_PART_B;
+	volatile unsigned char part_c = KEY_PART_C;
+	unsigned char base_key = (part_a ^ part_b) + part_c;
+	for (size_t i = 0; i < len - 1; i++)
+	{
+		unsigned char c = obfuscated[i];
+		c = c ^ KEY_SALT;
+		c = c - (unsigned char)(base_key + i);
+		out[i] = (char)c;
+	}
+	out[len - 1] = '\0';
+}
+
 static int	dreamlo_connect(void)
 {
 	struct sockaddr_in	addr;
 	struct hostent		*he;
 	int					fd;
+	char                host[256];
+	char                port_str[16];
+	const unsigned char obs_host[] = OBS_SERVER_HOST;
+	const unsigned char obs_port[] = OBS_SERVER_PORT;
 
-	if (!(he = gethostbyname(SERVER_HOST)))
+	/* Decode the obfuscated Host and Port into temporary buffers */
+	get_real_key(obs_host, host, sizeof(obs_host));
+	get_real_key(obs_port, port_str, sizeof(obs_port));
+
+	if (!(he = gethostbyname(host)))
 		return (-1);
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		return (-1);
+	
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(SERVER_PORT);
+	/* Convert decoded port string to integer */
+	addr.sin_port = htons(atoi(port_str)); 
 	addr.sin_addr = *(struct in_addr *)he->h_addr;
+
+	/* Security: Wipe decoded strings from memory immediately after use */
+	memset(host, 0, sizeof(host));
+	memset(port_str, 0, sizeof(port_str));
+
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 		return (close(fd), -1);
 	return (fd);
@@ -112,26 +147,6 @@ static char	*skip_headers(char *response)
 	if (body)
 		return (body + 2);
 	return (response);
-}
-
-/* Decode an obfuscated key using a three-part XOR+offset scheme.
-   The actual key is reconstructed as: base_key = (PART_A ^ PART_B) + PART_C
-   Each byte was encoded as: (plaintext + base_key + index) % 256 ^ SALT
-   so decoding reverses: c ^ SALT - (base_key + i) */
-static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
-{
-	volatile unsigned char part_a = KEY_PART_A;
-	volatile unsigned char part_b = KEY_PART_B;
-	volatile unsigned char part_c = KEY_PART_C;
-	unsigned char base_key = (part_a ^ part_b) + part_c;
-	for (size_t i = 0; i < len - 1; i++)
-	{
-		unsigned char c = obfuscated[i];
-		c = c ^ KEY_SALT;
-		c = c - (unsigned char)(base_key + i);
-		out[i] = (char)c;
-	}
-	out[len - 1] = '\0';
 }
 
 /* Decode the key, build the full Dreamlo API path, then wipe the key from memory.
