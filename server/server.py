@@ -78,4 +78,3 @@ def get_scores(key, limit):
 if __name__ == '__main__':
     # Start the server on all interfaces at the configured port
     app.run(host='0.0.0.0', port=VPS_PORT)
-    
