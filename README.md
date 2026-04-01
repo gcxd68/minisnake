@@ -94,6 +94,7 @@ Direct connection to Dreamlo is no longer possible. Due to the implementation of
    ```
 2. Create an `.env` file based on `.env.example` and fill in your actual Dreamlo keys, as well as generate new custom keys for your VPS:
    ```text
+   VPS_PORT=YOUR_VPS_PORT
    VPS_PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
    VPS_PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
    DREAMLO_PRIVATE_KEY=YOUR_DREAMLO_PRIVATE_KEY
@@ -107,15 +108,16 @@ Direct connection to Dreamlo is no longer possible. Due to the implementation of
 #### 2. Client Setup (Game)
 1. Create a `net` file in the root directory (you can use `net.example` as a template) and add the **VPS keys** you defined earlier:
    ```text
-   PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
-   PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
+   VPS_HOST=YOUR_VPS_IP
+   VPS_PORT=YOUR_VPS_PORT
+   VPS_PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
+   VPS_PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
    ```
-2. Make sure your C client points to your VPS IP instead of "dreamlo.com" in `minisnake_net.c` (`# define DREAMLO_HOST`).
-3. Generate `net.h`:
+2. Generate `net.h`:
    ```bash
    python3 obfuscator.py > net.h
    ```
-4. Compile:
+3. Compile:
    ```bash
    make
    ./minisnake online
