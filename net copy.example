@@ -1,0 +1,5 @@
+# Fill in these variables in a 'net' file
+VPS_HOST=minisnake.duckdns.org
+VPS_PORT=8000
+VPS_PRIVATE_KEY=}*"Eps+S'Dt9D?gUuiL_88nV=)waXf+H}l@B,W~1*%c54Zv6w)
+VPS_PUBLIC_KEY=*YyHv=7'/V<VsqPKPp^JQlrS]LNW=_zVk"yW')7)cVPb31dc.z
