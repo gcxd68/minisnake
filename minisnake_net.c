@@ -17,6 +17,7 @@ void	handle_leaderboard(t_data *d)
 # define BUF_PATH			256		/* Dreamlo API endpoint path */
 # define BUF_ENTRY			128		/* One parsed leaderboard line */
 # define BUF_KEY			128		/* Decoded Dreamlo key (public or private) */
+# define BUF_HOST			256		/* Decoded server host name */
 
 # define LB_MAX_SCORES		20
 # define LB_START_ROW		3		/* First row inside the game frame */
@@ -25,10 +26,7 @@ void	handle_leaderboard(t_data *d)
 # define UI_NAME_WIDTH		12		/* Column width for player name display */
 # define UI_SCORE_WIDTH		7		/* Column width for score display */
 
-# if SERVER_PORT <= 0 || SERVER_PORT > 65535
-#  error "SERVER_PORT must be a valid port number (1-65535)"
-# endif
-# if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0 || BUF_KEY <= 0
+# if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0 || BUF_KEY <= 0 || BUF_HOST <= 0
 #  error "Buffer sizes must be strictly positive"
 # endif
 # if LB_MAX_SCORES <= 0
@@ -106,12 +104,21 @@ static int	dreamlo_connect(void)
    Returns 0 on success, -1 on any network error. */
 static int	http_get(const char *path, char *out, int out_size)
 {
-	char	req[BUF_REQ], buf[BUF_READ];
+	char	req[BUF_REQ], buf[BUF_READ], host[256];
 	int		fd, n, total = 0;
+	const unsigned char obs_host[] = OBS_SERVER_HOST;
 
 	if ((fd = dreamlo_connect()) < 0)
 		return (-1);
-	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: " SERVER_HOST "\r\nConnection: close\r\n\r\n", path);
+	
+	/* Decode the obfuscated Host for the HTTP request */
+	get_real_key(obs_host, host, sizeof(obs_host));
+
+	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, host);
+	
+	/* Security: Wipe decoded host from memory */
+	memset(host, 0, sizeof(host));
+
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
 	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
