@@ -3,307 +3,225 @@
 #ifndef ONLINE_BUILD
 
 /* Stub: leaderboard is disabled in offline builds */
-void	handle_leaderboard(t_data *d)
+void    handle_leaderboard(t_data *d)
 {
-	(void)d;
+    (void)d;
+}
+
+/* Stub: session handling is disabled in offline builds */
+void    vps_start_session(t_data *d)
+{
+    (void)d;
 }
 
 #else
 
-# define BUF_RESP_SUBMIT	512			/* Small buffer: submit response is just "OK" */
-# define BUF_RESP_SCORES	8192		/* Large buffer: up to 20 leaderboard entries */
-# define BUF_READ			4096		/* Internal read() chunk size in http_get */
-# define BUF_REQ			512			/* HTTP request line */
-# define BUF_PATH			256			/* VPS API endpoint path */
-# define BUF_ENTRY			128			/* One parsed leaderboard line */
-# define BUF_KEY			128			/* Decoded VPS key (public or private) */
-# define BUF_HOST			256			/* Decoded server host name */
-# define BUF_PORT			16			/* Buffer for decoded port string */
-# define BUF_SIG_PAYLOAD	256			/* Buffer for raw string before hashing */
-# define BUF_SIG			9			/* 8 hex chars + \0 for djb2 signature */
+# define BUF_RESP_SUBMIT    512         /* Small buffer: submit response is just "OK" */
+# define BUF_RESP_SCORES    8192        /* Large buffer: up to 20 leaderboard entries */
+# define BUF_READ           4096        /* Internal read() chunk size in http_get */
+# define BUF_REQ            512         /* HTTP request line */
+# define BUF_PATH           256         /* VPS API endpoint path */
+# define BUF_ENTRY          128         /* One parsed leaderboard line */
 
-# define HTTP_MIN_LEN		12			/* Minimum size to validate "HTTP/1.x 200" */
-# define HTTP_VER_LEN		7			/* Length of "HTTP/1." */
-# define HTTP_STAT_OFFSET	8			/* Offset to find " 200" */
-# define HTTP_STAT_LEN		4			/* Length of " 200" */
-# define HTTP_CRLF_LEN		4			/* Length of "\r\n\r\n" */
-# define HTTP_LF_LEN		2			/* Length of "\n\n" */
-# define DJB2_INIT			5381		/* Initial hash value for djb2 algorithm */
-# define MIN_VALID_TS		1000000000L	/* Fallback threshold (Sep 2001) */
+# define HTTP_MIN_LEN       12          /* Minimum size to validate "HTTP/1.x 200" */
+# define HTTP_VER_LEN       7           /* Length of "HTTP/1." */
+# define HTTP_STAT_OFFSET   8           /* Offset to find " 200" */
+# define HTTP_STAT_LEN      4           /* Length of " 200" */
+# define HTTP_CRLF_LEN      4           /* Length of "\r\n\r\n" */
+# define HTTP_LF_LEN        2           /* Length of "\n\n" */
 
-# define LB_TITLE_ROW		1			/* Row for the leaderboard title */
-# define UI_PROMPT_ROW_OFF	4			/* Offset below game board for name prompt */
-# define UI_PROMPT_COL		1			/* Column start for name prompt */
-# define LB_MAX_SCORES		20
-# define LB_START_ROW		3			/* First row inside the game frame */
-# define LB_COL_OFFSET		2			/* Left margin inside the frame */
-# define MAX_NAME_LEN		8
-# define UI_NAME_WIDTH		12			/* Column width for player name display */
-# define UI_SCORE_WIDTH		7			/* Column width for score display */
+# define LB_TITLE_ROW       1           /* Row for the leaderboard title */
+# define UI_PROMPT_ROW_OFF  4           /* Offset below game board for name prompt */
+# define UI_PROMPT_COL      1           /* Column start for name prompt */
+# define LB_MAX_SCORES      20
+# define LB_START_ROW       3           /* First row inside the game frame */
+# define LB_COL_OFFSET      2           /* Left margin inside the frame */
+# define MAX_NAME_LEN       8
+# define UI_NAME_WIDTH      12          /* Column width for player name display */
+# define UI_SCORE_WIDTH     7           /* Column width for score display */
 
-# if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0 || BUF_KEY <= 0 || BUF_HOST <= 0
-#  error "Buffer sizes must be strictly positive"
-# endif
-# if LB_MAX_SCORES <= 0
-#  error "LB_MAX_SCORES must be strictly positive"
-# endif
-# if LB_START_ROW < 0 || LB_COL_OFFSET < 0
-#  error "UI offsets must be positive or zero"
-# endif
-# if MAX_NAME_LEN <= 0
-#  error "MAX_NAME_LEN must be strictly positive"
-# endif
-# if UI_NAME_WIDTH < MAX_NAME_LEN
-#  error "UI_NAME_WIDTH must be >= MAX_NAME_LEN"
-# endif
-# if UI_SCORE_WIDTH <= 0
-#  error "UI_SCORE_WIDTH must be strictly positive"
-# endif
+# define LDB_TITLE          "--- LEADERBOARD ---"
 
-# define LDB_TITLE			"--- LEADERBOARD ---"
-
-/* Decode an obfuscated key using a three-part XOR+offset scheme.
-   The actual key is reconstructed as: base_key = (PART_A ^ PART_B) + PART_C
-   Each byte was encoded as: (plaintext + base_key + index) % 256 ^ SALT
-   so decoding reverses: c ^ SALT - (base_key + i) */
-static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
+static int vps_connect(void)
 {
-	volatile unsigned char	part_a = KEY_PART_A;
-	volatile unsigned char	part_b = KEY_PART_B;
-	volatile unsigned char	part_c = KEY_PART_C;
-	const unsigned char		base_key = (part_a ^ part_b) + part_c;
+    struct sockaddr_in  addr;
+    struct hostent      *he;
+    int                 fd;
 
-	for (size_t i = 0; i < len - 1; i++)
-	{
-		unsigned char c = obfuscated[i];
-		c = c ^ KEY_SALT;
-		c = c - (unsigned char)(base_key + i);
-		out[i] = (char)c;
-	}
-	out[len - 1] = '\0';
-}
+    /* VPS_HOST and VPS_PORT are now plain strings defined in net.h */
+    if (!(he = gethostbyname(VPS_HOST)))
+        return (-1);
+    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        return (-1);
+    
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(atoi(VPS_PORT)); 
+    addr.sin_addr = *(struct in_addr *)he->h_addr;
 
-static int	vps_connect(void)
-{
-	struct sockaddr_in	addr;
-	struct hostent		*he;
-	int					fd;
-	char				host[BUF_HOST];
-	char				port_str[BUF_PORT];
-	const unsigned char	obs_host[] = OBS_SERVER_HOST;
-	const unsigned char	obs_port[] = OBS_SERVER_PORT;
-
-	/* Decode the obfuscated Host and Port into temporary buffers */
-	get_real_key(obs_host, host, sizeof(obs_host));
-	get_real_key(obs_port, port_str, sizeof(obs_port));
-
-	if (!(he = gethostbyname(host)))
-		return (-1);
-	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		return (-1);
-	
-	addr.sin_family = AF_INET;
-	/* Convert decoded port string to integer */
-	addr.sin_port = htons(atoi(port_str)); 
-	addr.sin_addr = *(struct in_addr *)he->h_addr;
-
-	/* Security: Wipe decoded strings from memory immediately after use */
-	memset(host, 0, sizeof(host));
-	memset(port_str, 0, sizeof(port_str));
-
-	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-		return (close(fd), -1);
-	return (fd);
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+        return (close(fd), -1);
+    return (fd);
 }
 
 /* Perform a simple HTTP/1.0 GET request and store the raw response in out.
    Returns 0 on success, -1 on any network error. */
-static int	http_get(const char *path, char *out, int out_size)
+static int http_get(const char *path, char *out, int out_size)
 {
-	const unsigned char	obs_host[] = OBS_SERVER_HOST;
-	char				req[BUF_REQ], buf[BUF_READ], host[BUF_HOST];
-	int					fd, n, total = 0;
+    char    req[BUF_REQ], buf[BUF_READ];
+    int     fd, n, total = 0;
 
-	if ((fd = vps_connect()) < 0)
-		return (-1);
-	
-	/* Decode the obfuscated Host for the HTTP request */
-	get_real_key(obs_host, host, sizeof(obs_host));
+    if ((fd = vps_connect()) < 0)
+        return (-1);
+    
+    snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, VPS_HOST);
+    
+    if (write(fd, req, strlen(req)) < 0)
+        return (close(fd), -1);
+        
+    while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
+    {
+        buf[n] = '\0';
+        if (total + n < out_size - 1)
+        {
+            memcpy(out + total, buf, n);
+            total += n;
+        }
+    }
 
-	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, host);
-	
-	/* Security: Wipe decoded host from memory */
-	memset(host, 0, sizeof(host));
+    if (n < 0)
+        return (close(fd), -1);
+    out[total] = '\0';
+    close(fd);
 
-	if (write(fd, req, strlen(req)) < 0)
-		return (close(fd), -1);
-	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
-	{
-		buf[n] = '\0';
-		if (total + n < out_size - 1)
-		{
-			memcpy(out + total, buf, n);
-			total += n;
-		}
-	}
-
-	/* n < 0 means read() failed (e.g. connection reset) */
-	if (n < 0)
-		return (close(fd), -1);
-	out[total] = '\0';
-	close(fd);
-
-	/* Check if the HTTP response is exactly HTTP/1.x 200 OK */
-	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || strncmp(out + HTTP_STAT_OFFSET, " 200", HTTP_STAT_LEN) != 0)
-		return (-1);
-	return (0);
+    /* Check if the HTTP response is exactly HTTP/1.x 200 OK */
+    if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || strncmp(out + HTTP_STAT_OFFSET, " 200", HTTP_STAT_LEN) != 0)
+        return (-1);
+    return (0);
 }
 
 /* Skip HTTP response headers and return a pointer to the body.
    Handles both \r\n\r\n (standard) and \n\n (non-conforming servers). */
-static char	*skip_headers(char *response)
+static char *skip_headers(char *response)
 {
-	char *body = strstr(response, "\r\n\r\n");
-	if (body)
-		return (body + HTTP_CRLF_LEN);
-	body = strstr(response, "\n\n");
-	if (body)
-		return (body + HTTP_LF_LEN);
-	return (response);
+    char *body = strstr(response, "\r\n\r\n");
+    if (body)
+        return (body + HTTP_CRLF_LEN);
+    body = strstr(response, "\n\n");
+    if (body)
+        return (body + HTTP_LF_LEN);
+    return (response);
 }
 
-/* Decode the key, build the full VPS API path, then wipe the key from memory.
-   Wiping prevents the key from lingering in stack memory after the call. */
-static void build_path(char *out, size_t size, const unsigned char *obs_key,
-	size_t key_len, const char *fmt, ...)
+/* Fetches a unique session token from the VPS when the game starts.
+   This marks the official start time on the server to prevent speedhacks. */
+void vps_start_session(t_data *d)
 {
-	char	real_key[BUF_KEY], action[BUF_PATH];
-	va_list	args;
+    char resp[BUF_RESP_SUBMIT];
 
-	get_real_key(obs_key, real_key, key_len);
-	va_start(args, fmt);
-	vsnprintf(action, sizeof(action), fmt, args);
-	va_end(args);
-	snprintf(out, size, "/lb/%s/%s", real_key, action);
-
-	/* Wipe the decoded key so it doesn't linger in stack memory */
-	memset(real_key, 0, sizeof(real_key));
+    if (!d->online) return;
+    
+    /* Call the /start route */
+    if (http_get("/start", resp, sizeof(resp)) == 0)
+    {
+        /* Copy the 32-character hex token received from the body */
+        strncpy(d->token, skip_headers(resp), 32);
+        d->token[32] = '\0';
+    }
+    else
+    {
+        /* Network error: leave the token empty, game will drop to offline mode */
+        d->token[0] = '\0'; 
+    }
 }
 
-/* Compute a 32-bit djb2 hash to sign the submit request.
-   This cleanly hides the exact PRIVATE_KEY from packet sniffers. */
-static void generate_signature(const char *key, const char *name, int score, long ts, char *out_sig)
+/* Submits the final score using the session token.
+   The server will validate the score against the elapsed time. */
+static int vps_submit(t_data *d, const char *name)
 {
-	char			buf[BUF_SIG_PAYLOAD];
-	unsigned int	hash = DJB2_INIT;
+    char path[BUF_PATH], resp[BUF_RESP_SUBMIT];
+    
+    /* If cheat was detected locally, send 0 instead of the real score */
+    int score = d->cheat ? 0 : REAL_SCORE;
 
-	snprintf(buf, sizeof(buf), "%s%s%d%ld", key, name, score, ts);
-	for (int i = 0; buf[i]; i++)
-		hash = ((hash << 5) + hash) + buf[i];
-	snprintf(out_sig, BUF_SIG, "%08x", hash);
+    printf(CLEAR_SCREEN "Submitting...");
+    fflush(stdout);
+
+    /* If no token was obtained at startup, we cannot submit */
+    if (!d->token[0])
+        return (-1);
+
+    /* The URL is now extremely simple and contains no secret keys:
+       /submit/TOKEN/NAME/SCORE */
+    snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, score);
+    return (http_get(path, resp, sizeof(resp)));
 }
 
-/* Fetch the current UNIX timestamp from the server's /time endpoint.
-   Using the server's clock ensures the signature check passes regardless
-   of the client's local clock drift or timezone. Falls back to local
-   time if the request fails, which works when clocks are in sync. */
-static long	get_server_time(void)
+static int vps_show(t_data *d)
 {
-	char	resp[BUF_RESP_SUBMIT];
-	long	ts;
+    const char  title[] = LDB_TITLE;
+    /* Center the title within the game frame */
+    const int   title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
+    char        *body, *line, *saveptr;
+    char        path[BUF_PATH], resp[BUF_RESP_SCORES];
+    int         rank = 1, row = LB_START_ROW;
 
-	if (http_get("/time", resp, sizeof(resp)) < 0)
-		return ((long)time(NULL));
-	ts = atol(skip_headers(resp));
-	if (ts < MIN_VALID_TS)
-		return ((long)time(NULL));
-	return (ts);
-}
+    /* No more need for complex get_real_key or build_path functions! */
+    /* We simply request the top scores from the public endpoint */
+    snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
+    
+    if (http_get(path, resp, sizeof(resp)) < 0)
+        return (-1);
+        
+    printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
+    body = skip_headers(resp);
 
-static int	vps_submit(t_data *d, const char *name)
-{
-	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
-	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
-	char				real_key[BUF_KEY], sig[BUF_SIG];
-	long				ts;
-
-	printf(CLEAR_SCREEN "Submitting...");
-	fflush(stdout);
-
-	/* Get server time before signing — avoids clock drift rejections */
-	ts = get_server_time();
-
-	get_real_key(obs_priv, real_key, sizeof(obs_priv));
-	generate_signature(real_key, name, d->cheat ? 0 : REAL_SCORE, ts, sig);
-	memset(real_key, 0, sizeof(real_key));
-
-	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d/%ld", sig, name, d->cheat ? 0 : REAL_SCORE, ts);
-	return (http_get(path, resp, sizeof(resp)));
-}
-
-static int	vps_show(t_data *d)
-{
-	const unsigned char	obs_pub[] = OBS_PUB_KEY;
-	const char			title[] = LDB_TITLE;
-	/* Center the title within the game frame */
-	const int			title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
-	char				*body, *line, *saveptr;
-	char				path[BUF_PATH], resp[BUF_RESP_SCORES];
-	int					rank = 1, row = LB_START_ROW;
-
-	build_path(path, sizeof(path), obs_pub, sizeof(obs_pub), "pipe/%d", LB_MAX_SCORES);
-	if (http_get(path, resp, sizeof(resp)) < 0)
-		return (-1);
-	printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
-	body = skip_headers(resp);
-
-	/* VPS pipe format (relayed from Dreamlo): name|score|seconds|extras\n per entry */
-	line = strtok_r(body, "\n", &saveptr);
-	while (line && rank <= LB_MAX_SCORES)
-	{
-		char entry[BUF_ENTRY], *p_name, *p_score, *p_save;
-		strncpy(entry, line, sizeof(entry) - 1);
-		entry[sizeof(entry) - 1] = '\0';
-		p_name = strtok_r(entry, "|", &p_save);
-		p_score = strtok_r(NULL, "|", &p_save);
-		if (p_name && p_score)
-			printf(CURSOR_POS "%2d. %-*s %*s", row++, LB_COL_OFFSET, rank++,
-				   UI_NAME_WIDTH, p_name, UI_SCORE_WIDTH, p_score);
-		line = strtok_r(NULL, "\n", &saveptr);
-	}
-	return (0);
+    /* VPS pipe format (relayed from Dreamlo): name|score|seconds|extras\n per entry */
+    line = strtok_r(body, "\n", &saveptr);
+    while (line && rank <= LB_MAX_SCORES)
+    {
+        char entry[BUF_ENTRY], *p_name, *p_score, *p_save;
+        strncpy(entry, line, sizeof(entry) - 1);
+        entry[sizeof(entry) - 1] = '\0';
+        p_name = strtok_r(entry, "|", &p_save);
+        p_score = strtok_r(NULL, "|", &p_save);
+        if (p_name && p_score)
+            printf(CURSOR_POS "%2d. %-*s %*s", row++, LB_COL_OFFSET, rank++,
+                   UI_NAME_WIDTH, p_name, UI_SCORE_WIDTH, p_score);
+        line = strtok_r(NULL, "\n", &saveptr);
+    }
+    return (0);
 }
 
 /* Read up to (size - 1) chars from stdin in canonical mode.
    tcflush() discards any keys pressed during gameplay that are still buffered.
    enable_raw_mode() is always called before returning so the caller doesn't
    need to worry about the terminal state. */
-static int	read_name(char *name, size_t size)
+static int read_name(char *name, size_t size)
 {
-	disable_raw_mode();
-	tcflush(STDIN_FILENO, TCIFLUSH);
-	if (!fgets(name, size, stdin) || name[0] == '\n')
-		name[0] = '\0';
-	else if (!strchr(name, '\n'))
-		/* fgets filled the buffer without hitting '\n': drain the rest of the line */
-		for (int c; (c = getchar()) != '\n' && c != EOF;);
+    disable_raw_mode();
+    tcflush(STDIN_FILENO, TCIFLUSH);
+    if (!fgets(name, size, stdin) || name[0] == '\n')
+        name[0] = '\0';
+    else if (!strchr(name, '\n'))
+        /* fgets filled the buffer without hitting '\n': drain the rest of the line */
+        for (int c; (c = getchar()) != '\n' && c != EOF;);
 
-	/* Trim trailing whitespace in-place */
-	for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
-	enable_raw_mode();
-	return (name[0]);
+    /* Trim trailing whitespace in-place */
+    for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
+    enable_raw_mode();
+    return (name[0]);
 }
 
-void	handle_leaderboard(t_data *d)
+void handle_leaderboard(t_data *d)
 {
-	if (!d->online) return;
-	char name[MAX_NAME_LEN + 1];
-	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
-	fflush(stdout);
-	if (!read_name(name, sizeof(name)))
-		return ;
-	if (vps_submit(d, name) < 0 || vps_show(d) < 0)
-		printf(CLEAR_SCREEN "Network error");
+    if (!d->online) return;
+    char name[MAX_NAME_LEN + 1];
+    printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
+    fflush(stdout);
+    if (!read_name(name, sizeof(name)))
+        return ;
+    if (vps_submit(d, name) < 0 || vps_show(d) < 0)
+        printf(CLEAR_SCREEN "Network error");
 }
 
 #endif

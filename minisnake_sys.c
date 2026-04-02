@@ -242,6 +242,11 @@ static void	initialize(t_data *d) {
 	init_game(d);
 	setup_display(d);
 	setup_sig();
+
+#ifdef ONLINE_BUILD
+	/* Request the session token from the server at the very beginning of the game */
+	vps_start_session(d);
+#endif
 }
 
 static void	finalize(t_data *d)

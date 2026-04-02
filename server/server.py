@@ -1,5 +1,6 @@
 import os
 import time
+import secrets
 from flask import Flask
 import requests
 from dotenv import load_dotenv
@@ -9,82 +10,79 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configuration from environment variables
-VPS_PORT = int(os.environ.get("VPS_PORT", 80))
-VPS_PRIVATE_KEY = os.environ.get("VPS_PRIVATE_KEY")
-VPS_PUBLIC_KEY  = os.environ.get("VPS_PUBLIC_KEY")
+# Configuration (VPS_PRIVATE_KEY and VPS_PUBLIC_KEY are no longer needed!)
+VPS_PORT = int(os.environ.get("VPS_PORT", 8000))
 DREAMLO_PRIVATE_KEY = os.environ.get("DREAMLO_PRIVATE_KEY")
 DREAMLO_PUBLIC_KEY  = os.environ.get("DREAMLO_PUBLIC_KEY")
 
-# Dictionary to store seen signatures: signature -> timestamp
-seen_requests = {}
+# Dictionary to store active game sessions: { "token" : start_timestamp }
+active_sessions = {}
 
-@app.route('/time', methods=['GET'])
-def get_server_time():
-    # Returns the absolute UNIX timestamp (UTC)
-    return str(int(time.time())), 200
+@app.route('/start', methods=['GET'])
+def start_session():
+    """
+    Called by the C client at the very beginning of the game.
+    Generates a unique token and records the exact start time.
+    """
+    # Generate a unique 32-character hex token (16 bytes)
+    token = secrets.token_hex(16)
+    active_sessions[token] = time.time()
+    return token, 200
 
-def check_signature(sig, name, score, ts):
-    now = int(time.time())
-    
-    # 1. Deny if the timestamp is older than 5 minutes (or too far in the future)
-    if abs(now - ts) > 300:
-        return False
-        
-    # 2. Deny if this exact signature has already been processed (Pure Replay attack)
-    if sig in seen_requests:
-        return False
-        
-    # 3. Clean up the server memory by removing expired signatures
-    expired = [k for k, v in seen_requests.items() if (now - v) > 300]
-    for k in expired:
-        del seen_requests[k]
-        
-    # 4. Verify the djb2 fingerprint (replicates the logic from the C client)
-    text = f"{VPS_PRIVATE_KEY}{name}{score}{ts}"
-    h = 5381
-    for c in text:
-        h = (((h << 5) + h) + ord(c)) & 0xFFFFFFFF
-        
-    expected_sig = f"{h:08x}"
-    return sig == expected_sig
-
-@app.route('/lb/<sig>/add/<name>/<int:score>/<int:ts>', methods=['GET'])
-def add_score(sig, name, score, ts):
-    if not check_signature(sig, name, score, ts):
-        print(f"SECURITY ALERT: Cheating/replay attempt blocked for '{name}'")
+@app.route('/submit/<token>/<name>/<int:score>', methods=['GET'])
+def submit_score(token, name, score):
+    """
+    Called by the C client at the end of the game (Game Over).
+    Validates the token, the elapsed time, and the physical game limits.
+    """
+    # 1. Does the token exist in the active sessions?
+    if token not in active_sessions:
+        print(f"REJECTED: Invalid or expired token for player '{name}'")
         return "Unauthorized", 403
 
-    # On a 25x20 grid, the max score is 5000 (500 cells * 10 pts).
+    # 2. Consume the token (Anti-Replay)
+    # .pop() retrieves the start time AND deletes the token instantly
+    start_time = active_sessions.pop(token)
+    duration = time.time() - start_time
+    
+    # 3. The TRUE Anti-Cheat: Physical consistency (Score vs Time)
+    # In your game, a fruit gives 10 points. Even playing extremely fast,
+    # it's impossible to score 100 points per second.
+    # If the player scored faster than physically possible, it's a hack.
+    if score > 0 and duration < (score / 100.0):
+        print(f"CHEAT DETECTED: {score} points in {duration:.2f}s for '{name}' = Impossible")
+        return "Speedhack Detected", 400
+
+    # 4. Absolute grid limit
+    # 25x20 grid = 500 cells. 500 cells * 10 points = 5000 theoretical max score.
     if score > 5000 or score < 0:
-        print(f"REJECTED: Impossible score {score} from '{name}'")
+        print(f"REJECTED: Aberrant score of {score} for player '{name}'")
         return "Invalid Score", 400
 
-    # Log the signature as "seen" to prevent Replay attacks
-    seen_requests[sig] = ts
-    print(f"Valid score (djb2 hash received). Forwarding to Dreamlo: {name} -> {score}")
+    print(f"Valid Session: {name} scored {score} points (Duration: {duration:.0f}s). Forwarding to Dreamlo...")
     
+    # Forward the validated score to Dreamlo's hidden API
     dreamlo_url = f"http://dreamlo.com/lb/{DREAMLO_PRIVATE_KEY}/add/{name}/{score}"
     try:
-        response = requests.get(dreamlo_url, timeout=5)
-        return response.text
+        requests.get(dreamlo_url, timeout=5)
+        return "OK", 200
     except Exception as e:
         print(f"Communication error with Dreamlo: {e}")
         return "Backend Error", 500
 
-@app.route('/lb/<key>/pipe/<int:limit>', methods=['GET'])
-def get_scores(key, limit):
-    # Verify the public key for read-only access
-    if key != VPS_PUBLIC_KEY:
-        return "Unauthorized", 403
-
-    dreamlo_url = f"http://dreamlo.com/lb/{DREAMLO_PUBLIC_KEY}/pipe/{limit}"
+@app.route('/scores/<int:limit>', methods=['GET'])
+def get_scores(limit):
+    """
+    Public endpoint to read the leaderboard.
+    VPS_PUBLIC_KEY is no longer needed, as this leaderboard is public anyway.
+    """
     try:
-        response = requests.get(dreamlo_url, timeout=5)
+        # We still use the DREAMLO public key on the server side to read
+        response = requests.get(f"http://dreamlo.com/lb/{DREAMLO_PUBLIC_KEY}/pipe/{limit}", timeout=5)
         return response.text
     except Exception as e:
         return "Backend Error", 500
 
 if __name__ == '__main__':
-    # Start the server on all interfaces at the configured port
+    # Start the server on all network interfaces at the configured port
     app.run(host='0.0.0.0', port=VPS_PORT)

@@ -134,6 +134,7 @@ typedef struct s_data
 	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
+	char	token[33];
 }	t_data;
 
 void		enable_raw_mode(void);
@@ -142,5 +143,6 @@ void		game_loop(t_data *d);
 void		spawn_fruit(t_data *d);
 const char	*fruit_color(void);
 void		handle_leaderboard(t_data *d);
+void		vps_start_session(t_data *d);
 
 #endif
