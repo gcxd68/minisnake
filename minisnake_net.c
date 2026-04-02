@@ -53,11 +53,9 @@ static int vps_connect(void)
         return (-1);
     if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         return (-1);
-    
     addr.sin_family = AF_INET;
     addr.sin_port = htons(atoi(VPS_PORT)); 
     addr.sin_addr = *(struct in_addr *)he->h_addr;
-
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
         return (close(fd), -1);
     return (fd);
@@ -72,12 +70,9 @@ static int http_get(const char *path, char *out, int out_size)
 
     if ((fd = vps_connect()) < 0)
         return (-1);
-    
     snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, VPS_HOST);
-    
     if (write(fd, req, strlen(req)) < 0)
         return (close(fd), -1);
-        
     while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
     {
         buf[n] = '\0';
@@ -87,12 +82,10 @@ static int http_get(const char *path, char *out, int out_size)
             total += n;
         }
     }
-
     if (n < 0)
         return (close(fd), -1);
     out[total] = '\0';
     close(fd);
-
     /* Check if the HTTP response is exactly HTTP/1.x 200 OK */
     if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || strncmp(out + HTTP_STAT_OFFSET, " 200", HTTP_STAT_LEN) != 0)
         return (-1);
@@ -103,7 +96,8 @@ static int http_get(const char *path, char *out, int out_size)
    Handles both \r\n\r\n (standard) and \n\n (non-conforming servers). */
 static char *skip_headers(char *response)
 {
-    char *body = strstr(response, "\r\n\r\n");
+    char    *body = strstr(response, "\r\n\r\n");
+
     if (body)
         return (body + HTTP_CRLF_LEN);
     body = strstr(response, "\n\n");
@@ -116,10 +110,9 @@ static char *skip_headers(char *response)
    This marks the official start time on the server to prevent speedhacks. */
 void vps_start_session(t_data *d)
 {
-    char resp[BUF_RESP_SUBMIT];
+    char    resp[BUF_RESP_SUBMIT];
 
     if (!d->online) return;
-    
     /* Call the /start route */
     if (http_get("/start", resp, sizeof(resp)) == 0)
     {
@@ -128,53 +121,37 @@ void vps_start_session(t_data *d)
         d->token[32] = '\0';
     }
     else
-    {
-        /* Network error: leave the token empty, game will drop to offline mode */
-        d->token[0] = '\0'; 
-    }
+        d->token[0] = '\0';
 }
 
 /* Submits the final score using the session token.
    The server will validate the score against the elapsed time. */
 static int vps_submit(t_data *d, const char *name)
 {
-    char path[BUF_PATH], resp[BUF_RESP_SUBMIT];
-    
-    /* If cheat was detected locally, send 0 instead of the real score */
-    int score = d->cheat ? 0 : REAL_SCORE;
+    char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
     printf(CLEAR_SCREEN "Submitting...");
     fflush(stdout);
-
     /* If no token was obtained at startup, we cannot submit */
     if (!d->token[0])
         return (-1);
-
-    /* The URL is now extremely simple and contains no secret keys:
-       /submit/TOKEN/NAME/SCORE */
-    snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, score);
+    snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->cheat ? 0 : REAL_SCORE);
     return (http_get(path, resp, sizeof(resp)));
 }
 
 static int vps_show(t_data *d)
 {
     const char  title[] = LDB_TITLE;
-    /* Center the title within the game frame */
     const int   title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
     char        *body, *line, *saveptr;
     char        path[BUF_PATH], resp[BUF_RESP_SCORES];
     int         rank = 1, row = LB_START_ROW;
 
-    /* No more need for complex get_real_key or build_path functions! */
-    /* We simply request the top scores from the public endpoint */
     snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
-    
     if (http_get(path, resp, sizeof(resp)) < 0)
         return (-1);
-        
     printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
     body = skip_headers(resp);
-
     /* VPS pipe format (relayed from Dreamlo): name|score|seconds|extras\n per entry */
     line = strtok_r(body, "\n", &saveptr);
     while (line && rank <= LB_MAX_SCORES)
@@ -205,7 +182,6 @@ static int read_name(char *name, size_t size)
     else if (!strchr(name, '\n'))
         /* fgets filled the buffer without hitting '\n': drain the rest of the line */
         for (int c; (c = getchar()) != '\n' && c != EOF;);
-
     /* Trim trailing whitespace in-place */
     for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
     enable_raw_mode();

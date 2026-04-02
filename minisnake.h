@@ -36,7 +36,6 @@
 # define DEFAULT_WIDTH		25
 # define DEFAULT_HEIGHT		20
 # define BUF_GEOM			32
-# define BUF_CHEAT			256
 # define BUF_CMD			512
 
 # if MIN_WIDTH < 2
@@ -75,7 +74,7 @@
 # if DEFAULT_HEIGHT < MIN_HEIGHT || DEFAULT_HEIGHT > MAX_HEIGHT
 #  error "DEFAULT_HEIGHT must be between MIN_HEIGHT and MAX_HEIGHT"
 # endif
-# if BUF_GEOM <= 0 || BUF_CHEAT <= 0 || BUF_CMD <= 0
+# if BUF_GEOM <= 0 || BUF_CMD <= 0
 #  error "Buffer sizes must be strictly positive"
 # endif
 
