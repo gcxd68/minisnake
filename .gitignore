@@ -8,7 +8,6 @@ obj/
 
 # Binaries and generated scripts
 minisnake
-play.sh
 
 # VS Code
 .vscode/
