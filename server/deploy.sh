@@ -70,6 +70,7 @@ venv/bin/python -m pip install flask requests python-dotenv gunicorn
 # 8. Firewall (UFW Only)
 echo "Step 6: Configuring Firewall..."
 if command -v ufw >/dev/null; then
+    $SUDO ufw allow ssh
     $SUDO ufw allow 8000/tcp
     $SUDO ufw --force enable || true
 fi
@@ -112,6 +113,7 @@ if [ $SUCCESS -eq 1 ]; then
     echo "--- ✅ Deployment Complete! ---"
     echo "🌐 Server running on: http://$SERVER_IP:8000"
     echo "📄 Logs: tail -f gunicorn.log"
+    echo "🛑 To stop the server: pkill -f server:app"
 else
     echo "❌ Deployment Failed! Gunicorn process exists but port 8000 is not listening."
     echo "Check gunicorn.log for bind errors."

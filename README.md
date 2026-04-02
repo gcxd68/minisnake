@@ -36,6 +36,7 @@ Launches a dedicated gnome-terminal window with a fixed 25x20 board. After the g
 ### Custom mode
 
 ```bash
+./minisnake
 ./minisnake <width> <height>
 ```
 
@@ -44,7 +45,7 @@ Launches a dedicated gnome-terminal window with a fixed 25x20 board. After the g
 ./minisnake 40 20
 ```
 
-Custom mode is offline only. The game window opens automatically in gnome-terminal.
+Custom mode is offline only. Playing without arguments defaults to 25x20. The game window opens automatically in gnome-terminal.
 
 ### Constraints
 
@@ -80,7 +81,7 @@ Custom mode is offline only. The game window opens automatically in gnome-termin
 
 ```bash
 make
-./minisnake <width> <height>
+./minisnake
 ```
 
 ### Building with online mode
@@ -88,21 +89,19 @@ make
 Direct connection to Dreamlo is no longer possible. Due to the implementation of the djb2 hash and the requirement to keep Dreamlo private keys secure, you are now required to set up a VPS acting as a proxy server. This is the only safe solution, as any API key embedded in the client-side binary could be extracted.
 
 #### 1. Server Setup (VPS)
-1. Go to the `server/` directory and install the dependencies:
-   ```bash
-   pip install flask requests python-dotenv
-   ```
-2. Create an `.env` file based on `.env.example` and fill in your actual Dreamlo keys, as well as generate new custom keys for your VPS:
+1. Go to the `server/` directory and create an `.env` file based on `.env.example`. Fill in your actual Dreamlo keys and generate new custom keys for your VPS:
    ```text
-   VPS_PORT=YOUR_VPS_PORT
+   VPS_PORT=8000
    VPS_PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
    VPS_PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
    DREAMLO_PRIVATE_KEY=YOUR_DREAMLO_PRIVATE_KEY
    DREAMLO_PUBLIC_KEY=YOUR_DREAMLO_PUBLIC_KEY
    ```
-3. Run the server (default port 80):
+   > **Note:** The deployment script binds to port `8000` by default, so ensure `VPS_PORT` matches or is configured accordingly.
+2. Run the automated deployment script. It will detect your package manager, install dependencies, set up a Python virtual environment, configure the firewall (if using UFW), and start the server in the background using Gunicorn:
    ```bash
-   sudo python3 server.py
+   chmod +x deploy.sh
+   ./deploy.sh
    ```
 
 #### 2. Client Setup (Game)
@@ -113,11 +112,8 @@ Direct connection to Dreamlo is no longer possible. Due to the implementation of
    VPS_PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
    VPS_PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
    ```
-2. Generate `net.h`:
-   ```bash
-   python3 obfuscator.py > net.h
-   ```
-3. Compile:
+   > **Note:** The VPS private and public keys can contain lowercase, uppercase, numbers, and the characters `.`, `_`, and `-`.
+2. Compile:
    ```bash
    make
    ./minisnake online
@@ -144,7 +140,7 @@ You can modify these constants in `minisnake.h`:
 - `INPUT_Q_SIZE` — Number of inputs buffered (default: 2)
 - `MIN_WIDTH` / `MAX_WIDTH` — Allowed board width range (default: 2 to 200)
 - `MIN_HEIGHT` / `MAX_HEIGHT` — Allowed board height range (default: 2 to 50)
-- `ONLINE_WIDTH` / `ONLINE_HEIGHT` — Online mode board dimensions (default: 25x20)
+- `DEFAULT_WIDTH` / `DEFAULT_HEIGHT` — Default/Online mode board dimensions (default: 25x20)
 
 **Controls & Text:**
 - `MOVE_KEYS` — Movement controls (default: "ADWS")

@@ -20,16 +20,23 @@ static int	parse_args(int argc, char **argv, t_data *d)
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
 		return(EXIT_FAILURE);
 	}
-	if (argc == 2 && !strcmp(argv[1], "online"))
+	/* Launch default mode if no arguments, or explicitly requested "online" */
+	if (argc == 1 || (argc == 2 && !strcmp(argv[1], "online")))
 	{
-		/* ONLINE_BUILD is only defined when net.h was generated from obfuscator.py */
-#ifndef ONLINE_BUILD
-		fprintf(stderr, "minisnake: online mode not available in this build\n");
-		return(EXIT_FAILURE);
-#endif
-		d->width = ONLINE_WIDTH;
-		d->height = ONLINE_HEIGHT;
+		d->width = DEFAULT_WIDTH;
+		d->height = DEFAULT_HEIGHT;
+#ifdef ONLINE_BUILD
+		/* If network is compiled in, activate online features */
 		d->online = 1;
+#else
+		/* If network is NOT compiled in, but the user explicitly typed "online", warn them */
+		if (argc == 2)
+		{
+			fprintf(stderr, "minisnake: online mode not available in this build\n");
+			return(EXIT_FAILURE);
+		}
+		/* If argc == 1, we silently drop to offline mode with default dimensions */
+#endif
 	}
 	else if (argc == 3)
 	{
@@ -38,10 +45,12 @@ static int	parse_args(int argc, char **argv, t_data *d)
 			return (2);
 	}
 	else {
-		fprintf(stderr, "Usage: ./minisnake online\n"
+		fprintf(stderr, "Usage: ./minisnake\n"
+						"       ./minisnake online\n"
 						"       ./minisnake WIDTH HEIGHT\n");
 		return(2);
 	}
+	
 	if ((d->width * d->height) % 2 != 0)
 	{
 		fprintf(stderr, "minisnake: board area (%dx%d = %d) must be even.\n", 
