@@ -34,6 +34,7 @@ static void anticheat(t_data *d)
 
 	// Validate score progression, physical board limits, and timing consistency
 	if ((d->score != last_score && REAL_SCORE != XOR_SCORE(last_score) + POINTS_PER_FRUIT)
+		|| REAL_SCORE % POINTS_PER_FRUIT
 		|| REAL_SCORE > (d->width * d->height * POINTS_PER_FRUIT)
 		|| now - last_frame > CHEAT_TIMEOUT)
 	{
