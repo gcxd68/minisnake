@@ -19,6 +19,11 @@ DREAMLO_PUBLIC_KEY  = os.environ.get("DREAMLO_PUBLIC_KEY")
 # Dictionary to store seen signatures: signature -> timestamp
 seen_requests = {}
 
+@app.route('/time', methods=['GET'])
+def get_server_time():
+    # Returns the absolute UNIX timestamp (UTC)
+    return str(int(time.time())), 200
+
 def check_signature(sig, name, score, ts):
     now = int(time.time())
     

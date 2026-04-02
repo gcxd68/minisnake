@@ -10,21 +10,36 @@ void	handle_leaderboard(t_data *d)
 
 #else
 
-# define BUF_RESP_SUBMIT	512		/* Small buffer: submit response is just "OK" */
-# define BUF_RESP_SCORES	8192	/* Large buffer: up to 20 leaderboard entries */
-# define BUF_READ			4096	/* Internal read() chunk size in http_get */
-# define BUF_REQ			512		/* HTTP request line */
-# define BUF_PATH			256		/* Dreamlo API endpoint path */
-# define BUF_ENTRY			128		/* One parsed leaderboard line */
-# define BUF_KEY			128		/* Decoded Dreamlo key (public or private) */
-# define BUF_HOST			256		/* Decoded server host name */
+# define BUF_RESP_SUBMIT	512			/* Small buffer: submit response is just "OK" */
+# define BUF_RESP_SCORES	8192		/* Large buffer: up to 20 leaderboard entries */
+# define BUF_READ			4096		/* Internal read() chunk size in http_get */
+# define BUF_REQ			512			/* HTTP request line */
+# define BUF_PATH			256			/* VPS API endpoint path */
+# define BUF_ENTRY			128			/* One parsed leaderboard line */
+# define BUF_KEY			128			/* Decoded VPS key (public or private) */
+# define BUF_HOST			256			/* Decoded server host name */
+# define BUF_PORT			16			/* Buffer for decoded port string */
+# define BUF_SIG_PAYLOAD	256			/* Buffer for raw string before hashing */
+# define BUF_SIG			9			/* 8 hex chars + \0 for djb2 signature */
 
+# define HTTP_MIN_LEN		12			/* Minimum size to validate "HTTP/1.x 200" */
+# define HTTP_VER_LEN		7			/* Length of "HTTP/1." */
+# define HTTP_STAT_OFFSET	8			/* Offset to find " 200" */
+# define HTTP_STAT_LEN		4			/* Length of " 200" */
+# define HTTP_CRLF_LEN		4			/* Length of "\r\n\r\n" */
+# define HTTP_LF_LEN		2			/* Length of "\n\n" */
+# define DJB2_INIT			5381		/* Initial hash value for djb2 algorithm */
+# define MIN_VALID_TS		1000000000L	/* Fallback threshold (Sep 2001) */
+
+# define LB_TITLE_ROW		1			/* Row for the leaderboard title */
+# define UI_PROMPT_ROW_OFF	4			/* Offset below game board for name prompt */
+# define UI_PROMPT_COL		1			/* Column start for name prompt */
 # define LB_MAX_SCORES		20
-# define LB_START_ROW		3		/* First row inside the game frame */
-# define LB_COL_OFFSET		2		/* Left margin inside the frame */
+# define LB_START_ROW		3			/* First row inside the game frame */
+# define LB_COL_OFFSET		2			/* Left margin inside the frame */
 # define MAX_NAME_LEN		8
-# define UI_NAME_WIDTH		12		/* Column width for player name display */
-# define UI_SCORE_WIDTH		7		/* Column width for score display */
+# define UI_NAME_WIDTH		12			/* Column width for player name display */
+# define UI_SCORE_WIDTH		7			/* Column width for score display */
 
 # if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0 || BUF_KEY <= 0 || BUF_HOST <= 0
 #  error "Buffer sizes must be strictly positive"
@@ -53,10 +68,11 @@ void	handle_leaderboard(t_data *d)
    so decoding reverses: c ^ SALT - (base_key + i) */
 static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
 {
-	volatile unsigned char part_a = KEY_PART_A;
-	volatile unsigned char part_b = KEY_PART_B;
-	volatile unsigned char part_c = KEY_PART_C;
-	unsigned char base_key = (part_a ^ part_b) + part_c;
+	volatile unsigned char	part_a = KEY_PART_A;
+	volatile unsigned char	part_b = KEY_PART_B;
+	volatile unsigned char	part_c = KEY_PART_C;
+	const unsigned char		base_key = (part_a ^ part_b) + part_c;
+
 	for (size_t i = 0; i < len - 1; i++)
 	{
 		unsigned char c = obfuscated[i];
@@ -67,15 +83,15 @@ static void get_real_key(const unsigned char *obfuscated, char *out, size_t len)
 	out[len - 1] = '\0';
 }
 
-static int	dreamlo_connect(void)
+static int	vps_connect(void)
 {
 	struct sockaddr_in	addr;
 	struct hostent		*he;
 	int					fd;
-	char                host[256];
-	char                port_str[16];
-	const unsigned char obs_host[] = OBS_SERVER_HOST;
-	const unsigned char obs_port[] = OBS_SERVER_PORT;
+	char				host[BUF_HOST];
+	char				port_str[BUF_PORT];
+	const unsigned char	obs_host[] = OBS_SERVER_HOST;
+	const unsigned char	obs_port[] = OBS_SERVER_PORT;
 
 	/* Decode the obfuscated Host and Port into temporary buffers */
 	get_real_key(obs_host, host, sizeof(obs_host));
@@ -104,11 +120,11 @@ static int	dreamlo_connect(void)
    Returns 0 on success, -1 on any network error. */
 static int	http_get(const char *path, char *out, int out_size)
 {
-	char	req[BUF_REQ], buf[BUF_READ], host[256];
-	int		fd, n, total = 0;
-	const unsigned char obs_host[] = OBS_SERVER_HOST;
+	const unsigned char	obs_host[] = OBS_SERVER_HOST;
+	char				req[BUF_REQ], buf[BUF_READ], host[BUF_HOST];
+	int					fd, n, total = 0;
 
-	if ((fd = dreamlo_connect()) < 0)
+	if ((fd = vps_connect()) < 0)
 		return (-1);
 	
 	/* Decode the obfuscated Host for the HTTP request */
@@ -138,7 +154,7 @@ static int	http_get(const char *path, char *out, int out_size)
 	close(fd);
 
 	/* Check if the HTTP response is exactly HTTP/1.x 200 OK */
-	if (total < 12 || strncmp(out, "HTTP/1.", 7) != 0 || strncmp(out + 8, " 200", 4) != 0)
+	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || strncmp(out + HTTP_STAT_OFFSET, " 200", HTTP_STAT_LEN) != 0)
 		return (-1);
 	return (0);
 }
@@ -149,20 +165,20 @@ static char	*skip_headers(char *response)
 {
 	char *body = strstr(response, "\r\n\r\n");
 	if (body)
-		return (body + 4);
+		return (body + HTTP_CRLF_LEN);
 	body = strstr(response, "\n\n");
 	if (body)
-		return (body + 2);
+		return (body + HTTP_LF_LEN);
 	return (response);
 }
 
-/* Decode the key, build the full Dreamlo API path, then wipe the key from memory.
+/* Decode the key, build the full VPS API path, then wipe the key from memory.
    Wiping prevents the key from lingering in stack memory after the call. */
 static void build_path(char *out, size_t size, const unsigned char *obs_key,
 	size_t key_len, const char *fmt, ...)
 {
-	char    real_key[BUF_KEY], action[BUF_PATH];
-	va_list args;
+	char	real_key[BUF_KEY], action[BUF_PATH];
+	va_list	args;
 
 	get_real_key(obs_key, real_key, key_len);
 	va_start(args, fmt);
@@ -178,25 +194,45 @@ static void build_path(char *out, size_t size, const unsigned char *obs_key,
    This cleanly hides the exact PRIVATE_KEY from packet sniffers. */
 static void generate_signature(const char *key, const char *name, int score, long ts, char *out_sig)
 {
-	char			buf[256];
-	unsigned int	hash = 5381;
+	char			buf[BUF_SIG_PAYLOAD];
+	unsigned int	hash = DJB2_INIT;
 
 	snprintf(buf, sizeof(buf), "%s%s%d%ld", key, name, score, ts);
 	for (int i = 0; buf[i]; i++)
 		hash = ((hash << 5) + hash) + buf[i];
-	snprintf(out_sig, 32, "%08x", hash);
+	snprintf(out_sig, BUF_SIG, "%08x", hash);
 }
 
-static int	dreamlo_submit(t_data *d, const char *name)
+/* Fetch the current UNIX timestamp from the server's /time endpoint.
+   Using the server's clock ensures the signature check passes regardless
+   of the client's local clock drift or timezone. Falls back to local
+   time if the request fails, which works when clocks are in sync. */
+static long	get_server_time(void)
+{
+	char	resp[BUF_RESP_SUBMIT];
+	long	ts;
+
+	if (http_get("/time", resp, sizeof(resp)) < 0)
+		return ((long)time(NULL));
+	ts = atol(skip_headers(resp));
+	if (ts < MIN_VALID_TS)
+		return ((long)time(NULL));
+	return (ts);
+}
+
+static int	vps_submit(t_data *d, const char *name)
 {
 	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
 	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
-	char				real_key[BUF_KEY], sig[32];
+	char				real_key[BUF_KEY], sig[BUF_SIG];
 	int					score = d->cheat ? XOR_SCORE(0) : REAL_SCORE;
-	long				ts = (long)time(NULL);
+	long				ts;
 
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
+
+	/* Get server time before signing — avoids clock drift rejections */
+	ts = get_server_time();
 
 	get_real_key(obs_priv, real_key, sizeof(obs_priv));
 	generate_signature(real_key, name, score, ts, sig);
@@ -206,7 +242,7 @@ static int	dreamlo_submit(t_data *d, const char *name)
 	return (http_get(path, resp, sizeof(resp)));
 }
 
-static int	dreamlo_show(t_data *d)
+static int	vps_show(t_data *d)
 {
 	const unsigned char	obs_pub[] = OBS_PUB_KEY;
 	const char			title[] = LDB_TITLE;
@@ -219,10 +255,10 @@ static int	dreamlo_show(t_data *d)
 	build_path(path, sizeof(path), obs_pub, sizeof(obs_pub), "pipe/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
-	printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, 1, title_col, title);
+	printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
 	body = skip_headers(resp);
 
-	/* Dreamlo pipe format: name|score|seconds|extras\n per entry */
+	/* VPS pipe format (relayed from Dreamlo): name|score|seconds|extras\n per entry */
 	line = strtok_r(body, "\n", &saveptr);
 	while (line && rank <= LB_MAX_SCORES)
 	{
@@ -263,11 +299,11 @@ void	handle_leaderboard(t_data *d)
 {
 	if (!d->online) return;
 	char name[MAX_NAME_LEN + 1];
-	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + 4, 1);
+	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
 	fflush(stdout);
 	if (!read_name(name, sizeof(name)))
 		return ;
-	if (dreamlo_submit(d, name) < 0 || dreamlo_show(d) < 0)
+	if (vps_submit(d, name) < 0 || vps_show(d) < 0)
 		printf(CLEAR_SCREEN "Network error");
 }
 
