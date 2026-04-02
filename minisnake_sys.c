@@ -209,7 +209,7 @@ static void	init_game(t_data *d) {
 
 static void	setup_display(t_data *d) {
 	printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 
-       d->fruit_y + 2, d->fruit_x + 2, fruit_color());
+	   d->fruit_y + 2, d->fruit_x + 2, fruit_color());
 	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)
 		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, y, 1, y, d->width + 2);

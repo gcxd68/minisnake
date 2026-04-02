@@ -55,6 +55,11 @@ def add_score(sig, name, score, ts):
         print(f"SECURITY ALERT: Cheating/replay attempt blocked for '{name}'")
         return "Unauthorized", 403
 
+    # On a 25x20 grid, the max score is 5000 (500 cells * 10 pts).
+    if score > 5000 or score < 0:
+        print(f"REJECTED: Impossible score {score} from '{name}'")
+        return "Invalid Score", 400
+
     # Log the signature as "seen" to prevent Replay attacks
     seen_requests[sig] = ts
     print(f"Valid score (djb2 hash received). Forwarding to Dreamlo: {name} -> {score}")

@@ -26,11 +26,11 @@ static void anticheat(t_data *d)
 
 	if (d->cheat) return;
 
-// Initialize on the first frame
-    if (!last_frame) {
-        last_frame = now;
-        last_score = d->score;
-    }
+	// Initialize on the first frame
+	if (!last_frame) {
+		last_frame = now;
+		last_score = d->score;
+	}
 
 	// Validate score progression, physical board limits, and timing consistency
 	if ((d->score != last_score && REAL_SCORE != XOR_SCORE(last_score) + POINTS_PER_FRUIT)
@@ -130,8 +130,8 @@ static void	update_game(t_data *d)
 
 const char *fruit_color(void)
 {
-    static const char *palette[] = FRUIT_PALETTE;
-    return palette[rand() % ARR_SIZE(palette)];
+	static const char *palette[] = FRUIT_PALETTE;
+	return palette[rand() % ARR_SIZE(palette)];
 }
 
 static void	render(t_data *d)

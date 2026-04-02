@@ -225,7 +225,6 @@ static int	vps_submit(t_data *d, const char *name)
 	const unsigned char	obs_priv[] = OBS_PRIV_KEY;
 	char				path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 	char				real_key[BUF_KEY], sig[BUF_SIG];
-	int					score = d->cheat ? XOR_SCORE(0) : REAL_SCORE;
 	long				ts;
 
 	printf(CLEAR_SCREEN "Submitting...");
@@ -235,10 +234,10 @@ static int	vps_submit(t_data *d, const char *name)
 	ts = get_server_time();
 
 	get_real_key(obs_priv, real_key, sizeof(obs_priv));
-	generate_signature(real_key, name, score, ts, sig);
+	generate_signature(real_key, name, d->cheat ? 0 : REAL_SCORE, ts, sig);
 	memset(real_key, 0, sizeof(real_key));
 
-	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d/%ld", sig, name, score, ts);
+	snprintf(path, sizeof(path), "/lb/%s/add/%s/%d/%ld", sig, name, d->cheat ? 0 : REAL_SCORE, ts);
 	return (http_get(path, resp, sizeof(resp)));
 }
 
