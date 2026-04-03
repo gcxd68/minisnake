@@ -126,7 +126,6 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
 	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
 		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
-
 	/* Dark theme for a better visual experience */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
@@ -196,7 +195,6 @@ static void	init_game(t_data *d) {
 	d->delay = INITIAL_DELAY;
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
-
 	/* Place snake head near center, with a small random offset on even dimensions */
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
@@ -238,24 +236,20 @@ static void	initialize(t_data *d) {
 	init_game(d);
 	setup_display(d);
 	setup_sig();
-
 #ifdef ONLINE_BUILD
 	/* Request the session token from the server at the very beginning of the game */
-	vps_start_session(d);
+	net_start_session(d);
 #endif
 }
 
 static void	finalize(t_data *d)
 {
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
-
-	/* Align outcome message to the right of the score line */
 	const int col = MAX(d->width - (int)strlen(outcome) + 3,
 		(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
 	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
 		? COLOR_RED : COLOR_GREEN, outcome);
-
 	/* Restore blocking stdin before any user-facing read operations */
 	restore_stdin_flags();
 	handle_leaderboard(d);

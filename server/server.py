@@ -18,12 +18,33 @@ DREAMLO_PUBLIC_KEY  = os.environ.get("DREAMLO_PUBLIC_KEY")
 # Format: { "token": {"score": int, "last_ping": float, "cheated": bool} }
 active_sessions = {}
 
+# --- Garbage Collector (Memory Leak Protection) ---
+def cleanup_stale_sessions():
+    """ 
+    Removes sessions that have been inactive for more than 15 minutes.
+    Prevents memory leaks if a player closes the terminal without finishing the game.
+    """
+    now = time.time()
+    # 900 seconds = 15 minutes without any /eat ping
+    stale_tokens = [token for token, data in active_sessions.items() 
+                    if now - data["last_ping"] > 900]
+    
+    for token in stale_tokens:
+        del active_sessions[token]
+        
+    if stale_tokens:
+        print(f"CLEANUP: Removed {len(stale_tokens)} abandoned sessions.")
+# --------------------------------------------------
+
 @app.route('/start', methods=['GET'])
 def start_session():
     """
     Called by the C client when the game starts.
     Generates a token and initializes the server-side score.
     """
+    # Clean up old sessions when a new player connects
+    cleanup_stale_sessions()
+    
     token = secrets.token_hex(16)
     active_sessions[token] = {
         "score": 0,
@@ -49,6 +70,13 @@ def eat_fruit(token):
         session["cheated"] = True
         print(f"SPEEDHACK DETECTED: Invalid ping interval for session {token}")
         return "Speedhack detected", 400
+
+    # Theoretical physical limit (25x20 = 500 cells = 5000 points)
+    # Prevents attackers from replaying the /eat endpoint via packet sniffing
+    if session["score"] >= 5000:
+        session["cheated"] = True
+        print(f"MAX SCORE EXCEEDED: Session {token} flagged.")
+        return "Score limit exceeded", 400
 
     # The server increments the score securely
     session["score"] += 10
