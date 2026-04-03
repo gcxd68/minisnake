@@ -195,7 +195,6 @@ static void	init_game(t_data *d) {
 	d->delay = INITIAL_DELAY;
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
-	/* Place snake head near center, with a small random offset on even dimensions */
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
 	spawn_fruit(d);
@@ -238,15 +237,15 @@ static void	initialize(t_data *d) {
 	setup_sig();
 #ifdef ONLINE_BUILD
 	/* Request the session token from the server at the very beginning of the game */
-	net_start_session(d);
+	start_session(d);
 #endif
 }
 
 static void	finalize(t_data *d)
 {
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
-	const int col = MAX(d->width - (int)strlen(outcome) + 3,
-		(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
+	const int	col = MAX(d->width - (int)strlen(outcome) + 3,
+					(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
 	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
 		? COLOR_RED : COLOR_GREEN, outcome);
@@ -261,8 +260,10 @@ static void	finalize(t_data *d)
 
 int	main(int argc, char **argv)
 {
-	t_data d = {0};
-	int	ret = parse_args(argc, argv, &d);
+	t_data	d = {0};
+	int		ret;
+
+	ret = parse_args(argc, argv, &d);
 	if (ret) return (ret);
 	ret = launch_terminal(argc, argv, &d);
 	if (ret != LAUNCH_LOCAL) return ret;

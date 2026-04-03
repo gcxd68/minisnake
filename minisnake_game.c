@@ -16,18 +16,16 @@ static long get_ms(void)
 
 static void anticheat(t_data *d)
 {
-	static int  counter = 0;
-	static int  last_score = 0;
+	static int	counter = 0;
+	static int	last_score = 0;
 	static long	last_frame = 0;
-	long        now = get_ms();
+	const long	now = get_ms();
 
 	if (d->cheat) return;
 
 	/* Initialize on the first frame */
-	if (!last_frame) {
+	if (!last_frame)
 		last_frame = now;
-		last_score = d->score;
-	}
 
 	/* Validate score progression (Plaintext, no XOR) */
 	if ((d->score != last_score && d->score != last_score + POINTS_PER_FRUIT)
@@ -36,7 +34,7 @@ static void anticheat(t_data *d)
 		|| now - last_frame > CHEAT_TIMEOUT)
 	{
 		d->cheat = 1;
-		net_notify_cheat(d); /* Alert the server immediately in the background */
+		notify_cheating(d); /* Alert the server immediately in the background */
 		return;
 	}
 	last_score = d->score;
@@ -55,7 +53,7 @@ static void anticheat(t_data *d)
 			if (!strncmp(buf, "TracerPid:", 10) && atoi(buf + 10) != 0)
 			{
 				d->cheat = 1;
-				net_notify_cheat(d); /* Alert the server */
+				notify_cheating(d); /* Alert the server */
 				break;
 			}
 		}
@@ -100,31 +98,23 @@ static void	update_game(t_data *d)
 {
 	if (d->grow && d->grow--)
 		d->size++;
-		
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
 	memmove(d->y + 1, d->y, d->size * sizeof(*d->y));
 	d->x[0] += (d->dir[0] == RIGHT) - (d->dir[0] == LEFT);
 	d->y[0] += (d->dir[0] == DOWN) - (d->dir[0] == UP);
-	
 	if (d->x[0] < 0 || d->x[0] == d->width || d->y[0] < 0 || d->y[0] == d->height)
 		d->game_over = 1;
-		
 	for (int i = 1; i < d->size; i++)
 		if (d->x[i] == d->x[0] && d->y[i] == d->y[0])
 			d->game_over = 1;
-			
 	if (d->x[0] != d->fruit_x || d->y[0] != d->fruit_y)
 		return ;
-		
 	if (d->size < d->width * d->height)
 		spawn_fruit(d);
-		
 	d->grow = 1;
-	d->score += POINTS_PER_FRUIT; /* Plaintext score increment */
+	d->score += POINTS_PER_FRUIT;
 	d->delay *= SPEEDUP_FACTOR;
-
-	/* Ping the server to count the fruit asynchronously */
-	net_fruit_eaten(d);
+	notify_fruit_eaten(d);
 }
 
 const char *fruit_color(void)
@@ -139,18 +129,14 @@ static void	render(t_data *d)
 	static const char	*bends[] = SNAKE_BENDS;
 
 	if (!d->dir[0]) return ;
-	
 	if (d->x[d->size] != d->fruit_x || d->y[d->size] != d->fruit_y)
 		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
-		
 	if (d->size > 1)
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
-			
 	if (d->grow)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET CURSOR_POS "%d",
 			d->fruit_y + 2, d->fruit_x + 2, fruit_color(), d->height + 3, 8, d->score);
-			
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
 	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }

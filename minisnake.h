@@ -147,8 +147,8 @@ const char	*fruit_color(void);
 
 /* Network functions */
 void		handle_leaderboard(t_data *d);
-void		net_start_session(t_data *d);
-void        net_fruit_eaten(t_data *d);
-void        net_notify_cheat(t_data *d);
+void		start_session(t_data *d);
+void        notify_fruit_eaten(t_data *d);
+void        notify_cheating(t_data *d);
 
 #endif

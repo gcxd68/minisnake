@@ -5,8 +5,8 @@
 /* STUBS: network functions are disabled in offline builds */
 void    handle_leaderboard(t_data *d) { (void)d; }
 void    start_session(t_data *d) { (void)d; }
-void    net_fruit_eaten(t_data *d) { (void)d; }
-void    net_notify_cheat(t_data *d) { (void)d; }
+void    notify_fruit_eaten(t_data *d) { (void)d; }
+void    notify_cheating(t_data *d) { (void)d; }
 
 #else
 
@@ -23,8 +23,6 @@ void    net_notify_cheat(t_data *d) { (void)d; }
 # define HTTP_VER_LEN       7
 # define HTTP_STAT_OFFSET   8
 # define HTTP_STAT_LEN      4
-# define HTTP_CRLF_LEN      4
-# define HTTP_LF_LEN        2
 
 /* UI LAYOUT: Terminal positioning for the leaderboard and prompts */
 # define LB_TITLE          "--- LEADERBOARD ---"
@@ -51,7 +49,7 @@ void    net_notify_cheat(t_data *d) { (void)d; }
 # if BUF_RESP_SCORES < (LB_MAX_SCORES * BUF_ENTRY)
 #  error "BUF_RESP_SCORES is too small to hold all leaderboard entries"
 # endif
-# if HTTP_MIN_LEN <= 0 || HTTP_VER_LEN <= 0 || HTTP_STAT_OFFSET <= 0 || HTTP_STAT_LEN <= 0 || HTTP_CRLF_LEN <= 0 || HTTP_LF_LEN <= 0
+# if HTTP_MIN_LEN <= 0 || HTTP_VER_LEN <= 0 || HTTP_STAT_OFFSET <= 0 || HTTP_STAT_LEN <= 0
 #  error "HTTP parsing constants must be strictly positive"
 # endif
 # if HTTP_MIN_LEN < (HTTP_STAT_OFFSET + HTTP_STAT_LEN)
@@ -78,12 +76,12 @@ void    net_notify_cheat(t_data *d) { (void)d; }
 
 /* Structure used to pass data to the background thread */
 typedef struct s_req {
-	char path[BUF_PATH];
-	int  in_use; /* Used as a boolean flag (0 = free, 1 = in use) */
-} t_req;
+	char	path[BUF_PATH];
+	int		in_use;
+}	t_req;
 
 /* Static array acting as pre-allocated memory for requests */
-static t_req           g_req_pool[REQ_POOL_SIZE];
+static t_req g_req_pool[REQ_POOL_SIZE];
 
 /* Mutex to prevent data races when threads claim or release a pool slot */
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -181,9 +179,7 @@ static void fire_and_forget(const char *path)
 	
 	/* 4. Spawn the detached thread pointing to our static slot */
 	if (pthread_create(&tid, NULL, async_http_worker, req) == 0)
-	{
 		pthread_detach(tid);
-	}
 	else
 	{
 		/* If thread creation fails due to system limits, free the slot */
@@ -196,14 +192,14 @@ static void fire_and_forget(const char *path)
 static char *skip_headers(char *response)
 {
 	char *body = strstr(response, "\r\n\r\n");
-	if (body) return (body + HTTP_CRLF_LEN);
+	if (body) return (body + 4);
 	body = strstr(response, "\n\n");
-	if (body) return (body + HTTP_LF_LEN);
+	if (body) return (body + 2);
 	return (response);
 }
 
 /* Initialization: Fetch the token (Synchronous, done before gameplay starts) */
-void net_start_session(t_data *d)
+void start_session(t_data *d)
 {
 	char    resp[BUF_RESP_SUBMIT];
 
@@ -218,7 +214,7 @@ void net_start_session(t_data *d)
 }
 
 /* Asynchronous Ping: Called when a fruit is eaten */
-void net_fruit_eaten(t_data *d)
+void notify_fruit_eaten(t_data *d)
 {
 	char path[BUF_PATH];
 	if (!d->online || !d->token[0]) return;
@@ -227,7 +223,7 @@ void net_fruit_eaten(t_data *d)
 }
 
 /* Asynchronous Ping: Called if the local anticheat detects tampering */
-void net_notify_cheat(t_data *d)
+void notify_cheating(t_data *d)
 {
 	if (!d->online || !d->token[0]) return;
 	char path[BUF_PATH];
@@ -236,7 +232,7 @@ void net_notify_cheat(t_data *d)
 }
 
 /* Submit the final score (The client no longer provides the score value) */
-static int net_submit(t_data *d, const char *name)
+static int end_session(t_data *d, const char *name)
 {
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
@@ -249,7 +245,7 @@ static int net_submit(t_data *d, const char *name)
 	return (http_get(path, resp, sizeof(resp)));
 }
 
-static int net_show(t_data *d)
+static int show_leaderboard(t_data *d)
 {
 	const char  title[] = LB_TITLE;
 	const int   title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
@@ -299,7 +295,7 @@ void handle_leaderboard(t_data *d)
 	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
 	fflush(stdout);
 	if (!read_name(name, sizeof(name))) return ;
-	if (net_submit(d, name) < 0 || net_show(d) < 0)
+	if (end_session(d, name) < 0 || show_leaderboard(d) < 0)
 		printf(CLEAR_SCREEN "Network error");
 }
 
