@@ -38,6 +38,9 @@ void    net_notify_cheat(t_data *d) { (void)d; }
 # define UI_NAME_WIDTH      12
 # define UI_SCORE_WIDTH     7
 
+/* ASYNC REQUEST POOL: Pre-allocated memory for background HTTP requests without malloc */
+# define REQ_POOL_SIZE      10
+
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
 # if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0
 #  error "Buffer sizes must be strictly positive"
@@ -69,17 +72,28 @@ void    net_notify_cheat(t_data *d) { (void)d; }
 # if UI_SCORE_WIDTH <= 0
 #  error "UI_SCORE_WIDTH must be strictly positive"
 # endif
+# if REQ_POOL_SIZE <= 0
+#  error "REQ_POOL_SIZE must be strictly positive"
+# endif
 
 /* Structure used to pass data to the background thread */
 typedef struct s_req {
 	char path[BUF_PATH];
+	int  in_use; /* Used as a boolean flag (0 = free, 1 = in use) */
 } t_req;
+
+/* Static array acting as pre-allocated memory for requests */
+static t_req           g_req_pool[REQ_POOL_SIZE];
+
+/* Mutex to prevent data races when threads claim or release a pool slot */
+static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 static int server_connect(void)
 {
-	struct sockaddr_in  addr;
-	struct hostent      *he;
-	int                 fd;
+	struct sockaddr_in	addr;
+	struct hostent		*he;
+	int					fd;
 
 	if (!(he = gethostbyname(VPS_HOST)))
 		return (-1);
@@ -96,8 +110,8 @@ static int server_connect(void)
 /* Synchronous HTTP GET request */
 static int http_get(const char *path, char *out, int out_size)
 {
-	char    req[BUF_REQ], buf[BUF_READ];
-	int     fd, n, total = 0;
+	char	req[BUF_REQ], buf[BUF_READ];
+	int		fd, n, total = 0;
 
 	if ((fd = server_connect()) < 0)
 		return (-1);
@@ -116,7 +130,6 @@ static int http_get(const char *path, char *out, int out_size)
 	if (n < 0) return (close(fd), -1);
 	out[total] = '\0';
 	close(fd);
-	
 	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || strncmp(out + HTTP_STAT_OFFSET, " 200", HTTP_STAT_LEN) != 0)
 		return (-1);
 	return (0);
@@ -125,36 +138,64 @@ static int http_get(const char *path, char *out, int out_size)
 /* The background worker function for asynchronous requests */
 static void *async_http_worker(void *arg)
 {
-	t_req   *req = (t_req *)arg;
-	char    resp[BUF_RESP_SUBMIT];
+	t_req	*req = (t_req *)arg;
+	char	resp[BUF_RESP_SUBMIT];
 	
+	/* Perform the HTTP request (blocks this thread, but not the game) */
 	http_get(req->path, resp, sizeof(resp)); 
-	free(req); /* Clean up allocated memory after the request finishes */
+
+	/* Thread-safely mark the pool slot as available again */
+	pthread_mutex_lock(&g_pool_mutex);
+	req->in_use = 0;
+	pthread_mutex_unlock(&g_pool_mutex);
 	return (NULL);
 }
 
-/* * Fire and Forget: Spawns a detached thread to execute an HTTP request.
- * This prevents the game from freezing when communicating with the VPS.
- */
+/* Fire and Forget: Spawns a detached thread using a static resource pool. *
+ * This prevents the game from freezing when communicating with the VPS.   */
 static void fire_and_forget(const char *path)
 {
-	pthread_t   tid;
-	t_req       *req = malloc(sizeof(t_req));
+	pthread_t	tid;
+	t_req		*req = NULL;
+	int			i;
 	
+	/* 1. Thread-safely search for an available slot in the pool */
+	pthread_mutex_lock(&g_pool_mutex);
+	for (i = 0; i < REQ_POOL_SIZE; i++)
+	{
+		if (g_req_pool[i].in_use == 0)
+		{
+			req = &g_req_pool[i];
+			req->in_use = 1; /* Reserve the slot */
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_pool_mutex);
+	
+	/* 2. If the pool is full, drop the ping to avoid crashing the game */
 	if (!req) return;
+	
+	/* 3. Prepare the data in the reserved static slot */
 	strncpy(req->path, path, BUF_PATH - 1);
 	req->path[BUF_PATH - 1] = '\0';
 	
-	/* Create thread and detach it immediately */
+	/* 4. Spawn the detached thread pointing to our static slot */
 	if (pthread_create(&tid, NULL, async_http_worker, req) == 0)
+	{
 		pthread_detach(tid);
+	}
 	else
-		free(req);
+	{
+		/* If thread creation fails due to system limits, free the slot */
+		pthread_mutex_lock(&g_pool_mutex);
+		req->in_use = 0;
+		pthread_mutex_unlock(&g_pool_mutex);
+	}
 }
 
 static char *skip_headers(char *response)
 {
-	char    *body = strstr(response, "\r\n\r\n");
+	char *body = strstr(response, "\r\n\r\n");
 	if (body) return (body + HTTP_CRLF_LEN);
 	body = strstr(response, "\n\n");
 	if (body) return (body + HTTP_LF_LEN);

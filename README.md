@@ -15,7 +15,7 @@ A lightweight, terminal-based Snake game written in C with minimal dependencies.
 
 - Make
 - GCC or any C compiler
-- POSIX-compliant system (Linux)
+- POSIX-compliant system with POSIX threads support (`pthread`)
 - Terminal with Unicode support (gnome-terminal recommended)
 
 ## Usage
@@ -86,14 +86,12 @@ make
 
 ### Building with online mode
 
-Direct connection to Dreamlo is no longer possible. Due to the implementation of the djb2 hash and the requirement to keep Dreamlo private keys secure, you are now required to set up a VPS acting as a proxy server. This is the only safe solution, as any API key embedded in the client-side binary could be extracted.
+Direct connection to Dreamlo from the client is no longer possible for security reasons. Minisnake now features an advanced **Server-Side Scoring Architecture**. The C client never sends its score directly; instead, it communicates with a proxy server via asynchronous HTTP pings every time a fruit is eaten. The server calculates the score securely while enforcing physical limits and timing constraints to prevent hacking.
 
 #### 1. Server Setup (VPS)
-1. Go to the `server/` directory and create an `.env` file based on `.env.example`. Fill in your actual Dreamlo keys and generate new custom keys for your VPS:
+1. Go to the `server/` directory and create an `.env` file based on `.env.example` (or create one). Provide your Dreamlo keys and the desired port for the Python proxy:
    ```text
    VPS_PORT=8000
-   VPS_PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
-   VPS_PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
    DREAMLO_PRIVATE_KEY=YOUR_DREAMLO_PRIVATE_KEY
    DREAMLO_PUBLIC_KEY=YOUR_DREAMLO_PUBLIC_KEY
    ```
@@ -105,21 +103,18 @@ Direct connection to Dreamlo is no longer possible. Due to the implementation of
    ```
 
 #### 2. Client Setup (Game)
-1. Create a `net` file in the root directory (you can use `net.example` as a template) and add the **VPS keys** you defined earlier:
+1. Create a `net` file in the root directory (you can use `net.example` as a template) and add the **VPS hostname/IP** and **port** you defined earlier:
    ```text
    VPS_HOST=YOUR_VPS_IP
    VPS_PORT=YOUR_VPS_PORT
-   VPS_PRIVATE_KEY=YOUR_CUSTOM_PRIVATE_KEY
-   VPS_PUBLIC_KEY=YOUR_CUSTOM_PUBLIC_KEY
    ```
-   > **Note:** The VPS private and public keys can contain lowercase, uppercase, numbers, and the characters `.`, `_`, and `-`.
 2. Compile:
    ```bash
    make
    ./minisnake online
    ```
 
-> Keys are XOR-obfuscated at compile time so they don't appear in plain text in the binary.
+> **Architecture Note:** The client utilizes POSIX threads (`pthread`) to implement a "fire-and-forget" static resource pool for non-blocking asynchronous HTTP requests. It securely links against the server-side validator without stalling the game loop.
 
 ## Makefile targets
 
