@@ -5,12 +5,13 @@ CC      = cc
 # -Wall -Wextra -Werror : strict warnings, treated as errors
 # -O3                   : aggressive compiler optimizations
 # -flto                 : link-time optimization (enables cross-file optimization)
-CFLAGS  = -Wall -Wextra -Werror -O3 -flto
+# -pthread              : Enables POSIX threads for non-blocking HTTP requests
+CFLAGS  = -Wall -Wextra -Werror -O3 -flto -pthread
 
 # LDFLAGS: Instructions for the final linking stage
 # -s                    : strip debug symbols (hardens against reverse engineering)
-# -flto                 : must be repeated here to finalize cross-file optimizations
-LDFLAGS = -flto -s
+# -pthread              : Must be included in linking stage as well
+LDFLAGS = -flto -s -pthread
 
 SRCS    = minisnake_game.c minisnake_sys.c minisnake_net.c
 OBJS    = $(SRCS:.c=.o)

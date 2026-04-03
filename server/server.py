@@ -10,59 +10,86 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Configuration (VPS_PRIVATE_KEY and VPS_PUBLIC_KEY are no longer needed!)
 VPS_PORT = int(os.environ.get("VPS_PORT", 8000))
 DREAMLO_PRIVATE_KEY = os.environ.get("DREAMLO_PRIVATE_KEY")
 DREAMLO_PUBLIC_KEY  = os.environ.get("DREAMLO_PUBLIC_KEY")
 
-# Dictionary to store active game sessions: { "token" : start_timestamp }
+# Dictionary to store active game sessions
+# Format: { "token": {"score": int, "last_ping": float, "cheated": bool} }
 active_sessions = {}
 
 @app.route('/start', methods=['GET'])
 def start_session():
     """
-    Called by the C client at the very beginning of the game.
-    Generates a unique token and records the exact start time.
+    Called by the C client when the game starts.
+    Generates a token and initializes the server-side score.
     """
-    # Generate a unique 32-character hex token (16 bytes)
     token = secrets.token_hex(16)
-    active_sessions[token] = time.time()
+    active_sessions[token] = {
+        "score": 0,
+        "last_ping": time.time(),
+        "cheated": False
+    }
     return token, 200
 
-@app.route('/submit/<token>/<name>/<int:score>', methods=['GET'])
-def submit_score(token, name, score):
+@app.route('/eat/<token>', methods=['GET'])
+def eat_fruit(token):
     """
-    Called by the C client at the end of the game (Game Over).
-    Validates the token, the elapsed time, and the physical game limits.
+    Called asynchronously by the C client each time the snake eats a fruit.
+    The server calculates the score and verifies physical time constraints.
     """
-    # 1. Does the token exist in the active sessions?
-    if token not in active_sessions:
-        print(f"REJECTED: Invalid or expired token for player '{name}'")
+    if token not in active_sessions or active_sessions[token]["cheated"]:
         return "Unauthorized", 403
-
-    # 2. Consume the token (Anti-Replay)
-    # .pop() retrieves the start time AND deletes the token instantly
-    start_time = active_sessions.pop(token)
-    duration = time.time() - start_time
     
-    # 3. The TRUE Anti-Cheat: Physical consistency (Score vs Time)
-    # In your game, a fruit gives 10 points. Even playing extremely fast,
-    # it's impossible to score 100 points per second.
-    # If the player scored faster than physically possible, it's a hack.
-    if score > 0 and duration < (score / 100.0):
-        print(f"CHEAT DETECTED: {score} points in {duration:.2f}s for '{name}' = Impossible")
-        return "Speedhack Detected", 400
+    now = time.time()
+    session = active_sessions[token]
 
-    # 4. Absolute grid limit
-    # 25x20 grid = 500 cells. 500 cells * 10 points = 5000 theoretical max score.
-    if score > 5000 or score < 0:
-        print(f"REJECTED: Aberrant score of {score} for player '{name}'")
+    # Anti-Spam: It's physically impossible to eat 2 fruits in under 0.05s
+    if now - session["last_ping"] < 0.05:
+        session["cheated"] = True
+        print(f"SPEEDHACK DETECTED: Invalid ping interval for session {token}")
+        return "Speedhack detected", 400
+
+    # The server increments the score securely
+    session["score"] += 10
+    session["last_ping"] = now
+    return "Yum", 200
+
+@app.route('/cheat/<token>', methods=['GET'])
+def flag_cheat(token):
+    """
+    Called asynchronously if the C client's local anti-cheat triggers.
+    """
+    if token in active_sessions:
+        active_sessions[token]["cheated"] = True
+        print(f"CHEAT FLAG RECEIVED: Local manipulation detected for session {token}")
+    return "Flagged", 200
+
+@app.route('/submit/<token>/<name>', methods=['GET'])
+def submit_score(token, name):
+    """
+    Called at Game Over. The client NO LONGER sends the score.
+    The server uses its own securely calculated score.
+    """
+    if token not in active_sessions:
+        return "Unauthorized", 403
+    
+    # Retrieve and destroy the session (prevents replay attacks)
+    session = active_sessions.pop(token)
+    
+    if session["cheated"]:
+        print(f"REJECTED: Player '{name}' was flagged for cheating.")
+        return "Cheater", 403
+
+    # Absolute grid limit check (500 cells * 10 points = 5000)
+    final_score = session["score"]
+    if final_score > 5000:
+        print(f"REJECTED: Impossible calculated score {final_score} for '{name}'")
         return "Invalid Score", 400
 
-    print(f"Valid Session: {name} scored {score} points (Duration: {duration:.0f}s). Forwarding to Dreamlo...")
+    print(f"VALID SESSION: '{name}' scored {final_score}. Forwarding to Dreamlo...")
+    dreamlo_url = f"http://dreamlo.com/lb/{DREAMLO_PRIVATE_KEY}/add/{name}/{final_score}"
     
-    # Forward the validated score to Dreamlo's hidden API
-    dreamlo_url = f"http://dreamlo.com/lb/{DREAMLO_PRIVATE_KEY}/add/{name}/{score}"
     try:
         requests.get(dreamlo_url, timeout=5)
         return "OK", 200
@@ -72,17 +99,12 @@ def submit_score(token, name, score):
 
 @app.route('/scores/<int:limit>', methods=['GET'])
 def get_scores(limit):
-    """
-    Public endpoint to read the leaderboard.
-    VPS_PUBLIC_KEY is no longer needed, as this leaderboard is public anyway.
-    """
+    """ Public endpoint to read the leaderboard. """
     try:
-        # We still use the DREAMLO public key on the server side to read
         response = requests.get(f"http://dreamlo.com/lb/{DREAMLO_PUBLIC_KEY}/pipe/{limit}", timeout=5)
         return response.text
     except Exception as e:
         return "Backend Error", 500
 
 if __name__ == '__main__':
-    # Start the server on all network interfaces at the configured port
     app.run(host='0.0.0.0', port=VPS_PORT)

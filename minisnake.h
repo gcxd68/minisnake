@@ -6,6 +6,7 @@
 # include <fcntl.h>
 # include <netdb.h>
 # include <netinet/in.h>
+# include <pthread.h>
 # include <signal.h>
 # include <stdarg.h>
 # include <stdio.h>
@@ -38,45 +39,7 @@
 # define BUF_GEOM			32
 # define BUF_CMD			512
 
-# if MIN_WIDTH < 2
-#  error "MIN_WIDTH must be >= 2"
-# endif
-# if MIN_HEIGHT < 2
-#  error "MIN_HEIGHT must be >= 2"
-# endif
-# if MAX_WIDTH < MIN_WIDTH
-#  error "MAX_WIDTH must be >= MIN_WIDTH"
-# endif
-# if MAX_HEIGHT < MIN_HEIGHT
-#  error "MAX_HEIGHT must be >= MIN_HEIGHT"
-# endif
-# if INITIAL_DELAY < 0
-#  error "INITIAL_DELAY must be >= 0"
-# endif
-# if INPUT_Q_SIZE <= 0
-#  error "INPUT_Q_SIZE must be > 0"
-# endif
-# if POINTS_PER_FRUIT <= 0
-#  error "POINTS_PER_FRUIT must be > 0"
-# endif
-# if CHEAT_TIMEOUT < 0
-#  error "CHEAT_TIMEOUT must be >= 0"
-# endif
-# if MIN_WIDTH * MIN_HEIGHT > 10000
-#  error "Minimum board size exceeds maximum snake capacity (10000)"
-# endif
-# if MAX_WIDTH * MAX_HEIGHT > 10000
-#  error "Maximum board size exceeds maximum snake capacity (10000)"
-# endif
-# if DEFAULT_WIDTH < MIN_WIDTH || DEFAULT_WIDTH > MAX_WIDTH
-#  error "DEFAULT_WIDTH must be between MIN_WIDTH and MAX_WIDTH"
-# endif
-# if DEFAULT_HEIGHT < MIN_HEIGHT || DEFAULT_HEIGHT > MAX_HEIGHT
-#  error "DEFAULT_HEIGHT must be between MIN_HEIGHT and MAX_HEIGHT"
-# endif
-# if BUF_GEOM <= 0 || BUF_CMD <= 0
-#  error "Buffer sizes must be strictly positive"
-# endif
+/* Security definitions removed (no more XOR macros) */
 
 # define TERM_TITLE			"minisnake"
 # define ENV_VAR			"MINISNAKE_LAUNCHED"
@@ -115,8 +78,6 @@
 # define ARR_SIZE(x)		(sizeof(x) / sizeof(x[0]))
 # define MIN(a, b)			(a < b ? a : b)
 # define MAX(a, b)			(a > b ? a : b)
-# define REAL_SCORE			(d->score ^ d->score_mask)
-# define XOR_SCORE(s)		((s) ^ d->score_mask)
 
 typedef enum e_launch_result {
 	LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4,
@@ -129,11 +90,12 @@ typedef enum e_dir
 
 typedef struct s_data
 {
-	int		width, height, fruit_x, fruit_y, size, grow, score, score_mask, game_over, online, cheat;
+    /* 'score_mask' removed, score is now stored plainly */
+	int		width, height, fruit_x, fruit_y, size, grow, score, game_over, online, cheat;
 	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	float	delay;
 	t_dir	dir[2];
-	char	token[33];
+	char	token[33]; /* 32 hex chars + null terminator */
 }	t_data;
 
 void		enable_raw_mode(void);
@@ -141,7 +103,11 @@ void		disable_raw_mode(void);
 void		game_loop(t_data *d);
 void		spawn_fruit(t_data *d);
 const char	*fruit_color(void);
+
+/* Network functions */
 void		handle_leaderboard(t_data *d);
 void		vps_start_session(t_data *d);
+void        vps_eat(t_data *d);
+void        vps_cheat(t_data *d);
 
 #endif
