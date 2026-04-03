@@ -95,12 +95,12 @@ static int server_connect(void)
 	struct hostent		*he;
 	int					fd;
 
-	if (!(he = gethostbyname(VPS_HOST)))
+	if (!(he = gethostbyname(HOST)))
 		return (-1);
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		return (-1);
 	addr.sin_family = AF_INET;
-	addr.sin_port = htons(atoi(VPS_PORT)); 
+	addr.sin_port = htons(atoi(PORT)); 
 	addr.sin_addr = *(struct in_addr *)he->h_addr;
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 		return (close(fd), -1);
@@ -115,7 +115,7 @@ static int http_get(const char *path, char *out, int out_size)
 
 	if ((fd = server_connect()) < 0)
 		return (-1);
-	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, VPS_HOST);
+	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, HOST);
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
 	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
@@ -229,7 +229,6 @@ void net_fruit_eaten(t_data *d)
 /* Asynchronous Ping: Called if the local anticheat detects tampering */
 void net_notify_cheat(t_data *d)
 {
-	d->cheat = 1;
 	if (!d->online || !d->token[0]) return;
 	char path[BUF_PATH];
 	snprintf(path, sizeof(path), "/cheat/%s", d->token);

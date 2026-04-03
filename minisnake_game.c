@@ -35,6 +35,7 @@ static void anticheat(t_data *d)
 		|| d->score > (d->width * d->height * POINTS_PER_FRUIT)
 		|| now - last_frame > CHEAT_TIMEOUT)
 	{
+		d->cheat = 1;
 		net_notify_cheat(d); /* Alert the server immediately in the background */
 		return;
 	}
@@ -53,6 +54,7 @@ static void anticheat(t_data *d)
 		{
 			if (!strncmp(buf, "TracerPid:", 10) && atoi(buf + 10) != 0)
 			{
+				d->cheat = 1;
 				net_notify_cheat(d); /* Alert the server */
 				break;
 			}

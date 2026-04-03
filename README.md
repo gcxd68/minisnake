@@ -89,13 +89,11 @@ make
 Direct connection to Dreamlo from the client is no longer possible for security reasons. Minisnake now features an advanced **Server-Side Scoring Architecture**. The C client never sends its score directly; instead, it communicates with a proxy server via asynchronous HTTP pings every time a fruit is eaten. The server calculates the score securely while enforcing physical limits and timing constraints to prevent hacking.
 
 #### 1. Server Setup (VPS)
-1. Go to the `server/` directory and create an `.env` file based on `.env.example` (or create one). Provide your Dreamlo keys and the desired port for the Python proxy:
+1. Go to the `server/` directory and create an `.env` file based on `.env.example` (or create one). Provide the desired port for the Python proxy:
    ```text
-   VPS_PORT=8000
-   DREAMLO_PRIVATE_KEY=YOUR_DREAMLO_PRIVATE_KEY
-   DREAMLO_PUBLIC_KEY=YOUR_DREAMLO_PUBLIC_KEY
+   PORT=YOUR_SERVER_PORT
    ```
-   > **Note:** The deployment script binds to port `8000` by default, so ensure `VPS_PORT` matches or is configured accordingly.
+   > **Note:** The deployment script binds to port `8000` by default, so ensure `PORT` matches or is configured accordingly.
 2. Run the automated deployment script. It will detect your package manager, install dependencies, set up a Python virtual environment, configure the firewall (if using UFW), and start the server in the background using Gunicorn:
    ```bash
    chmod +x deploy.sh
@@ -105,8 +103,8 @@ Direct connection to Dreamlo from the client is no longer possible for security 
 #### 2. Client Setup (Game)
 1. Create a `net` file in the root directory (you can use `net.example` as a template) and add the **VPS hostname/IP** and **port** you defined earlier:
    ```text
-   VPS_HOST=YOUR_VPS_IP
-   VPS_PORT=YOUR_VPS_PORT
+   HOST=YOUR_SERVER_IP
+   PORT=YOUR_SERVER_PORT
    ```
 2. Compile:
    ```bash

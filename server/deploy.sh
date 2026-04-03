@@ -18,6 +18,10 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+# Extract PORT from .env (defaults to 8000 if empty)
+PORT=$(grep "^PORT=" .env | cut -d '=' -f2 | xargs)
+PORT=${PORT:-8000}
+
 # 3. Universal Package Manager & Cache Refresh
 echo "Step 1: Detecting package manager..."
 if command -v apt >/dev/null; then
@@ -65,13 +69,13 @@ fi
 # 7. Safe Python Installation
 echo "Step 5: Installing Flask & Gunicorn..."
 venv/bin/python -m pip install --upgrade pip || (sleep 2 && venv/bin/python -m pip install --upgrade pip)
-venv/bin/python -m pip install flask requests python-dotenv gunicorn
+venv/bin/python -m pip install flask python-dotenv gunicorn
 
 # 8. Firewall (UFW Only)
 echo "Step 6: Configuring Firewall..."
 if command -v ufw >/dev/null; then
     $SUDO ufw allow ssh
-    $SUDO ufw allow 8000/tcp
+    $SUDO ufw allow $PORT/tcp
     $SUDO ufw --force enable || true
 fi
 
@@ -87,23 +91,23 @@ fi
 MAX_RETRIES=5
 RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if ! (ss -tuln 2>/dev/null | grep -q ":8000 ") && ! (netstat -tuln 2>/dev/null | grep -q ":8000 "); then
+    if ! (ss -tuln 2>/dev/null | grep -q ":$PORT ") && ! (netstat -tuln 2>/dev/null | grep -q ":$PORT "); then
         break
     fi
-    echo "⏳ Waiting for port 8000 to be free... ($((RETRY_COUNT+1))/$MAX_RETRIES)"
+    echo "⏳ Waiting for port $PORT to be free... ($((RETRY_COUNT+1))/$MAX_RETRIES)"
     sleep 1
     RETRY_COUNT=$((RETRY_COUNT+1))
 done
 
 # 10. Launch with nohup
 echo "Step 8: Launching Gunicorn..."
-nohup venv/bin/gunicorn --workers 1 --threads 2 --bind 0.0.0.0:8000 server:app > gunicorn.log 2>&1 &
+nohup venv/bin/gunicorn --workers 1 --threads 2 --bind 0.0.0.0:$PORT server:app > gunicorn.log 2>&1 &
 
 # 11. Deep Verification (Wait for Bind)
 sleep 2
 SUCCESS=0
 if pgrep -f "gunicorn.*server:app" >/dev/null; then
-    if (ss -tuln 2>/dev/null | grep -q ":8000 ") || (netstat -tuln 2>/dev/null | grep -q ":8000 "); then
+    if (ss -tuln 2>/dev/null | grep -q ":$PORT ") || (netstat -tuln 2>/dev/null | grep -q ":$PORT "); then
         SUCCESS=1
     fi
 fi
@@ -111,11 +115,11 @@ fi
 if [ $SUCCESS -eq 1 ]; then
     SERVER_IP=$(hostname -I | awk '{print $1}' || echo "localhost")
     echo "--- ✅ Deployment Complete! ---"
-    echo "🌐 Server running on: http://$SERVER_IP:8000"
+    echo "🌐 Server running on: http://$SERVER_IP:$PORT"
     echo "📄 Logs: tail -f gunicorn.log"
     echo "🛑 To stop the server: pkill -f server:app"
 else
-    echo "❌ Deployment Failed! Gunicorn process exists but port 8000 is not listening."
+    echo "❌ Deployment Failed! Gunicorn process exists but port $PORT is not listening."
     echo "Check gunicorn.log for bind errors."
     exit 1
 fi
