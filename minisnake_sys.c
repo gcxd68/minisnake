@@ -182,13 +182,12 @@ static void	setup_io(void) {
 }
 
 static void	init_game(t_data *d) {
-	d->size = DEF_INITIAL_SIZE;
-	d->grow = 0;
-	d->score = 0;
-	d->game_over = 0;
-	d->cheat = 0;
-	d->dir[0] = STOP;
-	d->dir[1] = STOP;
+	static t_data	save_state;
+
+	if (!save_state.size)
+		save_state = *d;
+	else
+		*d = save_state;
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
@@ -255,8 +254,8 @@ int	main(int argc, char **argv) {
 	if ((ret = launch_terminal(argc, argv, &d)) != LAUNCH_LOCAL) return (ret);
 
 	do {
-		start_session(&d);
 		initialize(&d);
+		start_session(&d);
 		game_loop(&d);
 		finalize(&d);
 	} while (ask_confirm("Play again? (y/n): "));
