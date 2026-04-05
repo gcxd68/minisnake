@@ -257,11 +257,10 @@ void notify_server(t_data *d, const char *action) {
 static int end_session(t_data *d, const char *name) {
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
-	memset(resp, 0, sizeof(resp)); // DEBUG TEST
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
 	if (!d->token[0]) return (-1);
-	
+
 	/* We only send the Token and the Name. The VPS already knows the score. */
 	snprintf(path, sizeof(path), "/submit/%s/%s", d->token, name);
 	return (http_get(path, resp, sizeof(resp)));
@@ -277,9 +276,9 @@ static int show_leaderboard(t_data *d) {
 	snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
-	printf(ERASE_LINE CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
+	printf(CLEAR_SCREEN CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
 	body = skip_headers(resp);
-	
+
 	line = strtok_r(body, "\n", &saveptr);
 	while (line && rank <= LB_MAX_SCORES) {
 		char entry[BUF_ENTRY], *p_name, *p_score, *p_save;
@@ -308,11 +307,15 @@ void handle_leaderboard(t_data *d) {
 	if (!d->online) return;
 
 	char	name[MAX_NAME_LEN + 1];
+	int		ret = 0;
 
-	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
-	fflush(stdout);
-	if (!read_name(name, sizeof(name))) return ;
-	if (end_session(d, name) < 0 || show_leaderboard(d) < 0)
+	if (d->score) {
+		printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
+		fflush(stdout);
+		if (!read_name(name, sizeof(name))) return ;
+		ret = end_session(d, name);
+	}
+	if (ret || show_leaderboard(d) < 0)
 		printf(CLEAR_SCREEN "Network error");
 }
 

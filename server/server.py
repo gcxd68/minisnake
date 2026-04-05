@@ -123,11 +123,15 @@ def submit_score(token, name):
     session = active_sessions.pop(token)
     
     if session["cheated"]:
-        print(f"REJECTED: Player '{name}' was flagged for cheating.")
-        return "Cheater", 403
+        print(f"BANNED: Player '{name}' flagged for cheating. Forcing score to 0.")
+        final_score = 0
+    else:
+        final_score = session["score"]
+        if final_score == 0:
+            print(f"REJECTED: Score too low ({final_score}) for '{name}'")
+            return "Score too low", 400
 
-    final_score = session["score"]
-    if final_score > MAX_SCORE:
+    if final_score < 0 or final_score > MAX_SCORE:
         print(f"REJECTED: Impossible calculated score {final_score} for '{name}'")
         return "Invalid Score", 400
 
