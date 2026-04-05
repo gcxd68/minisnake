@@ -4,7 +4,8 @@
 
 /* STUBS: network functions are disabled in offline builds */
 void    handle_leaderboard(t_data *d) { (void)d; }
-void    start_session(t_data *d) { (void)d; }
+void	server_sync_rules(t_data *d) { (void)d; }
+void	start_session(t_data *d) { (void)d; }
 void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
 
 #else
@@ -192,44 +193,53 @@ static char *skip_headers(char *response) {
 	return (response);
 }
 
-/* Initialization: Fetch token AND game rules from the server */
-void start_session(t_data *d) {
+/* Initialization 1: Fetch game dimensions and rules from the server dynamically */
+void server_sync_rules(t_data *d) {
 	if (!d->online) return;
 
 	char	resp[BUF_RESP_SUBMIT];
-	char	*saveptr, *token_str, *body;
+	char	*saveptr, *body;
+	char	*fields[NUM_RULES];
 
-	/* Logic: Always start by invalidating any existing session */
-	d->token[0] = '\0';
-
-	if (http_get("/start", resp, sizeof(resp)) != 0)
+	if (http_get("/rules", resp, sizeof(resp)) != 0)
 		return;
 
 	body = skip_headers(resp);
-	token_str = strtok_r(body, "|", &saveptr);
-	if (!token_str) return;
+	fields[0] = strtok_r(body, "|", &saveptr);
+	if (!fields[0]) return;
 
-	/* 1. Extract Token */
-	strncpy(d->token, token_str, BUF_TOKEN - 1);
-	d->token[BUF_TOKEN - 1] = '\0';
-
-	/* 2. Extract Fields */
-	char *fields[NUM_RULES];
-	for (int i = 0; i < NUM_RULES; i++) {
+	for (int i = 1; i < NUM_RULES; i++) {
 		fields[i] = strtok_r(NULL, "|", &saveptr);
-		if (!fields[i]) {
-			d->token[0] = '\0';
-			return;
-		}
+		if (!fields[i]) return;
 	}
 
-	/* 3. Safely convert and apply server rules to game data */
+	/* Safely convert and apply server rules to game data */
 	d->width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0])));
 	d->height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1])));
 	d->delay = atof(fields[2]);
 	d->speedup_factor = atof(fields[3]);
 	d->points_per_fruit = atoi(fields[4]);
 	d->cheat_timeout = atoi(fields[5]);
+}
+
+/* Initialization 2: Fetch a specific session token for the current game instance */
+void start_session(t_data *d) {
+	if (!d->online) return;
+
+	char resp[BUF_RESP_SUBMIT];
+	char *body;
+
+	/* Invalidate any existing session */
+	d->token[0] = '\0';
+
+	if (http_get("/token", resp, sizeof(resp)) != 0)
+		return;
+
+	body = skip_headers(resp);
+	if (body && *body) {
+		strncpy(d->token, body, BUF_TOKEN - 1);
+		d->token[BUF_TOKEN - 1] = '\0';
+	}
 }
 
 /* Asynchronous Ping: Spawns a background request to notify the server of an event */

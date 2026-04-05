@@ -139,13 +139,11 @@
 
 enum { LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4 };
 
-typedef enum e_dir
-{
+typedef enum e_dir {
 	STOP, LEFT, RIGHT, UP, DOWN
 }	t_dir;
 
-typedef struct s_data
-{
+typedef struct s_data {
 	int		size, points_per_fruit, cheat_timeout;
 	float	delay, speedup_factor;
 	int		width, height, fruit_x, fruit_y, grow, score, game_over, online, cheat;
@@ -162,6 +160,7 @@ const char	*fruit_color(void);
 
 /* Network functions */
 void		handle_leaderboard(t_data *d);
+void		server_sync_rules(t_data *d);
 void		start_session(t_data *d);
 void		notify_server(t_data *d, const char *action);
 

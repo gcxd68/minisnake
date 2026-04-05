@@ -57,8 +57,12 @@ def get_rules():
     """
     return f"{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}", 200
 
-@app.route('/start', methods=['GET'])
-def start_session():
+@app.route('/token', methods=['GET'])
+def get_token():
+    """ 
+    Spawns a new session and returns only the token. 
+    Rules are fetched separately via /rules.
+    """
     cleanup_stale_sessions()
     token = secrets.token_hex(16)
     active_sessions[token] = {
@@ -66,9 +70,7 @@ def start_session():
         "last_ping": time.time(),
         "cheated": False
     }
-    # Send game rules to the client
-    response_data = f"{token}|{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}"
-    return response_data, 200
+    return token, 200
 
 @app.route('/eat/<token>', methods=['GET'])
 def eat_fruit(token):

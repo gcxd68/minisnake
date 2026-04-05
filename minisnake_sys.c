@@ -24,8 +24,9 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 		d->height = DEF_HEIGHT;
 
 #ifdef ONLINE_BUILD
-		/* If network is compiled in, activate online features */
+		/* Override local dimensions with server competitive rules before spawning the terminal GUI */
 		d->online = 1;
+		server_sync_rules(d);
 #else
 
 		/* If network is NOT compiled in, but the user explicitly typed "online", warn them */
