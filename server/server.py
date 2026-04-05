@@ -24,6 +24,10 @@ INITIAL_SIZE = 1
 MIN_PING_INTERVAL = 0.05
 MAX_SCORE = GAME_WIDTH * GAME_HEIGHT * POINTS_PER_FRUIT
 
+# Pseudo-random generator synchronized with the C client (LCG algorithm)
+def lcg_rand(seed):
+    return (seed * 1103515245 + 12345) & 0x7fffffff
+
 # --- SQLite Database Initialization ---
 def init_db():
     """ Creates the local database file and table if they don't exist. """
@@ -38,7 +42,7 @@ init_db()
 # --------------------------------------
 
 # Dictionary to store active game sessions
-# Format: { "token": {"score": int, "last_ping": float, "cheated": bool} }
+# Format: { "token": {"score": int, "fruits_eaten": int, "last_ping": float, "cheated": bool, "seed": int, "last_x": int, "last_y": int, "last_steps": int} }
 active_sessions = {}
 
 def cleanup_stale_sessions():
@@ -61,38 +65,94 @@ def get_rules():
 @app.route('/token', methods=['GET'])
 def get_token():
     """ 
-    Spawns a new session and returns only the token. 
+    Spawns a new session and returns the token AND the synchronized seed. 
     Rules are fetched separately via /rules.
     """
     cleanup_stale_sessions()
     token = secrets.token_hex(16)
+    seed = secrets.randbits(31) # 31-bit seed for C compatibility
+    
     active_sessions[token] = {
         "score": 0,
+        "fruits_eaten": 0,
         "last_ping": time.time(),
-        "cheated": False
+        "cheated": False,
+        "seed": seed,
+        "last_x": GAME_WIDTH // 2, # Default starting X position
+        "last_y": GAME_HEIGHT // 2, # Default starting Y position
+        "last_steps": 0            # Track global steps across the whole game
     }
-    return token, 200
+    return f"{token}|{seed}", 200
 
-@app.route('/eat/<token>', methods=['GET'])
-def eat_fruit(token):
+@app.route('/eat/<token>/<int:steps>/<int:fx>/<int:fy>', methods=['GET'])
+def eat_fruit(token, steps, fx, fy):
     if token not in active_sessions or active_sessions[token]["cheated"]:
         return "Unauthorized", 403
     
     now = time.time()
     session = active_sessions[token]
 
-    # Dynamically calculate the theoretical minimum delay based on the current score
-    fruits_eaten = session["score"] // POINTS_PER_FRUIT
-    # Current delay in seconds (INITIAL_DELAY is in microseconds)
-    current_delay_sec = (INITIAL_DELAY / 1000000.0) * (SPEEDUP_FACTOR ** fruits_eaten)
-    # 20% margin to compensate for network latency and jitter
-    min_ping_interval = current_delay_sec * 0.8
+    # Calculate steps taken specifically for THIS fruit
+    delta_steps = steps - session["last_steps"]
+    if delta_steps <= 0:
+        session["cheated"] = True
+        print(f"INVALID STEPS LOGIC: Total steps didn't increase for session {token}")
+        return "Invalid steps logic", 400
 
-    # Dynamic anti-spam check
+    # --- 1. FRUIT VALIDATION (Window of candidates) ---
+    # The server checks if (fx, fy) is one of the valid upcoming fruits
+    valid_fruit = False
+    temp_seed = session["seed"]
+    
+    # Allow up to 50 re-rolls to account for snake body collisions
+    for _ in range(50):
+        temp_seed = lcg_rand(temp_seed)
+        cand_x = temp_seed % GAME_WIDTH
+        temp_seed = lcg_rand(temp_seed)
+        cand_y = temp_seed % GAME_HEIGHT
+        
+        if cand_x == fx and cand_y == fy:
+            valid_fruit = True
+            session["seed"] = temp_seed # Synchronize the seed at this exact point
+            break
+
+    if not valid_fruit:
+        session["cheated"] = True
+        print(f"INVALID FRUIT DETECTED: ({fx}, {fy}) for session {token}")
+        return "Invalid fruit coordinates", 400
+
+    # --- 2. MANHATTAN DISTANCE VALIDATION (Anti-Teleportation) ---
+    # Calculates the absolute shortest path. You cannot take fewer steps than this distance.
+    manhattan = abs(fx - session["last_x"]) + abs(fy - session["last_y"])
+    if delta_steps < manhattan:
+        session["cheated"] = True
+        print(f"SPEEDHACK/TELEPORT: {delta_steps} steps for {manhattan} dist in session {token}")
+        return "Impossible move", 400
+
+    # --- 3. DYNAMIC ANTI-SPAM (Time-based speedhack check) ---
+    # We must use fruits_eaten here because score decreases over time
+    current_delay_sec = (INITIAL_DELAY / 1000000.0) * (SPEEDUP_FACTOR ** session["fruits_eaten"])
+    
+    # Theoretical minimum time for delta_steps, with 20% network margin
+    min_ping_interval = current_delay_sec * delta_steps * 0.8
+    
     if now - session["last_ping"] < min_ping_interval:
         session["cheated"] = True
-        print(f"SPEEDHACK DETECTED: Invalid ping interval for session {token}")
+        print(f"SPEEDHACK DETECTED: Ping interval too short for {delta_steps} steps.")
         return "Speedhack detected", 400
+
+    # --- 4. EXACT SCORE DEGRADATION MATCHING THE C CLIENT ---
+    # The server loops over the exact step interval to apply the 2-point penalty every 10 steps
+    for step in range(session["last_steps"] + 1, steps + 1):
+        if step % 10 == 0:
+            if session["score"] >= 2:
+                session["score"] -= 2
+            else:
+                session["score"] = 0 # Hard floor at 0
+
+    # Add the fruit value AFTER applying the walking penalty
+    session["score"] += POINTS_PER_FRUIT
+    session["fruits_eaten"] += 1
 
     # Dynamic physical limit check
     if session["score"] >= MAX_SCORE:
@@ -100,8 +160,11 @@ def eat_fruit(token):
         print(f"MAX SCORE EXCEEDED: Session {token} flagged.")
         return "Score limit exceeded", 400
 
-    session["score"] += POINTS_PER_FRUIT
+    # Update session state for the next fruit
     session["last_ping"] = now
+    session["last_x"] = fx
+    session["last_y"] = fy
+    session["last_steps"] = steps 
     return "Yum", 200
 
 @app.route('/cheat/<token>', methods=['GET'])
@@ -111,8 +174,8 @@ def flag_cheat(token):
         print(f"CHEAT FLAG RECEIVED: Local manipulation detected for session {token}")
     return "Flagged", 200
 
-@app.route('/submit/<token>/<name>', methods=['GET'])
-def submit_score(token, name):
+@app.route('/submit/<token>/<name>/<int:steps>', methods=['GET'])
+def submit_score(token, name, steps):
     if token not in active_sessions:
         return "Unauthorized", 403
     
@@ -126,12 +189,20 @@ def submit_score(token, name):
         print(f"BANNED: Player '{name}' flagged for cheating. Forcing score to 0.")
         final_score = 0
     else:
+        # Apply degradation penalty for the final steps taken before dying
+        for step in range(session["last_steps"] + 1, steps + 1):
+            if step % 10 == 0:
+                if session["score"] >= 2:
+                    session["score"] -= 2
+                else:
+                    session["score"] = 0
+                    
         final_score = session["score"]
         if final_score == 0:
             print(f"REJECTED: Score too low ({final_score}) for '{name}'")
             return "Score too low", 400
 
-    if final_score < 0 or final_score > MAX_SCORE:
+    if final_score > MAX_SCORE:
         print(f"REJECTED: Impossible calculated score {final_score} for '{name}'")
         return "Invalid Score", 400
 

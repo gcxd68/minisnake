@@ -142,12 +142,13 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int		size, grow, points_per_fruit, cheat_timeout;
-	float	delay, speedup_factor;
-	int		width, height, fruit_x, fruit_y, score, game_over, online, cheat;
-	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
-	t_dir	dir[2];
-	char	token[33];
+	int			size, grow, points_per_fruit, cheat_timeout;
+	float		delay, speedup_factor;
+	int			width, height, fruit_x, fruit_y, score, game_over, online, cheat, steps;
+	uint32_t	seed;
+	int			x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
+	t_dir		dir[2];
+	char		token[33];
 }	t_data;
 
 void		enable_raw_mode(void);

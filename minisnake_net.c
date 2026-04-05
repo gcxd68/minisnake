@@ -223,23 +223,31 @@ void server_sync_rules(t_data *d) {
 	d->grow = atoi(fields[6]) - 1;
 }
 
-/* Initialization 2: Fetch a specific session token for the current game instance */
+/* Initialization 2: Fetch a specific session token AND seed for the current game instance */
 void start_session(t_data *d) {
 	if (!d->online) return;
 
-	char resp[BUF_RESP_SUBMIT];
-	char *body;
+	char    resp[BUF_RESP_SUBMIT];
+	char    *body, *saveptr, *token_str, *seed_str;
 
 	/* Invalidate any existing session */
 	d->token[0] = '\0';
-
 	if (http_get("/token", resp, sizeof(resp)) != 0)
 		return;
-
 	body = skip_headers(resp);
-	if (body && *body) {
-		strncpy(d->token, body, BUF_TOKEN - 1);
+	
+	/* 1. Extract the Token */
+	token_str = strtok_r(body, "|", &saveptr);
+	if (token_str) {
+		strncpy(d->token, token_str, BUF_TOKEN - 1);
 		d->token[BUF_TOKEN - 1] = '\0';
+		
+		/* 2. Extract the Seed */
+		seed_str = strtok_r(NULL, "|", &saveptr);
+		if (seed_str) {
+			/* Convert the string seed to unsigned 32-bit integer */
+			d->seed = (uint32_t)strtoul(seed_str, NULL, 10);
+		}
 	}
 }
 
@@ -247,13 +255,18 @@ void start_session(t_data *d) {
 void notify_server(t_data *d, const char *action) {
 	if (!IS_SESSION_ACTIVE(d)) return;
 
-	char	path[BUF_PATH];
+	char path[BUF_PATH];
 
-	snprintf(path, sizeof(path), "/%s/%s", action, d->token);
+	/* If it's an "eat" action, build the URL with anti-cheat parameters */
+	if (strcmp(action, "eat") == 0)
+		snprintf(path, sizeof(path), "/eat/%s/%d/%d/%d", 
+				 d->token, d->steps, d->fruit_x, d->fruit_y); 
+	/* Otherwise (for "cheat" for example), keep the basic format */
+	else
+		snprintf(path, sizeof(path), "/%s/%s", action, d->token);
 	fire_and_forget(path);
 }
 
-/* Submit the final score (The client no longer provides the score value) */
 static int end_session(t_data *d, const char *name) {
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
@@ -262,7 +275,7 @@ static int end_session(t_data *d, const char *name) {
 	if (!d->token[0]) return (-1);
 
 	/* We only send the Token and the Name. The VPS already knows the score. */
-	snprintf(path, sizeof(path), "/submit/%s/%s", d->token, name);
+	snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
 	return (http_get(path, resp, sizeof(resp)));
 }
 

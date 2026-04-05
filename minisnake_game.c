@@ -20,7 +20,6 @@ static long get_ms(void) {
 
 static void anticheat(t_data *d) {
 	static int	counter = 0;
-	static int	last_score = 0;
 	static long	last_frame = 0;
 	const long	now = get_ms();
 
@@ -28,22 +27,19 @@ static void anticheat(t_data *d) {
 
 	/* Reset local static state at the start of a new game */
 	if (!d->dir[0]) {
-		last_score = 0;
 		last_frame = now;
 		counter = 0;
 		return;
 	}
 
 	/* Validate score progression dynamically */
-	if ((d->score != last_score && d->score != last_score + d->points_per_fruit)
-		|| (d->points_per_fruit && d->score % d->points_per_fruit)
-		|| d->score > (d->width * d->height * d->points_per_fruit)
+	if (d->score < 0
+		|| d->score > d->width * d->height * d->points_per_fruit - d->steps / 10
 		|| now - last_frame > d->cheat_timeout) {
 		d->cheat = 1;
 		notify_server(d, "cheat");
 		return;
 	}
-	last_score = d->score;
 	last_frame = now;
 
 	/* External Debugger Detection */
@@ -85,18 +81,27 @@ static void	process_input(t_data *d) {
 		d->input_q[i] = d->input_q[i + 1];
 }
 
-void	spawn_fruit(t_data *d) {
-	int	i;
+/* Pseudo-random generator synchronized with the server */
+static uint32_t lcg_rand(uint32_t *seed) {
+	*seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
+	return *seed;
+}
+
+void spawn_fruit(t_data *d) {
+	int i;
 
 	do {
-		d->fruit_x = rand() % d->width;
-		d->fruit_y = rand() % d->height;
+		d->fruit_x = lcg_rand(&d->seed) % d->width;
+		d->fruit_y = lcg_rand(&d->seed) % d->height;
 		for (i = 0; i < d->size && !(d->x[i] == d->fruit_x && d->y[i] == d->fruit_y); i++);
 	} while (i < d->size);
 }
 
 static void	update_game(t_data *d) {
 	if (!d->dir[0]) return;
+		d->steps++;
+	if (d->steps % 10 == 0 && d->score)
+		d->score--;
 	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
@@ -110,12 +115,13 @@ static void	update_game(t_data *d) {
 			d->game_over = 1;
 	if (d->x[0] != d->fruit_x || d->y[0] != d->fruit_y)
 		return ;
-	if (d->size < d->width * d->height)
-		spawn_fruit(d);
 	d->grow = 1;
 	d->score += d->points_per_fruit;
 	d->delay *= d->speedup_factor;
 	notify_server(d, "eat");
+	if (d->size >= d->width * d->height)
+		return;
+	spawn_fruit(d);
 }
 
 const char *fruit_color(void) {
@@ -135,10 +141,10 @@ static void	render(t_data *d) {
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
 	if (d->grow)
-		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET CURSOR_POS "%d",
-			d->fruit_y + 2, d->fruit_x + 2, fruit_color(), d->height + 3, 8, d->score);
+		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
+			d->fruit_y + 2, d->fruit_x + 2, fruit_color());
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
-	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
+	printf(CURSOR_POS "%d \n", d->height + 3, 8, d->score);
 }
 
 void	game_loop(t_data *d) {
