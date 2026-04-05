@@ -13,6 +13,11 @@ static long get_ms(void) {
 	return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
+# define DEBUG_CHECK_FREQ	10
+# define PROC_STATUS_PATH	"/proc/self/status"
+# define TRACER_LEN			10
+# define PROC_BUF_SIZE		256
+
 static void anticheat(t_data *d) {
 	static int	counter = 0;
 	static int	last_score = 0;
@@ -22,10 +27,11 @@ static void anticheat(t_data *d) {
 	if (d->cheat) return;
 
 	/* Reset local static state at the start of a new game */
-	if (d->score == 0 && d->size == DEF_INITIAL_SIZE) {
+	if (!d->dir[0]) {
 		last_score = 0;
 		last_frame = now;
 		counter = 0;
+		return;
 	}
 
 	/* Validate score progression dynamically */
@@ -34,7 +40,7 @@ static void anticheat(t_data *d) {
 		|| d->score > (d->width * d->height * d->points_per_fruit)
 		|| now - last_frame > d->cheat_timeout) {
 		d->cheat = 1;
-		notify_server(d, "cheat"); /* Alert the server immediately in the background */
+		notify_server(d, "cheat");
 		return;
 	}
 	last_score = d->score;
@@ -42,15 +48,15 @@ static void anticheat(t_data *d) {
 
 	/* External Debugger Detection */
 	if (++counter > 10) {
-		FILE    *f = fopen("/proc/self/status", "r");
-		char    buf[256];
+		FILE    *f = fopen(PROC_STATUS_PATH, "r");
+		char    buf[PROC_BUF_SIZE];
 
 		counter = 0;
 		if (!f) return;
 		while (fgets(buf, sizeof(buf), f)) {
-			if (!strncmp(buf, "TracerPid:", 10) && atoi(buf + 10) != 0) {
+			if (!strncmp(buf, "TracerPid:", TRACER_LEN) && atoi(buf + 10) != 0) {
 				d->cheat = 1;
-				notify_server(d, "cheat"); /* Alert the server */
+				notify_server(d, "cheat");
 				break;
 			}
 		}
@@ -90,6 +96,7 @@ void	spawn_fruit(t_data *d) {
 }
 
 static void	update_game(t_data *d) {
+	if (!d->dir[0]) return;
 	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
@@ -120,8 +127,9 @@ static void	render(t_data *d) {
 	static const char	*heads[] = SNAKE_HEADS;
 	static const char	*bends[] = SNAKE_BENDS;
 
-	if (!d->dir[0]) return ;
-	if (d->x[d->size] != d->fruit_x || d->y[d->size] != d->fruit_y)
+	if (!d->dir[0]) return;
+	if ((d->x[d->size] != d->fruit_x || d->y[d->size] != d->fruit_y) &&
+		(d->x[d->size] != d->x[d->size - 1] || d->y[d->size] != d->y[d->size - 1]))
 		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
 	if (d->size > 1)
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,

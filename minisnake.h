@@ -33,7 +33,7 @@
 # define DEF_HEIGHT				20
 # define DEF_INITIAL_DELAY		250000
 # define DEF_SPEEDUP_FACTOR		0.985f
-# define DEF_INITIAL_SIZE		1
+# define DEF_INITIAL_SIZE		3
 # define INPUT_Q_SIZE			2
 # define DEF_POINTS_PER_FRUIT	10
 # define DEF_CHEAT_TIMEOUT		5000
@@ -61,9 +61,6 @@
 # endif
 # if DEF_INITIAL_DELAY < 0
 #  error "DEF_INITIAL_DELAY must be >= 0"
-# endif
-# if DEF_INITIAL_SIZE <= 0 || DEF_INITIAL_SIZE >= MIN_WIDTH
-#  error "DEF_INITIAL_SIZE must be > 0 and < MIN_WIDTH"
 # endif
 # if INPUT_Q_SIZE <= 0
 #  error "INPUT_Q_SIZE must be > 0"
@@ -130,7 +127,8 @@
 
 /* Default initializer for t_data */
 # define DEFAULT_RULES (t_data){ \
-	.size = DEF_INITIAL_SIZE, \
+	.size = 1, \
+	.grow = DEF_INITIAL_SIZE - 1, \
 	.points_per_fruit = DEF_POINTS_PER_FRUIT, \
 	.cheat_timeout = DEF_CHEAT_TIMEOUT, \
 	.delay = DEF_INITIAL_DELAY, \
@@ -144,9 +142,9 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int		size, points_per_fruit, cheat_timeout;
+	int		size, grow, points_per_fruit, cheat_timeout;
 	float	delay, speedup_factor;
-	int		width, height, fruit_x, fruit_y, grow, score, game_over, online, cheat;
+	int		width, height, fruit_x, fruit_y, score, game_over, online, cheat;
 	int		x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	t_dir	dir[2];
 	char	token[33];

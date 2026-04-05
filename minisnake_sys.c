@@ -182,17 +182,21 @@ static void	setup_io(void) {
 }
 
 static void	init_game(t_data *d) {
-	static t_data	save_state;
+    static t_data	save_state;
 
-	if (!save_state.size)
-		save_state = *d;
-	else
-		*d = save_state;
-	memset(d->input_q, EOF, sizeof(d->input_q));
-	srand(time(NULL));
-	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
-	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
-	spawn_fruit(d);
+    if (!save_state.size)
+        save_state = *d;
+    else
+        *d = save_state;
+    memset(d->input_q, EOF, sizeof(d->input_q));
+    srand(time(NULL));
+    d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
+    d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
+	for (int i = 1; i <= d->size + d->grow; i++) {
+		d->x[i] = d->x[0];
+		d->y[i] = d->y[0];
+	}
+    spawn_fruit(d);
 }
 
 static void	setup_display(t_data *d) {

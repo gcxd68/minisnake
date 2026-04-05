@@ -18,7 +18,7 @@ void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
 # define BUF_PATH           256
 # define BUF_ENTRY          128
 # define BUF_TOKEN			33
-# define NUM_RULES          6
+# define NUM_RULES          7
 
 /* HTTP PARSING: Offsets and string lengths for minimal HTTP/1.x parsing */
 # define HTTP_MIN_LEN       12
@@ -220,6 +220,7 @@ void server_sync_rules(t_data *d) {
 	d->speedup_factor = atof(fields[3]);
 	d->points_per_fruit = atoi(fields[4]);
 	d->cheat_timeout = atoi(fields[5]);
+	d->grow = atoi(fields[6]) - 1;
 }
 
 /* Initialization 2: Fetch a specific session token for the current game instance */
