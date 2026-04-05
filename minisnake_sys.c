@@ -194,6 +194,9 @@ static void	init_game(t_data *d) {
 	d->size = 1;
 	d->delay = INITIAL_DELAY;
 	memset(d->input_q, EOF, sizeof(d->input_q));
+	d->speedup_factor = SPEEDUP_FACTOR;
+	d->points_per_fruit = POINTS_PER_FRUIT;
+	d->cheat_timeout = CHEAT_TIMEOUT;
 	srand(time(NULL));
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
@@ -235,10 +238,6 @@ static void	initialize(t_data *d) {
 	init_game(d);
 	setup_display(d);
 	setup_sig();
-#ifdef ONLINE_BUILD
-	/* Request the session token from the server at the very beginning of the game */
-	start_session(d);
-#endif
 }
 
 static void	finalize(t_data *d)
@@ -263,8 +262,10 @@ int	main(int argc, char **argv)
 	t_data	d = {0};
 	int		ret;
 
+	*(t_rules *)&d = DEFAULT_RULES;
 	ret = parse_args(argc, argv, &d);
 	if (ret) return (ret);
+	start_session(&d);
 	ret = launch_terminal(argc, argv, &d);
 	if (ret != LAUNCH_LOCAL) return ret;
 	initialize(&d);

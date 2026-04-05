@@ -5,8 +5,7 @@
 /* STUBS: network functions are disabled in offline builds */
 void    handle_leaderboard(t_data *d) { (void)d; }
 void    start_session(t_data *d) { (void)d; }
-void    notify_fruit_eaten(t_data *d) { (void)d; }
-void    notify_cheating(t_data *d) { (void)d; }
+void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
 
 #else
 
@@ -17,6 +16,8 @@ void    notify_cheating(t_data *d) { (void)d; }
 # define BUF_REQ            512
 # define BUF_PATH           256
 # define BUF_ENTRY          128
+# define BUF_TOKEN			33
+# define NUM_RULES          6
 
 /* HTTP PARSING: Offsets and string lengths for minimal HTTP/1.x parsing */
 # define HTTP_MIN_LEN       12
@@ -42,6 +43,9 @@ void    notify_cheating(t_data *d) { (void)d; }
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
 # if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0
 #  error "Buffer sizes must be strictly positive"
+# endif
+# if BUF_TOKEN < 33
+#  error "BUF_TOKEN must be at least 33 to hold a 32-character hex token and a null terminator"
 # endif
 # if BUF_REQ < (BUF_PATH + 64)
 #  error "BUF_REQ is too small to contain an HTTP request line and a path"
@@ -198,7 +202,7 @@ static char *skip_headers(char *response)
 	return (response);
 }
 
-/* Initialization: Fetch the token (Synchronous, done before gameplay starts) */
+/* Initialization: Fetch token AND game rules from the server */
 void start_session(t_data *d)
 {
 	char    resp[BUF_RESP_SUBMIT];
@@ -206,28 +210,49 @@ void start_session(t_data *d)
 	if (!d->online) return;
 	if (http_get("/start", resp, sizeof(resp)) == 0)
 	{
-		strncpy(d->token, skip_headers(resp), 32);
-		d->token[32] = '\0';
+		char *body = skip_headers(resp);
+
+		/* 1. Extract Token */
+		char * saveptr, *token_str = strtok_r(body, "|", &saveptr);
+		if (token_str)
+		{
+			strncpy(d->token, token_str, BUF_TOKEN - 1);
+			d->token[BUF_TOKEN - 1] = '\0';
+
+			/* 2. Extract Fields */
+			char *fields[NUM_RULES];
+			for (int i = 0; i < NUM_RULES; i++) {
+				fields[i] = strtok_r(NULL, "|", &saveptr);
+				if (!fields[i]) {
+					d->token[0] = '\0';
+					return;
+				}
+			}
+
+			/* 3. Safely convert and assign fields to temporary rules */
+			t_rules new_rules = {
+				.width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0]))),
+				.height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1]))),
+				.delay = atof(fields[2]),
+				.speedup_factor = atof(fields[3]),
+				.points_per_fruit = atoi(fields[4]),
+				.cheat_timeout = atoi(fields[5])
+			};
+
+			/* 4. Memory Overlay: Overwrite the first part of t_data with server rules */
+			*(t_rules *)d = new_rules;
+		}
 	}
 	else
 		d->token[0] = '\0';
 }
 
-/* Asynchronous Ping: Called when a fruit is eaten */
-void notify_fruit_eaten(t_data *d)
+/* Asynchronous Ping: Spawns a background request to notify the server of an event */
+void notify_server(t_data *d, const char *action)
 {
+	if (!IS_SESSION_ACTIVE(d)) return;
 	char path[BUF_PATH];
-	if (!d->online || !d->token[0]) return;
-	snprintf(path, sizeof(path), "/eat/%s", d->token);
-	fire_and_forget(path);
-}
-
-/* Asynchronous Ping: Called if the local anticheat detects tampering */
-void notify_cheating(t_data *d)
-{
-	if (!d->online || !d->token[0]) return;
-	char path[BUF_PATH];
-	snprintf(path, sizeof(path), "/cheat/%s", d->token);
+	snprintf(path, sizeof(path), "/%s/%s", action, d->token);
 	fire_and_forget(path);
 }
 

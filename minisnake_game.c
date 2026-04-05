@@ -27,14 +27,14 @@ static void anticheat(t_data *d)
 	if (!last_frame)
 		last_frame = now;
 
-	/* Validate score progression (Plaintext, no XOR) */
-	if ((d->score != last_score && d->score != last_score + POINTS_PER_FRUIT)
-		|| d->score % POINTS_PER_FRUIT
-		|| d->score > (d->width * d->height * POINTS_PER_FRUIT)
-		|| now - last_frame > CHEAT_TIMEOUT)
+	/* Validate score progression dynamically */
+	if ((d->score != last_score && d->score != last_score + d->points_per_fruit)
+		|| (d->points_per_fruit && d->score % d->points_per_fruit)
+		|| d->score > (d->width * d->height * d->points_per_fruit)
+		|| now - last_frame > d->cheat_timeout)
 	{
 		d->cheat = 1;
-		notify_cheating(d); /* Alert the server immediately in the background */
+		notify_server(d, "cheat"); /* Alert the server immediately in the background */
 		return;
 	}
 	last_score = d->score;
@@ -53,7 +53,7 @@ static void anticheat(t_data *d)
 			if (!strncmp(buf, "TracerPid:", 10) && atoi(buf + 10) != 0)
 			{
 				d->cheat = 1;
-				notify_cheating(d); /* Alert the server */
+				notify_server(d, "cheat"); /* Alert the server */
 				break;
 			}
 		}
@@ -112,9 +112,9 @@ static void	update_game(t_data *d)
 	if (d->size < d->width * d->height)
 		spawn_fruit(d);
 	d->grow = 1;
-	d->score += POINTS_PER_FRUIT;
-	d->delay *= SPEEDUP_FACTOR;
-	notify_fruit_eaten(d);
+	d->score += d->points_per_fruit;
+	d->delay *= d->speedup_factor;
+	notify_server(d, "eat");
 }
 
 const char *fruit_color(void)

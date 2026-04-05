@@ -13,6 +13,16 @@ app = Flask(__name__)
 # Look for PORT instead of VPS_PORT
 PORT = int(os.environ.get("PORT", 8000))
 
+# Server dictated game rules
+GAME_WIDTH = 25
+GAME_HEIGHT = 20
+INITIAL_DELAY = 250000
+SPEEDUP_FACTOR = 0.985
+POINTS_PER_FRUIT = 10
+CHEAT_TIMEOUT = 5000
+MIN_PING_INTERVAL = 0.05
+MAX_SCORE = GAME_WIDTH * GAME_HEIGHT * POINTS_PER_FRUIT
+
 # --- SQLite Database Initialization ---
 def init_db():
     """ Creates the local database file and table if they don't exist. """
@@ -48,7 +58,9 @@ def start_session():
         "last_ping": time.time(),
         "cheated": False
     }
-    return token, 200
+    # Send game rules to the client
+    response_data = f"{token}|{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}"
+    return response_data, 200
 
 @app.route('/eat/<token>', methods=['GET'])
 def eat_fruit(token):
@@ -58,19 +70,19 @@ def eat_fruit(token):
     now = time.time()
     session = active_sessions[token]
 
-    # Anti-Spam
-    if now - session["last_ping"] < 0.05:
+    # Dynamic anti-Spam
+    if now - session["last_ping"] < MIN_PING_INTERVAL:
         session["cheated"] = True
         print(f"SPEEDHACK DETECTED: Invalid ping interval for session {token}")
         return "Speedhack detected", 400
 
-    # Theoretical physical limit (25x20 = 500 cells = 5000 points)
-    if session["score"] >= 5000:
+    # Dynamic physical limit
+    if session["score"] >= MAX_SCORE:
         session["cheated"] = True
         print(f"MAX SCORE EXCEEDED: Session {token} flagged.")
         return "Score limit exceeded", 400
 
-    session["score"] += 10
+    session["score"] += POINTS_PER_FRUIT
     session["last_ping"] = now
     return "Yum", 200
 
@@ -93,7 +105,7 @@ def submit_score(token, name):
         return "Cheater", 403
 
     final_score = session["score"]
-    if final_score > 5000:
+    if final_score > MAX_SCORE:
         print(f"REJECTED: Impossible calculated score {final_score} for '{name}'")
         return "Invalid Score", 400
 
