@@ -91,8 +91,7 @@ static t_req g_req_pool[REQ_POOL_SIZE];
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
-static int server_connect(void)
-{
+static int server_connect(void) {
 	struct sockaddr_in	addr;
 	struct hostent		*he;
 	int					fd;
@@ -110,8 +109,7 @@ static int server_connect(void)
 }
 
 /* Synchronous HTTP GET request */
-static int http_get(const char *path, char *out, int out_size)
-{
+static int http_get(const char *path, char *out, int out_size) {
 	char	req[BUF_REQ], buf[BUF_READ];
 	int		fd, n, total = 0;
 
@@ -120,26 +118,23 @@ static int http_get(const char *path, char *out, int out_size)
 	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, HOST);
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
-	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0)
-	{
+	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
 		buf[n] = '\0';
-		if (total + n < out_size - 1)
-		{
+		if (total + n < out_size - 1) {
 			memcpy(out + total, buf, n);
 			total += n;
 		}
 	}
-    if (n < 0) return (close(fd), -1);
-    out[total] = '\0';
-    close(fd);
-    if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || !strstr(out, " 200 "))
-        return (-1);
-    return (0);
+	if (n < 0) return (close(fd), -1);
+	out[total] = '\0';
+	close(fd);
+	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || !strstr(out, " 200 "))
+		return (-1);
+	return (0);
 }
 
 /* The background worker function for asynchronous requests */
-static void *async_http_worker(void *arg)
-{
+static void *async_http_worker(void *arg) {
 	t_req	*req = (t_req *)arg;
 	char	resp[BUF_RESP_SUBMIT];
 	
@@ -155,18 +150,15 @@ static void *async_http_worker(void *arg)
 
 /* Fire and Forget: Spawns a detached thread using a static resource pool. *
  * This prevents the game from freezing when communicating with the VPS.   */
-static void fire_and_forget(const char *path)
-{
+static void fire_and_forget(const char *path) {
 	pthread_t	tid;
 	t_req		*req = NULL;
 	int			i;
 	
 	/* 1. Thread-safely search for an available slot in the pool */
 	pthread_mutex_lock(&g_pool_mutex);
-	for (i = 0; i < REQ_POOL_SIZE; i++)
-	{
-		if (g_req_pool[i].in_use == 0)
-		{
+	for (i = 0; i < REQ_POOL_SIZE; i++) {
+		if (g_req_pool[i].in_use == 0) {
 			req = &g_req_pool[i];
 			req->in_use = 1; /* Reserve the slot */
 			break;
@@ -184,8 +176,7 @@ static void fire_and_forget(const char *path)
 	/* 4. Spawn the detached thread pointing to our static slot */
 	if (pthread_create(&tid, NULL, async_http_worker, req) == 0)
 		pthread_detach(tid);
-	else
-	{
+	else {
 		/* If thread creation fails due to system limits, free the slot */
 		pthread_mutex_lock(&g_pool_mutex);
 		req->in_use = 0;
@@ -193,8 +184,7 @@ static void fire_and_forget(const char *path)
 	}
 }
 
-static char *skip_headers(char *response)
-{
+static char *skip_headers(char *response) {
 	char *body = strstr(response, "\r\n\r\n");
 	if (body) return (body + 4);
 	body = strstr(response, "\n\n");
@@ -203,59 +193,60 @@ static char *skip_headers(char *response)
 }
 
 /* Initialization: Fetch token AND game rules from the server */
-void start_session(t_data *d)
-{
-	char    resp[BUF_RESP_SUBMIT];
-
+void start_session(t_data *d) {
 	if (!d->online) return;
-	if (http_get("/start", resp, sizeof(resp)) == 0)
-	{
-		char *body = skip_headers(resp);
 
-		/* 1. Extract Token */
-		char * saveptr, *token_str = strtok_r(body, "|", &saveptr);
-		if (token_str)
-		{
-			strncpy(d->token, token_str, BUF_TOKEN - 1);
-			d->token[BUF_TOKEN - 1] = '\0';
+	char	resp[BUF_RESP_SUBMIT];
+	char	*saveptr, *token_str, *body;
 
-			/* 2. Extract Fields */
-			char *fields[NUM_RULES];
-			for (int i = 0; i < NUM_RULES; i++) {
-				fields[i] = strtok_r(NULL, "|", &saveptr);
-				if (!fields[i]) {
-					d->token[0] = '\0';
-					return;
-				}
-			}
+	/* Logic: Always start by invalidating any existing session */
+	d->token[0] = '\0';
 
-			/* 3. Safely convert and apply server rules to game data */
-			d->width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0])));
-			d->height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1])));
-			d->delay = atof(fields[2]);
-			d->speedup_factor = atof(fields[3]);
-			d->points_per_fruit = atoi(fields[4]);
-			d->cheat_timeout = atoi(fields[5]);
+	if (http_get("/start", resp, sizeof(resp)) != 0)
+		return;
+
+	body = skip_headers(resp);
+	token_str = strtok_r(body, "|", &saveptr);
+	if (!token_str) return;
+
+	/* 1. Extract Token */
+	strncpy(d->token, token_str, BUF_TOKEN - 1);
+	d->token[BUF_TOKEN - 1] = '\0';
+
+	/* 2. Extract Fields */
+	char *fields[NUM_RULES];
+	for (int i = 0; i < NUM_RULES; i++) {
+		fields[i] = strtok_r(NULL, "|", &saveptr);
+		if (!fields[i]) {
+			d->token[0] = '\0';
+			return;
 		}
 	}
-	else
-		d->token[0] = '\0';
+
+	/* 3. Safely convert and apply server rules to game data */
+	d->width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0])));
+	d->height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1])));
+	d->delay = atof(fields[2]);
+	d->speedup_factor = atof(fields[3]);
+	d->points_per_fruit = atoi(fields[4]);
+	d->cheat_timeout = atoi(fields[5]);
 }
 
 /* Asynchronous Ping: Spawns a background request to notify the server of an event */
-void notify_server(t_data *d, const char *action)
-{
+void notify_server(t_data *d, const char *action) {
 	if (!IS_SESSION_ACTIVE(d)) return;
-	char path[BUF_PATH];
+
+	char	path[BUF_PATH];
+
 	snprintf(path, sizeof(path), "/%s/%s", action, d->token);
 	fire_and_forget(path);
 }
 
 /* Submit the final score (The client no longer provides the score value) */
-static int end_session(t_data *d, const char *name)
-{
+static int end_session(t_data *d, const char *name) {
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
+	memset(resp, 0, sizeof(resp)); // DEBUG TEST
 	printf(CLEAR_SCREEN "Submitting...");
 	fflush(stdout);
 	if (!d->token[0]) return (-1);
@@ -265,8 +256,7 @@ static int end_session(t_data *d, const char *name)
 	return (http_get(path, resp, sizeof(resp)));
 }
 
-static int show_leaderboard(t_data *d)
-{
+static int show_leaderboard(t_data *d) {
 	const char  title[] = LB_TITLE;
 	const int   title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 	char        *body, *line, *saveptr;
@@ -280,8 +270,7 @@ static int show_leaderboard(t_data *d)
 	body = skip_headers(resp);
 	
 	line = strtok_r(body, "\n", &saveptr);
-	while (line && rank <= LB_MAX_SCORES)
-	{
+	while (line && rank <= LB_MAX_SCORES) {
 		char entry[BUF_ENTRY], *p_name, *p_score, *p_save;
 		strncpy(entry, line, sizeof(entry) - 1);
 		entry[sizeof(entry) - 1] = '\0';
@@ -295,23 +284,20 @@ static int show_leaderboard(t_data *d)
 	return (0);
 }
 
-static int read_name(char *name, size_t size)
-{
-	disable_raw_mode();
-	tcflush(STDIN_FILENO, TCIFLUSH);
+static int read_name(char *name, size_t size) {
 	if (!fgets(name, size, stdin) || name[0] == '\n')
 		name[0] = '\0';
 	else if (!strchr(name, '\n'))
 		for (int c; (c = getchar()) != '\n' && c != EOF;);
 	for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
-	enable_raw_mode();
 	return (name[0]);
 }
 
-void handle_leaderboard(t_data *d)
-{
+void handle_leaderboard(t_data *d) {
 	if (!d->online) return;
-	char name[MAX_NAME_LEN + 1];
+
+	char	name[MAX_NAME_LEN + 1];
+
 	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
 	fflush(stdout);
 	if (!read_name(name, sizeof(name))) return ;

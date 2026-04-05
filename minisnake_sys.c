@@ -1,7 +1,6 @@
 #include "minisnake.h"
 
-static int	parse_dimension(const char *str, int min, int max, int *out, const char *name)
-{
+static int	parse_dimension(const char *str, int min, int max, int *out, const char *name) {
 	char	*endptr;
 	long	val = strtol(str, &endptr, 10);
 
@@ -13,44 +12,40 @@ static int	parse_dimension(const char *str, int min, int max, int *out, const ch
 	return (2);
 }
 
-static int	parse_args(int argc, char **argv, t_data *d)
-{
+static int	parse_args(int argc, char **argv, t_data *d) {
 	/* Validate compile-time constant at runtime in case someone changes it incorrectly */
 	if (DEF_SPEEDUP_FACTOR < 0.0f || DEF_SPEEDUP_FACTOR >= 1.0f) {
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
 		return(EXIT_FAILURE);
 	}
 	/* Launch default mode if no arguments, or explicitly requested "online" */
-	if (argc == 1 || (argc == 2 && !strcmp(argv[1], "online")))
-	{
+	if (argc == 1 || (argc == 2 && !strcmp(argv[1], "online"))) {
+		d->width = DEF_WIDTH;
+		d->height = DEF_HEIGHT;
+
 #ifdef ONLINE_BUILD
 		/* If network is compiled in, activate online features */
 		d->online = 1;
 #else
+
 		/* If network is NOT compiled in, but the user explicitly typed "online", warn them */
-		if (argc == 2)
-		{
+		if (argc == 2) {
 			fprintf(stderr, "minisnake: online mode not available in this build\n");
 			return(EXIT_FAILURE);
 		}
 		/* If argc == 1, we silently drop to offline mode with default dimensions */
 #endif
-	}
-	else if (argc == 3)
-	{
+	} else if (argc == 3) {
 		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
 			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))
 			return (2);
-	}
-	else {
+	} else {
 		fprintf(stderr, "Usage: ./minisnake\n"
 						"       ./minisnake online\n"
 						"       ./minisnake WIDTH HEIGHT\n");
 		return(2);
 	}
-	
-	if ((d->width * d->height) % 2 != 0)
-	{
+	if ((d->width * d->height) % 2 != 0) {
 		fprintf(stderr, "minisnake: board area (%dx%d = %d) must be even.\n", 
 				d->width, d->height, d->width * d->height);
 		fprintf(stderr, "A perfect game is mathematically impossible on odd grids.\n");
@@ -60,28 +55,24 @@ static int	parse_args(int argc, char **argv, t_data *d)
 }
 
 /* Read a single character and flush the rest of the line */
-static int	read_char(void)
-{
+static int	read_char(void) {
 	int c = getchar();
 	if (c != '\n' && c != EOF)
 		for (int next; (next = getchar()) != '\n' && next != EOF;);
 	return (c);
 }
 
-static int	ask_confirm(const char *question)
-{
+static int	ask_confirm(const char *question) {
 	printf("%s", question);
 	fflush(stdout);
 	int c = read_char();
 	return (c == 'y' || c == 'Y');
 }
 
-static int	install_gnome_terminal(void)
-{
+static int	install_gnome_terminal(void) {
 	if (ask_confirm("gnome-terminal is not installed.\n"
 		"It is recommended for a better user experience, but not required.\n"
-		"Would you like to install it? (y/n): "))
-	{
+		"Would you like to install it? (y/n): ")) {
 		printf("Installing gnome-terminal...\n");
 		if (system("sudo apt update && sudo apt install -y gnome-terminal") == 0)
 			return (LAUNCH_SPAWN);
@@ -99,8 +90,7 @@ static int	install_gnome_terminal(void)
 /* Try to spawn a dedicated gnome-terminal window.
    If successful (LAUNCH_SPAWN), the current process is replaced by execvp
    and never reaches the game loop. If LAUNCH_LOCAL, play in current terminal. */
-static int	launch_terminal(int argc, char **argv, t_data *d)
-{
+static int	launch_terminal(int argc, char **argv, t_data *d) {
 	char	geom[BUF_GEOM], cmd[BUF_CMD];
 	char	*self, *tty;
 	int		ret;
@@ -127,8 +117,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d)
 	/* Dark theme for a better visual experience */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
-	if (execvp(args[0], args) == -1)
-	{
+	if (execvp(args[0], args) == -1) {
 		/* execvp only returns on failure — offer to continue in the current terminal */
 		perror("minisnake: execvp failed");
 		fprintf(stderr, "Failed to open a new terminal window.\n");
@@ -147,8 +136,7 @@ struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
 
 /* Raw mode disables line buffering (ICANON) and echo so keypresses are instantly read without waiting for Enter */
-void	enable_raw_mode(void)
-{
+void	enable_raw_mode(void) {
 	struct termios	raw;
 
 	raw = g_saved_term;
@@ -170,9 +158,13 @@ static void	restore_stdin_flags(void) {
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
 }
 
-static void	clean_exit(int status) {
+static void restore_io(void) {
 	disable_raw_mode();
 	restore_stdin_flags();
+}
+
+static void	clean_exit(int status) {
+	restore_io();
 	exit(status);
 }
 
@@ -189,7 +181,13 @@ static void	setup_io(void) {
 }
 
 static void	init_game(t_data *d) {
-	d->size = 1;
+	d->size = DEF_INITIAL_SIZE;
+	d->grow = 0;
+	d->score = 0;
+	d->game_over = 0;
+	d->cheat = 0;
+	d->dir[0] = STOP;
+	d->dir[1] = STOP;
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	srand(time(NULL));
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
@@ -234,8 +232,7 @@ static void	initialize(t_data *d) {
 	setup_sig();
 }
 
-static void	finalize(t_data *d)
-{
+static void	finalize(t_data *d) {
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
 	const int	col = MAX(d->width - (int)strlen(outcome) + 3,
 					(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
@@ -243,26 +240,25 @@ static void	finalize(t_data *d)
 	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
 		? COLOR_RED : COLOR_GREEN, outcome);
 	/* Restore blocking stdin before any user-facing read operations */
-	restore_stdin_flags();
+	restore_io();
+	tcflush(STDIN_FILENO, TCIFLUSH);
 	handle_leaderboard(d);
 	printf(CURSOR_POS ERASE_LINE, d->height + 4, 1);
-	ask_confirm("Press Enter to close...");
-	printf("\n");
-	disable_raw_mode();
 }
 
-int	main(int argc, char **argv)
-{
+int	main(int argc, char **argv) {
 	t_data	d = DEFAULT_RULES;
 	int		ret;
 
-	ret = parse_args(argc, argv, &d);
-	if (ret) return (ret);
-	start_session(&d);
-	ret = launch_terminal(argc, argv, &d);
-	if (ret != LAUNCH_LOCAL) return ret;
-	initialize(&d);
-	game_loop(&d);
-	finalize(&d);
+	if ((ret = parse_args(argc, argv, &d))) return (ret);
+	if ((ret = launch_terminal(argc, argv, &d)) != LAUNCH_LOCAL) return (ret);
+
+	do {
+		start_session(&d);
+		initialize(&d);
+		game_loop(&d);
+		finalize(&d);
+	} while (ask_confirm("Play again? (y/n): "));
+	printf("\n");
 	return (EXIT_SUCCESS);
 }

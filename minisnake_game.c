@@ -7,15 +7,13 @@ static void	anticheat(t_data *d) { (void)d; }
 
 #else
 
-static long get_ms(void)
-{
+static long get_ms(void) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
-static void anticheat(t_data *d)
-{
+static void anticheat(t_data *d) {
 	static int	counter = 0;
 	static int	last_score = 0;
 	static long	last_frame = 0;
@@ -23,16 +21,18 @@ static void anticheat(t_data *d)
 
 	if (d->cheat) return;
 
-	/* Initialize on the first frame */
-	if (!last_frame)
+	/* Reset local static state at the start of a new game */
+	if (d->score == 0 && d->size == DEF_INITIAL_SIZE) {
+		last_score = 0;
 		last_frame = now;
+		counter = 0;
+	}
 
 	/* Validate score progression dynamically */
 	if ((d->score != last_score && d->score != last_score + d->points_per_fruit)
 		|| (d->points_per_fruit && d->score % d->points_per_fruit)
 		|| d->score > (d->width * d->height * d->points_per_fruit)
-		|| now - last_frame > d->cheat_timeout)
-	{
+		|| now - last_frame > d->cheat_timeout) {
 		d->cheat = 1;
 		notify_server(d, "cheat"); /* Alert the server immediately in the background */
 		return;
@@ -41,17 +41,14 @@ static void anticheat(t_data *d)
 	last_frame = now;
 
 	/* External Debugger Detection */
-	if (++counter > 10)
-	{
+	if (++counter > 10) {
 		FILE    *f = fopen("/proc/self/status", "r");
 		char    buf[256];
 
 		counter = 0;
 		if (!f) return;
-		while (fgets(buf, sizeof(buf), f))
-		{
-			if (!strncmp(buf, "TracerPid:", 10) && atoi(buf + 10) != 0)
-			{
+		while (fgets(buf, sizeof(buf), f)) {
+			if (!strncmp(buf, "TracerPid:", 10) && atoi(buf + 10) != 0) {
 				d->cheat = 1;
 				notify_server(d, "cheat"); /* Alert the server */
 				break;
@@ -63,8 +60,7 @@ static void anticheat(t_data *d)
 
 #endif
 
-static void	process_input(t_data *d)
-{
+static void	process_input(t_data *d) {
 	static const char	keys[] = MOVE_KEYS;
 	char				*pos;
 	int					c, i;
@@ -83,8 +79,7 @@ static void	process_input(t_data *d)
 		d->input_q[i] = d->input_q[i + 1];
 }
 
-void	spawn_fruit(t_data *d)
-{
+void	spawn_fruit(t_data *d) {
 	int	i;
 
 	do {
@@ -94,8 +89,7 @@ void	spawn_fruit(t_data *d)
 	} while (i < d->size);
 }
 
-static void	update_game(t_data *d)
-{
+static void	update_game(t_data *d) {
 	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
@@ -117,14 +111,12 @@ static void	update_game(t_data *d)
 	notify_server(d, "eat");
 }
 
-const char *fruit_color(void)
-{
+const char *fruit_color(void) {
 	static const char *palette[] = FRUIT_PALETTE;
 	return palette[rand() % ARR_SIZE(palette)];
 }
 
-static void	render(t_data *d)
-{
+static void	render(t_data *d) {
 	static const char	*heads[] = SNAKE_HEADS;
 	static const char	*bends[] = SNAKE_BENDS;
 
@@ -141,10 +133,8 @@ static void	render(t_data *d)
 	printf(STYLE_RESET CURSOR_POS "\n", d->height + 3, 1);
 }
 
-void	game_loop(t_data *d)
-{
-	while (!d->game_over && d->size < d->width * d->height)
-	{
+void	game_loop(t_data *d) {
+	while (!d->game_over && d->size < d->width * d->height) {
 		anticheat(d);
 		process_input(d);
 		update_game(d);

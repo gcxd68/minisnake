@@ -49,6 +49,14 @@ def cleanup_stale_sessions():
     if stale_tokens:
         print(f"CLEANUP: Removed {len(stale_tokens)} abandoned sessions.")
 
+@app.route('/rules', methods=['GET'])
+def get_rules():
+    """ 
+    Public endpoint to fetch game dimensions and rules without spawning a session token.
+    Returns: format 'width|height|delay|speedup_factor|points|cheat_timeout'
+    """
+    return f"{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}", 200
+
 @app.route('/start', methods=['GET'])
 def start_session():
     cleanup_stale_sessions()
