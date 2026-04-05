@@ -16,15 +16,13 @@ static int	parse_dimension(const char *str, int min, int max, int *out, const ch
 static int	parse_args(int argc, char **argv, t_data *d)
 {
 	/* Validate compile-time constant at runtime in case someone changes it incorrectly */
-	if (SPEEDUP_FACTOR < 0.0f || SPEEDUP_FACTOR >= 1.0f) {
+	if (DEF_SPEEDUP_FACTOR < 0.0f || DEF_SPEEDUP_FACTOR >= 1.0f) {
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
 		return(EXIT_FAILURE);
 	}
 	/* Launch default mode if no arguments, or explicitly requested "online" */
 	if (argc == 1 || (argc == 2 && !strcmp(argv[1], "online")))
 	{
-		d->width = DEFAULT_WIDTH;
-		d->height = DEFAULT_HEIGHT;
 #ifdef ONLINE_BUILD
 		/* If network is compiled in, activate online features */
 		d->online = 1;
@@ -192,11 +190,7 @@ static void	setup_io(void) {
 
 static void	init_game(t_data *d) {
 	d->size = 1;
-	d->delay = INITIAL_DELAY;
 	memset(d->input_q, EOF, sizeof(d->input_q));
-	d->speedup_factor = SPEEDUP_FACTOR;
-	d->points_per_fruit = POINTS_PER_FRUIT;
-	d->cheat_timeout = CHEAT_TIMEOUT;
 	srand(time(NULL));
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : rand() % 2);
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : rand() % 2);
@@ -259,10 +253,9 @@ static void	finalize(t_data *d)
 
 int	main(int argc, char **argv)
 {
-	t_data	d = {0};
+	t_data	d = DEFAULT_RULES;
 	int		ret;
 
-	*(t_rules *)&d = DEFAULT_RULES;
 	ret = parse_args(argc, argv, &d);
 	if (ret) return (ret);
 	start_session(&d);

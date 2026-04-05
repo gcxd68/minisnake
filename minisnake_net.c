@@ -129,12 +129,12 @@ static int http_get(const char *path, char *out, int out_size)
 			total += n;
 		}
 	}
-	if (n < 0) return (close(fd), -1);
-	out[total] = '\0';
-	close(fd);
-	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || strncmp(out + HTTP_STAT_OFFSET, " 200", HTTP_STAT_LEN) != 0)
-		return (-1);
-	return (0);
+    if (n < 0) return (close(fd), -1);
+    out[total] = '\0';
+    close(fd);
+    if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || !strstr(out, " 200 "))
+        return (-1);
+    return (0);
 }
 
 /* The background worker function for asynchronous requests */
@@ -229,18 +229,13 @@ void start_session(t_data *d)
 				}
 			}
 
-			/* 3. Safely convert and assign fields to temporary rules */
-			t_rules new_rules = {
-				.width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0]))),
-				.height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1]))),
-				.delay = atof(fields[2]),
-				.speedup_factor = atof(fields[3]),
-				.points_per_fruit = atoi(fields[4]),
-				.cheat_timeout = atoi(fields[5])
-			};
-
-			/* 4. Memory Overlay: Overwrite the first part of t_data with server rules */
-			*(t_rules *)d = new_rules;
+			/* 3. Safely convert and apply server rules to game data */
+			d->width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0])));
+			d->height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1])));
+			d->delay = atof(fields[2]);
+			d->speedup_factor = atof(fields[3]);
+			d->points_per_fruit = atoi(fields[4]);
+			d->cheat_timeout = atoi(fields[5]);
 		}
 	}
 	else

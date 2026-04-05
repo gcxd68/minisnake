@@ -70,13 +70,20 @@ def eat_fruit(token):
     now = time.time()
     session = active_sessions[token]
 
-    # Dynamic anti-Spam
-    if now - session["last_ping"] < MIN_PING_INTERVAL:
+    # Dynamically calculate the theoretical minimum delay based on the current score
+    fruits_eaten = session["score"] // POINTS_PER_FRUIT
+    # Current delay in seconds (INITIAL_DELAY is in microseconds)
+    current_delay_sec = (INITIAL_DELAY / 1000000.0) * (SPEEDUP_FACTOR ** fruits_eaten)
+    # 20% margin to compensate for network latency and jitter
+    min_ping_interval = current_delay_sec * 0.8
+
+    # Dynamic anti-spam check
+    if now - session["last_ping"] < min_ping_interval:
         session["cheated"] = True
         print(f"SPEEDHACK DETECTED: Invalid ping interval for session {token}")
         return "Speedhack detected", 400
 
-    # Dynamic physical limit
+    # Dynamic physical limit check
     if session["score"] >= MAX_SCORE:
         session["cheated"] = True
         print(f"MAX SCORE EXCEEDED: Session {token} flagged.")
@@ -98,6 +105,10 @@ def submit_score(token, name):
     if token not in active_sessions:
         return "Unauthorized", 403
     
+    # SECURITY: Strict player name validation to prevent injection or DB saturation
+    if not name.isalnum() or len(name) > 8:
+        return "Invalid Name", 400
+
     session = active_sessions.pop(token)
     
     if session["cheated"]:

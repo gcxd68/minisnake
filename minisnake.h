@@ -29,13 +29,13 @@
 # define MIN_HEIGHT				2
 # define MAX_WIDTH				200
 # define MAX_HEIGHT				50
-# define DEFAULT_WIDTH			25
-# define DEFAULT_HEIGHT			20
-# define INITIAL_DELAY			250000
-# define SPEEDUP_FACTOR			0.985f
+# define DEF_WIDTH				25
+# define DEF_HEIGHT				20
+# define DEF_INITIAL_DELAY		250000
+# define DEF_SPEEDUP_FACTOR		0.985f
 # define INPUT_Q_SIZE			2
-# define POINTS_PER_FRUIT		10
-# define CHEAT_TIMEOUT			5000
+# define DEF_POINTS_PER_FRUIT	10
+# define DEF_CHEAT_TIMEOUT		5000
 
 /* SYSTEM & I/O: Buffers, paths, and environment */
 # define BUF_GEOM				32
@@ -58,17 +58,17 @@
 # if MAX_HEIGHT < MIN_HEIGHT
 #  error "MAX_HEIGHT must be >= MIN_HEIGHT"
 # endif
-# if INITIAL_DELAY < 0
-#  error "INITIAL_DELAY must be >= 0"
+# if DEF_INITIAL_DELAY < 0
+#  error "DEF_INITIAL_DELAY must be >= 0"
 # endif
 # if INPUT_Q_SIZE <= 0
 #  error "INPUT_Q_SIZE must be > 0"
 # endif
-# if POINTS_PER_FRUIT <= 0
-#  error "POINTS_PER_FRUIT must be > 0"
+# if DEF_POINTS_PER_FRUIT <= 0
+#  error "DEF_POINTS_PER_FRUIT must be > 0"
 # endif
-# if CHEAT_TIMEOUT < 0
-#  error "CHEAT_TIMEOUT must be >= 0"
+# if DEF_CHEAT_TIMEOUT < 0
+#  error "DEF_CHEAT_TIMEOUT must be >= 0"
 # endif
 # if MIN_WIDTH * MIN_HEIGHT > 10000
 #  error "Minimum board size exceeds maximum snake capacity (10000)"
@@ -76,11 +76,11 @@
 # if MAX_WIDTH * MAX_HEIGHT > 10000
 #  error "Maximum board size exceeds maximum snake capacity (10000)"
 # endif
-# if DEFAULT_WIDTH < MIN_WIDTH || DEFAULT_WIDTH > MAX_WIDTH
-#  error "DEFAULT_WIDTH must be between MIN_WIDTH and MAX_WIDTH"
+# if DEF_WIDTH < MIN_WIDTH || DEF_WIDTH > MAX_WIDTH
+#  error "DEF_WIDTH must be between MIN_WIDTH and MAX_WIDTH"
 # endif
-# if DEFAULT_HEIGHT < MIN_HEIGHT || DEFAULT_HEIGHT > MAX_HEIGHT
-#  error "DEFAULT_HEIGHT must be between MIN_HEIGHT and MAX_HEIGHT"
+# if DEF_HEIGHT < MIN_HEIGHT || DEF_HEIGHT > MAX_HEIGHT
+#  error "DEF_HEIGHT must be between MIN_HEIGHT and MAX_HEIGHT"
 # endif
 # if BUF_GEOM <= 0 || BUF_CMD <= 0
 #  error "Buffer sizes must be strictly positive"
@@ -124,14 +124,15 @@
 # define MAX(a, b)				(a > b ? a : b)
 # define IS_SESSION_ACTIVE(d)	(d->online && d->token[0] != '\0')
 
-typedef struct s_rules
-{
-	int		width, height, points_per_fruit, cheat_timeout;
-	float	delay, speedup_factor;
-}	t_rules;
-
-# define DEFAULT_RULES (t_rules){DEFAULT_WIDTH, DEFAULT_HEIGHT, POINTS_PER_FRUIT, \
-                                 CHEAT_TIMEOUT, INITIAL_DELAY, SPEEDUP_FACTOR}
+/* Default initializer for t_data */
+# define DEFAULT_RULES (t_data){ \
+    .width = DEF_WIDTH, \
+    .height = DEF_HEIGHT, \
+    .points_per_fruit = DEF_POINTS_PER_FRUIT, \
+    .cheat_timeout = DEF_CHEAT_TIMEOUT, \
+    .delay = DEF_INITIAL_DELAY, \
+    .speedup_factor = DEF_SPEEDUP_FACTOR \
+}
 
 enum { LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4 };
 
