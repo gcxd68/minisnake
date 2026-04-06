@@ -25,28 +25,41 @@
 # endif
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
-# define MIN_WIDTH				2
-# define MIN_HEIGHT				2
-# define MAX_WIDTH				200
-# define MAX_HEIGHT				50
-# define DEF_WIDTH				25
-# define DEF_HEIGHT				20
-# define DEF_INITIAL_DELAY		250000
-# define DEF_SPEEDUP_FACTOR		0.985f
-# define DEF_INITIAL_SIZE		3
-# define INPUT_Q_SIZE			2
-# define DEF_POINTS_PER_FRUIT	10
-# define DEF_CHEAT_TIMEOUT		5000
-# define DEF_PENALTY_INTERVAL	10
-# define DEF_PENALTY_AMOUNT		1
+# define MIN_WIDTH						2
+# define MIN_HEIGHT						2
+# define MAX_WIDTH						200
+# define MAX_HEIGHT						50
+# define DEF_WIDTH						25
+# define DEF_HEIGHT						20
+# define DEF_INITIAL_DELAY				250000
+# define DEF_SPEEDUP_FACTOR				0.985f
+# define DEF_INITIAL_SIZE				3
+# define INPUT_Q_SIZE					2
+# define DEF_POINTS_PER_FRUIT			10
+# define DEF_SPAWN_FRUIT_MAX_ATTEMPTS	10000
+# define DEF_CHEAT_TIMEOUT				5000
+# define DEF_PENALTY_INTERVAL			10
+# define DEF_PENALTY_AMOUNT				1
+
+/* SPLASH SCREEN & ANIMATION */
+# define SPLASH_TITLE_MIN_ROW			3
+# define SPLASH_FRAMES					30
+# define SPLASH_OFFSET_MINI				5
+# define SPLASH_OFFSET_S				1
+# define SPLASH_OFFSET_NAKE				1
+# define SPLASH_WORD_LEN				4
+# define SPLASH_SNAKE_START_Y			-MAX_HEIGHT
+# define SPLASH_USLEEP					30000
+# define SPLASH_TITLE_TO_PROMPT_DIST	3
+# define SPLASH_BLINK_RATE				15
 
 /* SYSTEM & I/O: Buffers, paths, and environment */
-# define BUF_GEOM				32
-# define BUF_CMD				512
+# define BUF_GEOM						32
+# define BUF_CMD						512
 
-# define TERM_TITLE				"minisnake"
-# define ENV_VAR				"MINISNAKE_LAUNCHED"
-# define DEFAULT_EXE			"./minisnake"
+# define TERM_TITLE						"minisnake"
+# define ENV_VAR						"MINISNAKE_LAUNCHED"
+# define DEFAULT_EXE					"./minisnake"
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
 # if MIN_WIDTH < 2
@@ -70,6 +83,9 @@
 # if DEF_POINTS_PER_FRUIT <= 0
 #  error "DEF_POINTS_PER_FRUIT must be > 0"
 # endif
+# if DEF_SPAWN_FRUIT_MAX_ATTEMPTS <= 0
+#  error "DEF_SPAWN_FRUIT_MAX_ATTEMPTS must be > 0"
+# endif
 # if DEF_CHEAT_TIMEOUT < 0
 #  error "DEF_CHEAT_TIMEOUT must be >= 0"
 # endif
@@ -90,6 +106,21 @@
 # endif
 # if DEF_HEIGHT < MIN_HEIGHT || DEF_HEIGHT > MAX_HEIGHT
 #  error "DEF_HEIGHT must be between MIN_HEIGHT and MAX_HEIGHT"
+# endif
+# if SPLASH_TITLE_MIN_ROW < 1
+#  error "SPLASH_TITLE_MIN_ROW must be at least 1"
+# endif
+# if SPLASH_FRAMES <= 0
+#  error "SPLASH_FRAMES must be greater than 0 to avoid division by zero"
+# endif
+# if SPLASH_BLINK_RATE <= 0
+#  error "SPLASH_BLINK_RATE must be greater than 0"
+# endif
+# if SPLASH_USLEEP < 0
+#  error "SPLASH_USLEEP cannot be negative"
+# endif
+# if SPLASH_WORD_LEN <= 0
+#  error "SPLASH_WORD_LEN must be positive"
 # endif
 # if BUF_GEOM <= 0 || BUF_CMD <= 0
 #  error "Buffer sizes must be strictly positive"
@@ -135,9 +166,11 @@
 
 /* Default initializer for t_data */
 # define DEFAULT_RULES (t_data){ \
+	.show_splash = 1, \
 	.size = 1, \
 	.grow = DEF_INITIAL_SIZE - 1, \
 	.points_per_fruit = DEF_POINTS_PER_FRUIT, \
+	.spawn_fruit_max_attempts = DEF_SPAWN_FRUIT_MAX_ATTEMPTS, \
 	.cheat_timeout = DEF_CHEAT_TIMEOUT, \
 	.penalty_interval = DEF_PENALTY_INTERVAL, \
 	.penalty_amount = DEF_PENALTY_AMOUNT, \
@@ -152,7 +185,7 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int			size, grow, points_per_fruit, cheat_timeout, penalty_interval, penalty_amount;
+	int			show_splash, size, grow, points_per_fruit, spawn_fruit_max_attempts, cheat_timeout, penalty_interval, penalty_amount;
 	float		delay, speedup_factor;
 	int			width, height, fruit_x, fruit_y, score, game_over, online, cheat, steps;
 	uint32_t	seed;
@@ -167,9 +200,8 @@ const char	*fruit_color(void);
 void		game_loop(t_data *d);
 
 /* minisnake_sys - System functions */
+void		splash_screen(t_data *d);
 void		show_loading(void);
-void		enable_raw_mode(void);
-void		disable_raw_mode(void);
 uint32_t	lcg_rand(uint32_t *seed);
 
 /* minisnake_net.c - Network functions */

@@ -23,6 +23,7 @@ CHEAT_TIMEOUT = 5000
 INITIAL_SIZE = 1
 PENALTY_INTERVAL = 10
 PENALTY_AMOUNT = 1
+SPAWN_FRUIT_MAX_ATTEMPTS = 10000
 MIN_PING_INTERVAL = 0.05
 MAX_SCORE = GAME_WIDTH * GAME_HEIGHT * POINTS_PER_FRUIT
 
@@ -60,9 +61,9 @@ def cleanup_stale_sessions():
 def get_rules():
     """ 
     Public endpoint to fetch game dimensions and rules without spawning a session token.
-    Returns: format 'width|height|delay|speedup_factor|points|cheat_timeout|initial_size|penalty_interval|penalty_amount'
+    Returns: format 'width|height|delay|speedup_factor|points|cheat_timeout|initial_size|penalty_interval|penalty_amount|spawn_fruit_max_attempts'
     """
-    return f"{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}|{INITIAL_SIZE}|{PENALTY_INTERVAL}|{PENALTY_AMOUNT}", 200
+    return f"{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}|{INITIAL_SIZE}|{PENALTY_INTERVAL}|{PENALTY_AMOUNT}|{SPAWN_FRUIT_MAX_ATTEMPTS}", 200
 
 @app.route('/token', methods=['GET'])
 def get_token():

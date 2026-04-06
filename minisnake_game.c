@@ -83,12 +83,13 @@ static void	process_input(t_data *d) {
 }
 
 void spawn_fruit(t_data *d) {
-	int i;
+	int i, attempts = 0;
 
 	do {
 		d->fruit_x = (lcg_rand(&d->seed) >> 16) % d->width;
 		d->fruit_y = (lcg_rand(&d->seed) >> 16) % d->height;
 		for (i = 0; i < d->size && !(d->x[i] == d->fruit_x && d->y[i] == d->fruit_y); i++);
+		if (++attempts > d->spawn_fruit_max_attempts) break;
 	} while (i < d->size);
 }
 

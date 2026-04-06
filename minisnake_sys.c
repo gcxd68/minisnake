@@ -137,7 +137,7 @@ struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
 
 /* Raw mode disables line buffering (ICANON) and echo so keypresses are instantly read without waiting for Enter */
-void	enable_raw_mode(void) {
+static void	enable_raw_mode(void) {
 	struct termios	raw;
 
 	raw = g_saved_term;
@@ -148,7 +148,7 @@ void	enable_raw_mode(void) {
 }
 
 /* Restore the terminal to its original state and show the cursor */
-void	disable_raw_mode(void) {
+static void	disable_raw_mode(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
 	printf(CURSOR_SHOW);
 }
@@ -180,7 +180,75 @@ static void	setup_terminal(void) {
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
 }
 
-/* Pseudo-random generator synchronized with the server */
+static void	handle_sig(int sig) {
+	clean_exit(128 + sig);
+}
+
+static void setup_sig(void) {
+	static int          initialized = 0;
+
+	if (initialized) return;
+
+	const int           signals[] = {SIGINT, SIGQUIT, SIGTERM};
+	struct sigaction    sa;
+
+	sa.sa_handler = handle_sig;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	for (size_t i = 0; i < sizeof(signals) / sizeof(*signals); i++) {
+		if (sigaction(signals[i], &sa, NULL) == -1) {
+			perror("minisnake: sigaction failed");
+			clean_exit(EXIT_FAILURE);
+		}
+	}
+	initialized = 1;
+}
+
+void splash_screen(t_data *d) {
+	if (!d->show_splash) return;
+
+	int w = MAX(d->width + 2, (int)strlen(INSTRUCTIONS)), h = d->height + 4;
+	int v_cx = (MAX_WIDTH / 2) + 1, v_cy = MAX(SPLASH_TITLE_MIN_ROW, (d->height / 2) + 1);
+	int r_cx = (w / 2) + 1, blink = 0;
+
+	/* 1. Animation: Smooth linear interpolation from virtual space to real center */
+	for (int i = 0; i <= SPLASH_FRAMES; i++) {
+		int lx = 1 + (v_cx - SPLASH_OFFSET_MINI - 1) * i / SPLASH_FRAMES;
+		int rx = (MAX_WIDTH - SPLASH_WORD_LEN) + (v_cx + SPLASH_OFFSET_NAKE - (MAX_WIDTH - SPLASH_WORD_LEN)) * i / SPLASH_FRAMES;
+		int ty = SPLASH_SNAKE_START_Y + (v_cy - SPLASH_SNAKE_START_Y) * i / SPLASH_FRAMES;
+		int r_lx = lx - (v_cx - r_cx), r_rx = rx - (v_cx - r_cx);
+		printf(CLEAR_SCREEN);
+		if (r_lx > 0 && r_lx <= w - SPLASH_WORD_LEN + 1) printf(CURSOR_POS STYLE_BOLD "mini" STYLE_RESET, v_cy, r_lx);
+		if (r_rx > 0 && r_rx <= w - SPLASH_WORD_LEN + 1) printf(CURSOR_POS STYLE_BOLD "nake" STYLE_RESET, v_cy, r_rx);
+		if (ty > 0 && ty <= h) printf(CURSOR_POS "🐍", ty, r_cx - SPLASH_OFFSET_S);
+		fflush(stdout);
+		usleep(SPLASH_USLEEP);
+	}
+
+	/* 2. Interactive: Centered blinking prompt with bottom-screen safety */
+	const char *msg = "Press ENTER to start";
+	int m_x = MAX(1, r_cx - ((int)strlen(msg) / 2));
+	int m_y = MIN(h - 1, MAX(v_cy + 1, v_cy + SPLASH_TITLE_TO_PROMPT_DIST));
+	tcflush(STDIN_FILENO, TCIFLUSH);
+	while (1) {
+		if (getchar() != EOF) break; /* Since O_NONBLOCK is active in initialize */
+		if (blink % SPLASH_BLINK_RATE == 0) {
+			if ((blink / SPLASH_BLINK_RATE) % 2 == 0) printf(CURSOR_POS "%s", m_y, m_x, msg);
+			else printf(CURSOR_POS "%*s", m_y, m_x, (int)strlen(msg), "");
+			fflush(stdout);
+		}
+		blink++;
+		usleep(SPLASH_USLEEP);
+	}
+	d->show_splash = 0;
+}
+
+void show_loading(void) {
+	printf(CLEAR_SCREEN "Loading...");
+	fflush(stdout);
+}
+
+/* Linear Congruential Generator (pseudo-random) synchronized with the server */
 uint32_t lcg_rand(uint32_t *seed) {
 	*seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
 	return *seed;
@@ -220,36 +288,13 @@ static void	setup_display(t_data *d) {
 	printf(STYLE_RESET CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS, d->height + 3, 1, d->height + 4, 1);
 }
 
-static void	handle_sig(int sig) {
-	clean_exit(128 + sig);
-}
-
-static void	setup_sig(void) {
-	const int			signals[] = {SIGINT, SIGQUIT, SIGTERM};
-	struct sigaction	sa;
-
-	sa.sa_handler = handle_sig;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = 0;
-	for (size_t i = 0; i < sizeof(signals) / sizeof(*signals); i++) {
-		if (sigaction(signals[i], &sa, NULL) == -1) {
-			perror("minisnake: sigaction failed");
-			clean_exit(EXIT_FAILURE);
-		}
-	}
-}
-
-void show_loading(void) {
-	printf(CLEAR_SCREEN "Loading...");
-	fflush(stdout);
-}
-
 static void	initialize(t_data *d) {
-	show_loading();
 	setup_terminal();
+	setup_sig();
+	splash_screen(d);
+	show_loading();
 	init_game(d);
 	setup_display(d);
-	setup_sig();
 }
 
 static void	finalize(t_data *d) {

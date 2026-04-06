@@ -18,7 +18,7 @@ void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
 # define BUF_PATH           256
 # define BUF_ENTRY          128
 # define BUF_TOKEN			33
-# define NUM_RULES          9
+# define NUM_RULES          10
 
 /* HTTP PARSING: Offsets and string lengths for minimal HTTP/1.x parsing */
 # define HTTP_MIN_LEN       12
@@ -221,6 +221,7 @@ int server_sync_rules(t_data *d) {
 	d->grow = atoi(fields[6]) - 1;
 	d->penalty_interval = atoi(fields[7]);
 	d->penalty_amount = atoi(fields[8]);
+	d->spawn_fruit_max_attempts = atoi(fields[9]);
 
 	return (1);
 }
