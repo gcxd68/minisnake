@@ -207,6 +207,7 @@ void		game_loop(t_data *d);
 /* minisnake_sys - System functions */
 void		splash_screen(t_data *d);
 void		show_loading(void);
+uint32_t	sys_rand(void);
 uint32_t	lcg_rand(uint32_t *seed);
 
 /* minisnake_net.c - Network functions */

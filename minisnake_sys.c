@@ -257,19 +257,20 @@ void show_loading(void) {
 	fflush(stdout);
 }
 
-/* Linear Congruential Generator (pseudo-random) synchronized with the server */
-uint32_t lcg_rand(uint32_t *seed) {
-	*seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
-	return *seed;
-}
-
-static void init_rand(void) {
+uint32_t sys_rand(void) {
 	static int	initialized = 0;
 
 	if (!initialized) {
 		srand((unsigned int)time(NULL));
 		initialized = 1;
 	}
+	return ((uint32_t)rand());
+}
+
+/* Linear Congruential Generator (pseudo-random) synchronized with the server */
+uint32_t lcg_rand(uint32_t *seed) {
+	*seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
+	return *seed;
 }
 
 static void	init_game(t_data *d) {
@@ -287,9 +288,8 @@ static void	init_game(t_data *d) {
 	if (d->online && !start_session(d))
 		d->online = 0;
 	memset(d->input_q, EOF, sizeof(d->input_q));
-	init_rand();
 	if (!d->online)
-		d->seed = rand();
+		d->seed = sys_rand();
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)(lcg_rand(&d->seed) % 2));
 	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)(lcg_rand(&d->seed) % 2));
 	for (int i = 1; i <= d->size + d->grow; i++) {

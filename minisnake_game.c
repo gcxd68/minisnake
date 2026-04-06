@@ -124,7 +124,7 @@ static void	update_game(t_data *d) {
 
 const char *fruit_color(void) {
 	static const char *palette[] = FRUIT_PALETTE;
-	return palette[rand() % ARR_SIZE(palette)];
+	return palette[sys_rand() % ARR_SIZE(palette)];
 }
 
 static void	render(t_data *d) {
