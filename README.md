@@ -6,9 +6,10 @@ A lightweight, terminal-based Snake game written in C with minimal dependencies.
 
 - 🎮 Classic Snake gameplay in your terminal
 - 🌐 Online leaderboard (pre-built release only)
-- 🎨 Unicode character graphics
+- 🎨 Unicode character graphics with a smooth linear-interpolation splash screen
 - ⚡ Progressive difficulty (speeds up as you grow)
 - 📏 Customizable game board dimensions
+- 🛡️ Advanced server-side anti-cheat with strict PRNG synchronization
 - 🎯 Score tracking
 
 ## Requirements
@@ -88,6 +89,12 @@ make
 
 Direct connection to Dreamlo from the client is no longer possible for security reasons. Minisnake now features an advanced **Server-Side Scoring Architecture**. The C client never sends its score directly; instead, it communicates with a proxy server via asynchronous HTTP pings every time a fruit is eaten. The server calculates the score securely while enforcing physical limits and timing constraints to prevent hacking.
 
+The anti-cheat backend incorporates several robust validation layers:
+1. **Synchronized PRNG**: Server and client utilize an identical Linear Congruential Generator (LCG) dropping low-order bits (`>> 16`) to predict exactly where fruits must spawn safely.
+2. **Speedhack & Teleport Filters**: Enforces minimum pathing (Manhattan distance) and minimum time delays factoring in the game's actual exponential speed-up.
+3. **Dynamic Degradation**: Penalty calculations are securely mirrored to slowly decay the score if the snake deliberately avoids eating fruits over time.
+4. **Structured Logging**: Fully timestamped, level-based logs track all warnings natively.
+
 #### 1. Server Setup (VPS)
 1. Go to the `server/` directory and create an `.env` file based on `.env.example` (or create one). Provide the desired port for the Python proxy:
    ```text
@@ -128,12 +135,14 @@ Direct connection to Dreamlo from the client is no longer possible for security 
 You can modify these constants in `minisnake.h`:
 
 **Gameplay & Board:**
-- `INITIAL_DELAY` — Starting game speed in microseconds (default: 250000)
-- `SPEEDUP_FACTOR` — Speed multiplier per fruit (default: 0.985f)
+- `DEF_INITIAL_DELAY` — Starting game speed in microseconds (default: 250000)
+- `DEF_SPEEDUP_FACTOR` — Speed multiplier per fruit (default: 0.985f)
+- `DEF_SPAWN_FRUIT_MAX_ATTEMPTS` — Loop safety limit preventing hangs on dense grids (default: 10000)
 - `INPUT_Q_SIZE` — Number of inputs buffered (default: 2)
 - `MIN_WIDTH` / `MAX_WIDTH` — Allowed board width range (default: 2 to 200)
 - `MIN_HEIGHT` / `MAX_HEIGHT` — Allowed board height range (default: 2 to 50)
-- `DEFAULT_WIDTH` / `DEFAULT_HEIGHT` — Default/Online mode board dimensions (default: 25x20)
+- `DEF_WIDTH` / `DEF_HEIGHT` — Default/Online mode board dimensions (default: 25x20)
+- `SPLASH_FRAMES` / `SPLASH_USLEEP` — Startup animation interpolations.
 
 **Controls & Text:**
 - `MOVE_KEYS` — Movement controls (default: "ADWS")
