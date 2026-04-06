@@ -45,11 +45,16 @@
 # define SPLASH_TITLE_MIN_ROW			3
 # define SPLASH_FRAMES					30
 # define SPLASH_OFFSET_MINI				5
-# define SPLASH_OFFSET_S				1
 # define SPLASH_OFFSET_NAKE				1
+# define SPLASH_OFFSET_SNAKE			1
 # define SPLASH_WORD_LEN				4
 # define SPLASH_SNAKE_START_Y			-MAX_HEIGHT
+# define SPLASH_MSG_PROMPT				"Press ENTER to start"
+# define SPLASH_MINI_CHAR				"mini"
+# define SPLASH_NAKE_CHAR				"nake"
+# define SPLASH_SNAKE_CHAR				"🐍"
 # define SPLASH_USLEEP					30000
+# define SPLASH_PROMPT_BOTTOM_MARGIN	1
 # define SPLASH_TITLE_TO_PROMPT_DIST	3
 # define SPLASH_BLINK_RATE				15
 

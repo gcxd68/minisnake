@@ -3,7 +3,7 @@ import time
 import secrets
 import sqlite3
 import logging
-from flask import Flask
+from flask import Flask, request
 from dotenv import load_dotenv
 
 # Load environment variables from the .env file
@@ -12,13 +12,26 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- Logging Configuration ---
-# Logs are formatted with timestamps and severity levels for easy debugging via 'tail -f gunicorn.log'
+# Custom Filter to inject client IP into every log record automatically
+class ContextFilter(logging.Filter):
+    def filter(self, record):
+        # request.remote_addr captures the client's IP
+        # We handle cases outside of request context (like startup) by defaulting to 'Server'
+        try:
+            record.client_ip = request.remote_addr
+        except RuntimeError:
+            record.client_ip = "Server"
+        return True
+
+# Logs are formatted with timestamps, severity levels, and client IP
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(asctime)s [%(levelname)s] %(client_ip)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
+
 logger = logging.getLogger(__name__)
+logger.addFilter(ContextFilter())
 
 # Look for PORT instead of VPS_PORT
 PORT = int(os.environ.get("PORT", 8000))
@@ -81,11 +94,18 @@ def get_token():
     token = secrets.token_hex(16)
     original_seed = secrets.randbits(31) 
     
+    # Simulate the initial C client offset logic to keep seeds synced
     current_seed = original_seed
+    
+    offset_x = 0
     if GAME_WIDTH % 2 == 0:
         current_seed = lcg_rand(current_seed)
+        offset_x = current_seed % 2
+
+    offset_y = 0
     if GAME_HEIGHT % 2 == 0:
         current_seed = lcg_rand(current_seed)
+        offset_y = current_seed % 2
 
     active_sessions[token] = {
         "score": 0,
@@ -93,8 +113,8 @@ def get_token():
         "last_ping": time.time(),
         "cheated": False,
         "seed": current_seed,
-        "last_x": (GAME_WIDTH // 2) - (1 if GAME_WIDTH % 2 == 0 else 0),
-        "last_y": (GAME_HEIGHT // 2) - (1 if GAME_HEIGHT % 2 == 0 else 0),
+        "last_x": (GAME_WIDTH // 2) - offset_x,
+        "last_y": (GAME_HEIGHT // 2) - offset_y,
         "last_steps": 0
     }
     
@@ -159,7 +179,7 @@ def eat_fruit(token, steps, fx, fy):
 
     if session["score"] >= MAX_SCORE:
         session["cheated"] = True
-        logger.warning(f"CHEAT (Limit): {token[:8]} | Score {session['score']} exceeded maximum board capacity.")
+        logger.warning(f"CHEAT (Limit): {token[:8]} | Score {session['score']} exceeded board capacity.")
         return "Score limit exceeded", 400
 
     session["last_ping"], session["last_x"], session["last_y"], session["last_steps"] = now, fx, fy, steps
@@ -187,14 +207,14 @@ def submit_score(token, name, steps):
         logger.error(f"BANNED SUBMISSION: Player '{name}' attempted to submit from flagged session.")
         return "Banned", 403
 
-    # Final degradation check for steps taken after the last fruit
+    # Final degradation check
     for step in range(session["last_steps"] + 1, steps + 1):
         if PENALTY_INTERVAL > 0 and step % PENALTY_INTERVAL == 0:
             session["score"] = max(0, session["score"] - PENALTY_AMOUNT)
 
     final_score = session["score"]
     if final_score <= 0 or final_score > MAX_SCORE:
-        logger.warning(f"SUBMIT REJECTED: Invalid calculated score {final_score} for '{name}'")
+        logger.warning(f"SUBMIT REJECTED: Invalid score {final_score} for '{name}'")
         return "Invalid Score", 400
 
     try:
@@ -206,7 +226,7 @@ def submit_score(token, name, steps):
         logger.info(f"SCORE SAVED: '{name}' | Score: {final_score} | Fruits: {session['fruits_eaten']}")
         return "OK", 200
     except Exception as e:
-        logger.error(f"Database write error: {e}")
+        logger.error(f"Database error: {e}")
         return "Backend Error", 500
 
 @app.route('/scores/<int:limit>', methods=['GET'])
@@ -219,7 +239,7 @@ def get_scores(limit):
         conn.close()
         return "".join([f"{r[0]}|{r[1]}|0|0\n" for r in rows]), 200
     except Exception as e:
-        logger.error(f"Database read error: {e}")
+        logger.error(f"Database error: {e}")
         return "Backend Error", 500
 
 if __name__ == '__main__':

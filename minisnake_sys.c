@@ -207,34 +207,43 @@ static void setup_sig(void) {
 void splash_screen(t_data *d) {
 	if (!d->show_splash) return;
 
-	int w = MAX(d->width + 2, (int)strlen(INSTRUCTIONS)), h = d->height + 4;
-	int v_cx = (MAX_WIDTH / 2) + 1, v_cy = MAX(SPLASH_TITLE_MIN_ROW, (d->height / 2) + 1);
-	int r_cx = (w / 2) + 1, blink = 0;
+	const int	w = MAX(d->width + 2, (int)strlen(INSTRUCTIONS)), h = d->height + 4;
+	const int	v_cx = (MAX_WIDTH / 2) + 1, v_cy = MAX(SPLASH_TITLE_MIN_ROW, (d->height / 2) + 1);
+	const int	r_cx = (w / 2) + 1;
 
 	/* 1. Animation: Smooth linear interpolation from virtual space to real center */
 	for (int i = 0; i <= SPLASH_FRAMES; i++) {
-		int lx = 1 + (v_cx - SPLASH_OFFSET_MINI - 1) * i / SPLASH_FRAMES;
-		int rx = (MAX_WIDTH - SPLASH_WORD_LEN) + (v_cx + SPLASH_OFFSET_NAKE - (MAX_WIDTH - SPLASH_WORD_LEN)) * i / SPLASH_FRAMES;
-		int ty = SPLASH_SNAKE_START_Y + (v_cy - SPLASH_SNAKE_START_Y) * i / SPLASH_FRAMES;
-		int r_lx = lx - (v_cx - r_cx), r_rx = rx - (v_cx - r_cx);
+		const int	lx = 1 + (v_cx - SPLASH_OFFSET_MINI - 1) * i / SPLASH_FRAMES;
+		const int	rx = (MAX_WIDTH - SPLASH_WORD_LEN) + (v_cx + SPLASH_OFFSET_NAKE - (MAX_WIDTH - SPLASH_WORD_LEN)) * i / SPLASH_FRAMES;
+		const int	ty = SPLASH_SNAKE_START_Y + (v_cy - SPLASH_SNAKE_START_Y) * i / SPLASH_FRAMES;
+		const int	r_lx = lx - (v_cx - r_cx), r_rx = rx - (v_cx - r_cx);
+
 		printf(CLEAR_SCREEN);
-		if (r_lx > 0 && r_lx <= w - SPLASH_WORD_LEN + 1) printf(CURSOR_POS STYLE_BOLD "mini" STYLE_RESET, v_cy, r_lx);
-		if (r_rx > 0 && r_rx <= w - SPLASH_WORD_LEN + 1) printf(CURSOR_POS STYLE_BOLD "nake" STYLE_RESET, v_cy, r_rx);
-		if (ty > 0 && ty <= h) printf(CURSOR_POS "🐍", ty, r_cx - SPLASH_OFFSET_S);
+		if (r_lx > 0 && r_lx <= w - SPLASH_WORD_LEN + 1) 
+			printf(CURSOR_POS STYLE_BOLD SPLASH_MINI_CHAR STYLE_RESET, v_cy, r_lx);
+		if (r_rx > 0 && r_rx <= w - SPLASH_WORD_LEN + 1) 
+			printf(CURSOR_POS STYLE_BOLD SPLASH_NAKE_CHAR STYLE_RESET, v_cy, r_rx);
+		if (ty > 0 && ty <= h) 
+			printf(CURSOR_POS SPLASH_SNAKE_CHAR, ty, r_cx - SPLASH_OFFSET_SNAKE);
+		
 		fflush(stdout);
 		usleep(SPLASH_USLEEP);
 	}
 
 	/* 2. Interactive: Centered blinking prompt with bottom-screen safety */
-	const char *msg = "Press ENTER to start";
-	int m_x = MAX(1, r_cx - ((int)strlen(msg) / 2));
-	int m_y = MIN(h - 1, MAX(v_cy + 1, v_cy + SPLASH_TITLE_TO_PROMPT_DIST));
+	const char	*msg = SPLASH_MSG_PROMPT;
+	const int	m_x = MAX(1, r_cx - ((int)strlen(msg) / 2));
+	const int	m_y = MIN(h - SPLASH_PROMPT_BOTTOM_MARGIN, MAX(v_cy + 1, v_cy + SPLASH_TITLE_TO_PROMPT_DIST));
+	int			blink = 0;
+
 	tcflush(STDIN_FILENO, TCIFLUSH);
 	while (1) {
-		if (getchar() != EOF) break; /* Since O_NONBLOCK is active in initialize */
+		if (getchar() != EOF) break;
 		if (blink % SPLASH_BLINK_RATE == 0) {
-			if ((blink / SPLASH_BLINK_RATE) % 2 == 0) printf(CURSOR_POS "%s", m_y, m_x, msg);
-			else printf(CURSOR_POS "%*s", m_y, m_x, (int)strlen(msg), "");
+			if ((blink / SPLASH_BLINK_RATE) % 2 == 0) 
+				printf(CURSOR_POS "%s", m_y, m_x, msg);
+			else 
+				printf(CURSOR_POS "%*s", m_y, m_x, (int)strlen(msg), "");
 			fflush(stdout);
 		}
 		blink++;
@@ -254,17 +263,31 @@ uint32_t lcg_rand(uint32_t *seed) {
 	return *seed;
 }
 
+static void init_rand(void) {
+	static int	initialized = 0;
+
+	if (!initialized) {
+		srand((unsigned int)time(NULL));
+		initialized = 1;
+	}
+}
+
 static void	init_game(t_data *d) {
 	static t_data	save_state;
 
 	if (!save_state.size)
 		save_state = *d;
-	else
-		*d = save_state;
-	memset(d->input_q, EOF, sizeof(d->input_q));
+	if (!d->online && save_state.online) {
+		save_state = DEFAULT_RULES;
+		save_state.width = DEF_WIDTH;
+		save_state.height = DEF_HEIGHT;
+		save_state.online = 0;
+	}
+	*d = save_state;
 	if (d->online && !start_session(d))
 		d->online = 0;
-	srand(time(NULL));
+	memset(d->input_q, EOF, sizeof(d->input_q));
+	init_rand();
 	if (!d->online)
 		d->seed = rand();
 	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)(lcg_rand(&d->seed) % 2));
