@@ -272,10 +272,9 @@ void notify_server(t_data *d, const char *action) {
 }
 
 static int end_session(t_data *d, const char *name) {
-	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
-
-	show_loading();
 	if (!d->token[0]) return (-1);
+
+	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
 	/* We only send the Token and the Name. The VPS already knows the score. */
 	snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
@@ -329,8 +328,10 @@ void handle_leaderboard(t_data *d) {
 		printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
 		fflush(stdout);
 		if (!read_name(name, sizeof(name))) return ;
-		ret = end_session(d, name);
 	}
+	show_loading();
+	if (d->score)
+		ret = end_session(d, name);
 	if (ret || show_leaderboard(d) < 0)
 		printf(CLEAR_SCREEN "Network error");
 }

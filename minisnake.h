@@ -61,7 +61,6 @@
 /* SYSTEM & I/O: Buffers, paths, and environment */
 # define BUF_GEOM						32
 # define BUF_CMD						512
-
 # define TERM_TITLE						"minisnake"
 # define ENV_VAR						"MINISNAKE_LAUNCHED"
 # define DEFAULT_EXE					"./minisnake"
@@ -81,6 +80,9 @@
 # endif
 # if DEF_INITIAL_DELAY < 0
 #  error "DEF_INITIAL_DELAY must be >= 0"
+# endif
+# if DEF_INITIAL_SIZE <= 0
+#  error "DEF_INITIAL_SIZE must be strictly positive"
 # endif
 # if INPUT_Q_SIZE <= 0
 #  error "INPUT_Q_SIZE must be > 0"
@@ -118,14 +120,23 @@
 # if SPLASH_FRAMES <= 0
 #  error "SPLASH_FRAMES must be greater than 0 to avoid division by zero"
 # endif
-# if SPLASH_BLINK_RATE <= 0
-#  error "SPLASH_BLINK_RATE must be greater than 0"
+# if SPLASH_OFFSET_MINI < 0 || SPLASH_OFFSET_NAKE < 0 || SPLASH_OFFSET_SNAKE < 0
+#  error "Splash offsets cannot be negative"
+# endif
+# if SPLASH_WORD_LEN <= 0
+#  error "SPLASH_WORD_LEN must be positive"
 # endif
 # if SPLASH_USLEEP < 0
 #  error "SPLASH_USLEEP cannot be negative"
 # endif
-# if SPLASH_WORD_LEN <= 0
-#  error "SPLASH_WORD_LEN must be positive"
+# if SPLASH_PROMPT_BOTTOM_MARGIN < 0
+#  error "SPLASH_PROMPT_BOTTOM_MARGIN cannot be negative"
+# endif
+# if SPLASH_TITLE_TO_PROMPT_DIST < 0
+#  error "SPLASH_TITLE_TO_PROMPT_DIST cannot be negative"
+# endif
+# if SPLASH_BLINK_RATE <= 0
+#  error "SPLASH_BLINK_RATE must be greater than 0"
 # endif
 # if BUF_GEOM <= 0 || BUF_CMD <= 0
 #  error "Buffer sizes must be strictly positive"

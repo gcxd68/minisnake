@@ -7,16 +7,16 @@ static void	anticheat(t_data *d) { (void)d; }
 
 #else
 
+# define DEBUG_CHECK_FREQ	10
+# define PROC_STATUS_PATH	"/proc/self/status"
+# define TRACER_LEN			10
+# define PROC_BUF_SIZE		256
+
 static long get_ms(void) {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
-
-# define DEBUG_CHECK_FREQ	10
-# define PROC_STATUS_PATH	"/proc/self/status"
-# define TRACER_LEN			10
-# define PROC_BUF_SIZE		256
 
 static void anticheat(t_data *d) {
 	static int	counter = 0;
