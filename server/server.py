@@ -123,12 +123,12 @@ def eat_fruit(token, steps, fx, fy):
     valid_fruit = False
     temp_seed = session["seed"]
     
-    # Allow up to 50 re-rolls to account for snake body collisions
-    for _ in range(50):
+    # Allow up to 10000 re-rolls to account for snake body collisions
+    for _ in range(10000):
         temp_seed = lcg_rand(temp_seed)
-        cand_x = temp_seed % GAME_WIDTH
+        cand_x = (temp_seed >> 16) % GAME_WIDTH
         temp_seed = lcg_rand(temp_seed)
-        cand_y = temp_seed % GAME_HEIGHT
+        cand_y = (temp_seed >> 16) % GAME_HEIGHT
         
         if cand_x == fx and cand_y == fy:
             valid_fruit = True
