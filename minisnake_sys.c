@@ -71,6 +71,8 @@ static int	ask_confirm(const char *question) {
 }
 
 static int	install_gnome_terminal(void) {
+	if (system("which gnome-terminal > /dev/null 2>&1") == 0)
+		return (LAUNCH_SPAWN);
 	if (ask_confirm("gnome-terminal is not installed.\n"
 		"It is recommended for a better user experience, but not required.\n"
 		"Would you like to install it? (y/n): ")) {
@@ -88,6 +90,20 @@ static int	install_gnome_terminal(void) {
 	return (EXIT_SUCCESS);
 }
 
+static void	install_emoji_fonts(void) {
+	if (system("dpkg -s fonts-noto-color-emoji > /dev/null 2>&1") == 0)
+		return;
+	if (ask_confirm("The package 'fonts-noto-color-emoji' is not installed.\n"
+		"It is required to display the snake emoji correctly.\n"
+		"Would you like to install it now? (y/n): ")) {
+		printf("Installing fonts-noto-color-emoji...\n");
+		if (system("sudo apt update && sudo apt install -y fonts-noto-color-emoji") != 0)
+			fprintf(stderr, "Installation failed. Please install it manually.\n");
+	}
+	else
+		printf("Installation skipped.\n");
+}
+
 /* Try to spawn a dedicated gnome-terminal window.
    If successful (LAUNCH_SPAWN), the current process is replaced by execvp
    and never reaches the game loop. If LAUNCH_LOCAL, play in current terminal. */
@@ -99,9 +115,10 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	/* ENV_VAR is set before execvp so the child process knows it's already in the dedicated terminal */
 	if (getenv(ENV_VAR))
 		return (LAUNCH_LOCAL);
-	if (system("which gnome-terminal > /dev/null 2>&1") != 0)
-		if ((ret = install_gnome_terminal()) != LAUNCH_SPAWN)
-			return (ret);
+	if ((ret = install_gnome_terminal()) > 2)
+		install_emoji_fonts();		
+	if (ret != LAUNCH_SPAWN)
+		return (ret);
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
 
