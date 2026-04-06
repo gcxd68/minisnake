@@ -70,19 +70,28 @@ static int	ask_confirm(const char *question) {
 	return (c == 'y' || c == 'Y');
 }
 
-static int	install_gnome_terminal(void) {
-	if (system("which gnome-terminal > /dev/null 2>&1") == 0)
-		return (LAUNCH_SPAWN);
-	if (ask_confirm("gnome-terminal is not installed.\n"
-		"It is recommended for a better user experience, but not required.\n"
-		"Would you like to install it? (y/n): ")) {
-		printf("Installing gnome-terminal...\n");
-		if (system("sudo apt update && sudo apt install -y gnome-terminal") == 0)
-			return (LAUNCH_SPAWN);
+static int	install_package(const char *pkg_name, const char *check_cmd) {
+	char	cmd[BUF_CMD];
+
+	if (system(check_cmd) == 0)
+		return (1);
+	printf("%s is not installed.\n"
+		"It is recommended for a better user experience, but not required.\n", pkg_name);
+	if (ask_confirm("Would you like to install it? (y/n): ")) {
+		printf("Installing %s...\n", pkg_name);
+		snprintf(cmd, sizeof(cmd), "sudo apt update && sudo apt install -y %s", pkg_name);
+		if (system(cmd) == 0)
+			return (1);
 		fprintf(stderr, "Installation failed. Please install it manually.\n");
 	}
 	else
 		printf("Installation skipped.\n");
+	return (0);
+}
+
+static int	install_gnome_terminal(void) {
+	if (install_package("gnome-terminal", "which gnome-terminal > /dev/null 2>&1"))
+		return (LAUNCH_SPAWN);
 
 	/* Fall back to running in the current terminal if the user agrees */
 	if (ask_confirm("Would you like to use the current terminal instead? (y/n): "))
@@ -91,17 +100,7 @@ static int	install_gnome_terminal(void) {
 }
 
 static void	install_emoji_fonts(void) {
-	if (system("dpkg -s fonts-noto-color-emoji > /dev/null 2>&1") == 0)
-		return;
-	if (ask_confirm("The package 'fonts-noto-color-emoji' is not installed.\n"
-		"It is required to display the snake emoji correctly.\n"
-		"Would you like to install it now? (y/n): ")) {
-		printf("Installing fonts-noto-color-emoji...\n");
-		if (system("sudo apt update && sudo apt install -y fonts-noto-color-emoji") != 0)
-			fprintf(stderr, "Installation failed. Please install it manually.\n");
-	}
-	else
-		printf("Installation skipped.\n");
+	install_package("fonts-noto-color-emoji", "dpkg -s fonts-noto-color-emoji > /dev/null 2>&1");
 }
 
 /* Try to spawn a dedicated gnome-terminal window.
