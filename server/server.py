@@ -21,6 +21,8 @@ SPEEDUP_FACTOR = 0.985
 POINTS_PER_FRUIT = 10
 CHEAT_TIMEOUT = 5000
 INITIAL_SIZE = 1
+PENALTY_INTERVAL = 10
+PENALTY_AMOUNT = 1
 MIN_PING_INTERVAL = 0.05
 MAX_SCORE = GAME_WIDTH * GAME_HEIGHT * POINTS_PER_FRUIT
 
@@ -58,9 +60,9 @@ def cleanup_stale_sessions():
 def get_rules():
     """ 
     Public endpoint to fetch game dimensions and rules without spawning a session token.
-    Returns: format 'width|height|delay|speedup_factor|points|cheat_timeout|initial_size'
+    Returns: format 'width|height|delay|speedup_factor|points|cheat_timeout|initial_size|penalty_interval|penalty_amount'
     """
-    return f"{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}|{INITIAL_SIZE}", 200
+    return f"{GAME_WIDTH}|{GAME_HEIGHT}|{INITIAL_DELAY}|{SPEEDUP_FACTOR}|{POINTS_PER_FRUIT}|{CHEAT_TIMEOUT}|{INITIAL_SIZE}|{PENALTY_INTERVAL}|{PENALTY_AMOUNT}", 200
 
 @app.route('/token', methods=['GET'])
 def get_token():
@@ -70,19 +72,36 @@ def get_token():
     """
     cleanup_stale_sessions()
     token = secrets.token_hex(16)
-    seed = secrets.randbits(31) # 31-bit seed for C compatibility
+    original_seed = secrets.randbits(31) # 31-bit seed for C compatibility
     
+    # --- SEED BURN LOGIC ---
+    # Simulate the C client's initial placement to keep the RNG sequence perfectly synced
+    current_seed = original_seed
+    
+    offset_x = 0
+    if GAME_WIDTH % 2 == 0:
+        current_seed = lcg_rand(current_seed)
+        offset_x = current_seed % 2
+        
+    offset_y = 0
+    if GAME_HEIGHT % 2 == 0:
+        current_seed = lcg_rand(current_seed)
+        offset_y = current_seed % 2
+    # -----------------------
+
     active_sessions[token] = {
         "score": 0,
         "fruits_eaten": 0,
         "last_ping": time.time(),
         "cheated": False,
-        "seed": seed,
-        "last_x": GAME_WIDTH // 2, # Default starting X position
-        "last_y": GAME_HEIGHT // 2, # Default starting Y position
-        "last_steps": 0            # Track global steps across the whole game
+        "seed": current_seed, # Important: Store the seed AFTER the initial burn
+        "last_x": (GAME_WIDTH // 2) - offset_x,
+        "last_y": (GAME_HEIGHT // 2) - offset_y,
+        "last_steps": 0
     }
-    return f"{token}|{seed}", 200
+    
+    # We return the original, unburned seed to the client so it can do the exact same math!
+    return f"{token}|{original_seed}", 200
 
 @app.route('/eat/<token>/<int:steps>/<int:fx>/<int:fy>', methods=['GET'])
 def eat_fruit(token, steps, fx, fy):
@@ -142,11 +161,11 @@ def eat_fruit(token, steps, fx, fy):
         return "Speedhack detected", 400
 
     # --- 4. EXACT SCORE DEGRADATION MATCHING THE C CLIENT ---
-    # The server loops over the exact step interval to apply the 2-point penalty every 10 steps
+    # The server loops over the exact step interval to apply the dynamic penalty
     for step in range(session["last_steps"] + 1, steps + 1):
-        if step % 10 == 0:
-            if session["score"] >= 2:
-                session["score"] -= 2
+        if PENALTY_INTERVAL > 0 and step % PENALTY_INTERVAL == 0:
+            if session["score"] >= PENALTY_AMOUNT:
+                session["score"] -= PENALTY_AMOUNT
             else:
                 session["score"] = 0 # Hard floor at 0
 
@@ -191,11 +210,11 @@ def submit_score(token, name, steps):
     else:
         # Apply degradation penalty for the final steps taken before dying
         for step in range(session["last_steps"] + 1, steps + 1):
-            if step % 10 == 0:
-                if session["score"] >= 2:
-                    session["score"] -= 2
+            if PENALTY_INTERVAL > 0 and step % PENALTY_INTERVAL == 0:
+                if session["score"] >= PENALTY_AMOUNT:
+                    session["score"] -= PENALTY_AMOUNT
                 else:
-                    session["score"] = 0
+                    session["score"] = 0 # Hard floor at 0
                     
         final_score = session["score"]
         if final_score == 0:

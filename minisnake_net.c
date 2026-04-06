@@ -4,8 +4,8 @@
 
 /* STUBS: network functions are disabled in offline builds */
 void    handle_leaderboard(t_data *d) { (void)d; }
-void	server_sync_rules(t_data *d) { (void)d; }
-void	start_session(t_data *d) { (void)d; }
+int		server_sync_rules(t_data *d) { (void)d; return (0); }
+int		start_session(t_data *d) { (void)d; return (0); }
 void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
 
 #else
@@ -18,7 +18,7 @@ void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
 # define BUF_PATH           256
 # define BUF_ENTRY          128
 # define BUF_TOKEN			33
-# define NUM_RULES          7
+# define NUM_RULES          9
 
 /* HTTP PARSING: Offsets and string lengths for minimal HTTP/1.x parsing */
 # define HTTP_MIN_LEN       12
@@ -194,23 +194,21 @@ static char *skip_headers(char *response) {
 }
 
 /* Initialization 1: Fetch game dimensions and rules from the server dynamically */
-void server_sync_rules(t_data *d) {
-	if (!d->online) return;
-
+int server_sync_rules(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
 	char	*saveptr, *body;
 	char	*fields[NUM_RULES];
 
 	if (http_get("/rules", resp, sizeof(resp)) != 0)
-		return;
+		return (0);
 
 	body = skip_headers(resp);
 	fields[0] = strtok_r(body, "|", &saveptr);
-	if (!fields[0]) return;
+	if (!fields[0]) return (0);
 
 	for (int i = 1; i < NUM_RULES; i++) {
 		fields[i] = strtok_r(NULL, "|", &saveptr);
-		if (!fields[i]) return;
+		if (!fields[i]) return (0);
 	}
 
 	/* Safely convert and apply server rules to game data */
@@ -221,34 +219,39 @@ void server_sync_rules(t_data *d) {
 	d->points_per_fruit = atoi(fields[4]);
 	d->cheat_timeout = atoi(fields[5]);
 	d->grow = atoi(fields[6]) - 1;
+	d->penalty_interval = atoi(fields[7]);
+	d->penalty_amount = atoi(fields[8]);
+
+	return (1);
 }
 
 /* Initialization 2: Fetch a specific session token AND seed for the current game instance */
-void start_session(t_data *d) {
-	if (!d->online) return;
+int start_session(t_data *d) {
+	if (!d->online) return (0);
 
 	char    resp[BUF_RESP_SUBMIT];
 	char    *body, *saveptr, *token_str, *seed_str;
 
-	/* Invalidate any existing session */
+	/* 1. Invalidate any existing session */
 	d->token[0] = '\0';
 	if (http_get("/token", resp, sizeof(resp)) != 0)
-		return;
+		return (0);
 	body = skip_headers(resp);
 	
-	/* 1. Extract the Token */
+	/* 2. Extract the Token */
 	token_str = strtok_r(body, "|", &saveptr);
-	if (token_str) {
-		strncpy(d->token, token_str, BUF_TOKEN - 1);
-		d->token[BUF_TOKEN - 1] = '\0';
-		
-		/* 2. Extract the Seed */
-		seed_str = strtok_r(NULL, "|", &saveptr);
-		if (seed_str) {
-			/* Convert the string seed to unsigned 32-bit integer */
-			d->seed = (uint32_t)strtoul(seed_str, NULL, 10);
-		}
-	}
+	if (!token_str) return (0);
+
+	strncpy(d->token, token_str, BUF_TOKEN - 1);
+	d->token[BUF_TOKEN - 1] = '\0';
+	
+	/* 3. Extract the Seed */
+	seed_str = strtok_r(NULL, "|", &saveptr);
+	if (!seed_str) return (0);
+
+	/* 4. Convert the string seed to unsigned 32-bit integer */
+	d->seed = (uint32_t)strtoul(seed_str, NULL, 10);
+	return (1);
 }
 
 /* Asynchronous Ping: Spawns a background request to notify the server of an event */
@@ -270,8 +273,7 @@ void notify_server(t_data *d, const char *action) {
 static int end_session(t_data *d, const char *name) {
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
-	printf(CLEAR_SCREEN "Submitting...");
-	fflush(stdout);
+	show_loading();
 	if (!d->token[0]) return (-1);
 
 	/* We only send the Token and the Name. The VPS already knows the score. */

@@ -37,6 +37,8 @@
 # define INPUT_Q_SIZE			2
 # define DEF_POINTS_PER_FRUIT	10
 # define DEF_CHEAT_TIMEOUT		5000
+# define DEF_PENALTY_INTERVAL	10
+# define DEF_PENALTY_AMOUNT		1
 
 /* SYSTEM & I/O: Buffers, paths, and environment */
 # define BUF_GEOM				32
@@ -70,6 +72,12 @@
 # endif
 # if DEF_CHEAT_TIMEOUT < 0
 #  error "DEF_CHEAT_TIMEOUT must be >= 0"
+# endif
+# if DEF_PENALTY_INTERVAL < 0
+#  error "DEF_PENALTY_INTERVAL must be >= 0 (0 to disable penalty)"
+# endif
+# if DEF_PENALTY_AMOUNT < 0
+#  error "DEF_PENALTY_AMOUNT must be >= 0"
 # endif
 # if MIN_WIDTH * MIN_HEIGHT > 10000
 #  error "Minimum board size exceeds maximum snake capacity (10000)"
@@ -131,6 +139,8 @@
 	.grow = DEF_INITIAL_SIZE - 1, \
 	.points_per_fruit = DEF_POINTS_PER_FRUIT, \
 	.cheat_timeout = DEF_CHEAT_TIMEOUT, \
+	.penalty_interval = DEF_PENALTY_INTERVAL, \
+	.penalty_amount = DEF_PENALTY_AMOUNT, \
 	.delay = DEF_INITIAL_DELAY, \
 	.speedup_factor = DEF_SPEEDUP_FACTOR \
 }
@@ -142,7 +152,7 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int			size, grow, points_per_fruit, cheat_timeout;
+	int			size, grow, points_per_fruit, cheat_timeout, penalty_interval, penalty_amount;
 	float		delay, speedup_factor;
 	int			width, height, fruit_x, fruit_y, score, game_over, online, cheat, steps;
 	uint32_t	seed;
@@ -151,16 +161,21 @@ typedef struct s_data {
 	char		token[33];
 }	t_data;
 
-void		enable_raw_mode(void);
-void		disable_raw_mode(void);
-void		game_loop(t_data *d);
+/* minisnake_game - Gameplay functions */
 void		spawn_fruit(t_data *d);
 const char	*fruit_color(void);
+void		game_loop(t_data *d);
 
-/* Network functions */
+/* minisnake_sys - System functions */
+void		show_loading(void);
+void		enable_raw_mode(void);
+void		disable_raw_mode(void);
+uint32_t	lcg_rand(uint32_t *seed);
+
+/* minisnake_net.c - Network functions */
 void		handle_leaderboard(t_data *d);
-void		server_sync_rules(t_data *d);
-void		start_session(t_data *d);
+int			server_sync_rules(t_data *d);
+int			start_session(t_data *d);
 void		notify_server(t_data *d, const char *action);
 
 #endif

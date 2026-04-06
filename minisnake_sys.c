@@ -25,8 +25,8 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 
 #ifdef ONLINE_BUILD
 		/* Override local dimensions with server competitive rules before spawning the terminal GUI */
-		d->online = 1;
-		server_sync_rules(d);
+		if (server_sync_rules(d))
+			d->online = 1;
 #else
 
 		/* If network is NOT compiled in, but the user explicitly typed "online", warn them */
@@ -180,6 +180,12 @@ static void	setup_terminal(void) {
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
 }
 
+/* Pseudo-random generator synchronized with the server */
+uint32_t lcg_rand(uint32_t *seed) {
+	*seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
+	return *seed;
+}
+
 static void	init_game(t_data *d) {
 	static t_data	save_state;
 
@@ -187,11 +193,14 @@ static void	init_game(t_data *d) {
 		save_state = *d;
 	else
 		*d = save_state;
-	start_session(d);
 	memset(d->input_q, EOF, sizeof(d->input_q));
+	if (d->online && !start_session(d))
+		d->online = 0;
 	srand(time(NULL));
-	d->x[0] = (d->width >> 1);// - (d->width % 2 ? 0 : rand() % 2);
-	d->y[0] = (d->height >> 1);// - (d->height % 2 ? 0 : rand() % 2);
+	if (!d->online)
+		d->seed = rand();
+	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)(lcg_rand(&d->seed) % 2));
+	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)(lcg_rand(&d->seed) % 2));
 	for (int i = 1; i <= d->size + d->grow; i++) {
 		d->x[i] = d->x[0];
 		d->y[i] = d->y[0];
@@ -230,7 +239,13 @@ static void	setup_sig(void) {
 	}
 }
 
+void show_loading(void) {
+    printf(CLEAR_SCREEN "Loading...");
+    fflush(stdout);
+}
+
 static void	initialize(t_data *d) {
+	show_loading();
 	setup_terminal();
 	init_game(d);
 	setup_display(d);
@@ -260,7 +275,6 @@ int	main(int argc, char **argv) {
 
 	do {
 		initialize(&d);
-		// start_session(&d);
 		game_loop(&d);
 		finalize(&d);
 	} while (ask_confirm("Play again? (y/n): "));

@@ -33,8 +33,9 @@ static void anticheat(t_data *d) {
 	}
 
 	/* Validate score progression dynamically */
+	int current_penalty = (d->penalty_interval > 0) ? (d->steps / d->penalty_interval) * d->penalty_amount : 0;
 	if (d->score < 0
-		|| d->score > d->width * d->height * d->points_per_fruit - d->steps / 10
+		|| d->score > d->width * d->height * d->points_per_fruit - current_penalty
 		|| now - last_frame > d->cheat_timeout) {
 		d->cheat = 1;
 		notify_server(d, "cheat");
@@ -81,12 +82,6 @@ static void	process_input(t_data *d) {
 		d->input_q[i] = d->input_q[i + 1];
 }
 
-/* Pseudo-random generator synchronized with the server */
-static uint32_t lcg_rand(uint32_t *seed) {
-	*seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
-	return *seed;
-}
-
 void spawn_fruit(t_data *d) {
 	int i;
 
@@ -99,9 +94,11 @@ void spawn_fruit(t_data *d) {
 
 static void	update_game(t_data *d) {
 	if (!d->dir[0]) return;
-		d->steps++;
-	if (d->steps % 10 == 0 && d->score)
-		d->score--;
+	d->steps++;
+	if (d->penalty_interval > 0 && d->steps % d->penalty_interval == 0)
+		d->score -= d->penalty_amount;
+	if (d->score < 0)
+		d->score = 0;
 	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
@@ -144,7 +141,7 @@ static void	render(t_data *d) {
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
 			d->fruit_y + 2, d->fruit_x + 2, fruit_color());
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
-	printf(CURSOR_POS "%d \n", d->height + 3, 8, d->score);
+	printf(STYLE_RESET CURSOR_POS "%d \n", d->height + 3, 8, d->score);
 }
 
 void	game_loop(t_data *d) {
