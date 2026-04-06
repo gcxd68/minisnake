@@ -240,8 +240,8 @@ static void	setup_sig(void) {
 }
 
 void show_loading(void) {
-    printf(CLEAR_SCREEN "Loading...");
-    fflush(stdout);
+	printf(CLEAR_SCREEN "Loading...");
+	fflush(stdout);
 }
 
 static void	initialize(t_data *d) {
