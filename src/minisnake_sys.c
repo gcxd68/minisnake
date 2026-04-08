@@ -70,37 +70,43 @@ static int	ask_confirm(const char *question) {
 	return (c == 'y' || c == 'Y');
 }
 
-static int	install_package(const char *pkg_name, const char *check_cmd) {
-	char	cmd[BUF_CMD];
+static int	install_dependencies(void) {
+	const int		need_term = system("which gnome-terminal > /dev/null 2>&1");
+	const int		need_font = system("dpkg -s fonts-noto-color-emoji > /dev/null 2>&1");
 
-	if (system(check_cmd) == 0)
-		return (1);
-	printf("%s is not installed.\n"
-		"It is recommended for a better user experience, but not required.\n", pkg_name);
-	if (ask_confirm("Would you like to install it? (y/n): ")) {
-		printf("Installing %s...\n", pkg_name);
-		snprintf(cmd, sizeof(cmd), "sudo apt update && sudo apt install -y %s", pkg_name);
-		if (system(cmd) == 0)
-			return (1);
-		fprintf(stderr, "Installation failed. Please install it manually.\n");
+	/* 1. If everything is already installed, proceed directly */
+	if (!need_term && !need_font) return (LAUNCH_SPAWN);
+
+	const int	has_apt = (system("command -v apt > /dev/null 2>&1") == 0);
+	char		cmd[BUF_CMD] = "sudo apt update && sudo apt install -y";
+
+	/* 2. If packages are missing AND we are on Ubuntu/Debian */
+	if (has_apt && (need_term != 0 || need_font != 0)) {
+		printf("For the best visual experience, these packages are recommended:\n");
+		if (need_term) {
+			printf("- gnome-terminal\n");
+			strcat(cmd, " gnome-terminal");
+		}
+		if (need_font) {
+			printf("- fonts-noto-color-emoji\n");
+			strcat(cmd, " fonts-noto-color-emoji");
+		}
+		if (ask_confirm("Would you like to install them now? (y/n): ")) {
+			printf("Installing dependencies...\n");
+			if (system(cmd) == 0)
+				return (LAUNCH_SPAWN);
+			fprintf(stderr, "Installation failed.\n");
+		} else
+			printf("Installation skipped.\n");
+	} else if (!has_apt && need_term != 0) {
+		/* If on macOS or other distros, just warn them gracefully */
+		printf("Notice: 'gnome-terminal' is not installed on this system.\n");
 	}
-	else
-		printf("Installation skipped.\n");
-	return (0);
-}
 
-static int	install_gnome_terminal(void) {
-	if (install_package("gnome-terminal", "which gnome-terminal > /dev/null 2>&1"))
-		return (LAUNCH_SPAWN);
-
-	/* Fall back to running in the current terminal if the user agrees */
-	if (ask_confirm("Would you like to use the current terminal instead? (y/n): "))
+	/* 3. Fallback: gnome-terminal is still missing */
+	if (ask_confirm("Would you like to play in the current terminal instead? (y/n): "))
 		return (LAUNCH_LOCAL);
-	return (EXIT_SUCCESS);
-}
-
-static void	install_emoji_fonts(void) {
-	install_package("fonts-noto-color-emoji", "dpkg -s fonts-noto-color-emoji > /dev/null 2>&1");
+	return (EXIT_SUCCESS); /* The player refused, exit the game cleanly */
 }
 
 /* Try to spawn a dedicated gnome-terminal window.
@@ -114,10 +120,11 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	/* ENV_VAR is set before execvp so the child process knows it's already in the dedicated terminal */
 	if (getenv(ENV_VAR))
 		return (LAUNCH_LOCAL);
-	if ((ret = install_gnome_terminal()) > 2)
-		install_emoji_fonts();		
-	if (ret != LAUNCH_SPAWN)
+	
+	/* Delegate all environment checks and prompt to our smart installer */
+	if ((ret = install_dependencies()) != LAUNCH_SPAWN)
 		return (ret);
+		
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
 
@@ -131,6 +138,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
 	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
 		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+	
 	/* Dark theme for a better visual experience */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
