@@ -42,26 +42,26 @@ type Session struct {
 	LastPing    time.Time
 	Cheated     bool
 	Seed        uint32
-	LastX       int
-	LastY       int
+	HeadX       int // Represents the true X position of the snake's head
+	HeadY       int // Represents the true Y position of the snake's head
 	LastSteps   int
 }
 
 // Global state
 var (
-	db             *sql.DB // Go's sql.DB is a thread-safe connection pool
+	db             *sql.DB
 	activeSessions = make(map[string]*Session)
-	sessionMutex   sync.RWMutex // Protects activeSessions from concurrent read/writes
+	sessionMutex   sync.RWMutex
 )
 
 // --- Helper Functions ---
 
-// lcgRand: Pseudo-random generator synchronized with the C client (LCG algorithm)
+// lcgRand: Pseudo-random generator synchronized with the C client
 func lcgRand(seed uint32) uint32 {
 	return (seed*1103515245 + 12345) & 0x7fffffff
 }
 
-// applyPenalties: Centralized degradation logic.
+// applyPenalties: Deducts points if the player takes too many steps without eating
 func applyPenalties(session *Session, newSteps int) {
 	if PenaltyInterval <= 0 {
 		return
@@ -76,7 +76,7 @@ func applyPenalties(session *Session, newSteps int) {
 	}
 }
 
-// flagCheater: Centralized cheating flag execution.
+// flagCheater: Centralized cheating flag execution
 func flagCheater(token string, reason string, logMsg string, ip string) {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
@@ -86,7 +86,7 @@ func flagCheater(token string, reason string, logMsg string, ip string) {
 	}
 }
 
-// getRemoteIP: Extracts the client IP for logging purposes
+// getRemoteIP: Extracts the client IP for logging
 func getRemoteIP(r *http.Request) string {
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -97,7 +97,6 @@ func getRemoteIP(r *http.Request) string {
 
 // --- Database Management ---
 
-// initDB: Creates the local database file and table if they don't exist.
 func initDB() {
 	var err error
 	db, err = sql.Open("sqlite3", DBPath)
@@ -116,13 +115,13 @@ func initDB() {
 	log.Println("[Server] Database initialized successfully.")
 }
 
-// cleanupStaleSessions: Removes sessions inactive for > 15 minutes.
 func cleanupStaleSessions() {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
 	now := time.Now()
 	removed := 0
 	for token, session := range activeSessions {
+		// Remove sessions inactive for more than 15 minutes
 		if now.Sub(session.LastPing).Seconds() > 900 {
 			delete(activeSessions, token)
 			removed++
@@ -149,11 +148,12 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	rand.Read(bytes)
 	token := hex.EncodeToString(bytes)
 
-	// Generate 31-bit seed (matching Python's secrets.randbits(31))
+	// Generate 31-bit seed
 	seedBytes := make([]byte, 4)
 	rand.Read(seedBytes)
 	originalSeed := (uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3])) & 0x7fffffff
 
+	// Seed advancement logic (offset) required to maintain cryptographic sync with the C client
 	currentSeed := originalSeed
 	offsetX := 0
 	if GameWidth%2 == 0 {
@@ -167,6 +167,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		offsetY = int(currentSeed % 2)
 	}
 
+	// Initialize session with the snake's starting position based on the offset
 	sessionMutex.Lock()
 	activeSessions[token] = &Session{
 		Score:       0,
@@ -174,8 +175,8 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		LastPing:    time.Now(),
 		Cheated:     false,
 		Seed:        currentSeed,
-		LastX:       (GameWidth / 2) - offsetX,
-		LastY:       (GameHeight / 2) - offsetY,
+		HeadX:       (GameWidth / 2) - offsetX,
+		HeadY:       (GameHeight / 2) - offsetY,
 		LastSteps:   0,
 	}
 	sessionMutex.Unlock()
@@ -210,7 +211,9 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Fruit Validation
+	// 1. Fruit Validation (Implicit body collision bypass)
+	// The server searches forward. If the client skipped RNG values due to body collisions,
+	// the server will naturally fast-forward to the matching valid fruit.
 	validFruit := false
 	tempSeed := session.Seed
 	for i := 0; i < SpawnFruitMaxAttempts; i++ {
@@ -221,7 +224,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 		if candX == fx && candY == fy {
 			validFruit = true
-			session.Seed = tempSeed
+			session.Seed = tempSeed // Sync seed to the accepted fruit
 			break
 		}
 	}
@@ -234,8 +237,8 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Manhattan Distance
-	manhattan := int(math.Abs(float64(fx-session.LastX)) + math.Abs(float64(fy-session.LastY)))
+	// 2. Manhattan Distance (Calculated from current head position to new fruit)
+	manhattan := int(math.Abs(float64(fx-session.HeadX)) + math.Abs(float64(fy-session.HeadY)))
 	if deltaSteps < manhattan {
 		session.Cheated = true
 		sessionMutex.Unlock()
@@ -269,10 +272,10 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5. Update State
+	// 5. Update State (Snake's head is now on the fruit it just ate)
 	session.LastPing = now
-	session.LastX = fx
-	session.LastY = fy
+	session.HeadX = fx
+	session.HeadY = fy
 	session.LastSteps = steps
 	sessionMutex.Unlock()
 
@@ -290,10 +293,11 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	steps, _ := strconv.Atoi(r.PathValue("steps"))
 	ip := getRemoteIP(r)
 
+	// Safely detach the session from the global map to prevent race conditions or double-submits
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 	if exists {
-		delete(activeSessions, token) // Remove session immediately (pop equivalent)
+		delete(activeSessions, token)
 	}
 	sessionMutex.Unlock()
 
@@ -315,6 +319,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		session.Score = 0
 	}
 
+	// Apply final penalties based on steps taken since the last fruit was eaten
 	if session.Score > 0 {
 		applyPenalties(session, steps)
 	}
@@ -365,7 +370,10 @@ func handleScores(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	godotenv.Load()
+	// Log error if .env is missing to prevent silent failures
+	if err := godotenv.Load(); err != nil {
+		log.Println("[Warning] No .env file found or error reading it. Relying on system environment variables.")
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -373,7 +381,7 @@ func main() {
 	}
 
 	initDB()
-	defer db.Close() // Ensure DB closes gracefully when server stops
+	defer db.Close()
 
 	// HTTP Routing (Go 1.22+ syntax)
 	http.HandleFunc("GET /rules", handleRules)

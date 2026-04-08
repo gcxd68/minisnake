@@ -32,7 +32,7 @@ logger.addFilter(ContextFilter())
 
 # --- Configuration & Game Rules ---
 PORT = int(os.environ.get("PORT", 8000))
-DB_PATH = 'scores.db' # Refactored: Centralized database path
+DB_PATH = 'scores.db'
 
 GAME_WIDTH = 25
 GAME_HEIGHT = 20
@@ -55,10 +55,7 @@ def lcg_rand(seed):
     return (seed * 1103515245 + 12345) & 0x7fffffff
 
 def apply_penalties(session, new_steps):
-    """ 
-    Refactored: Centralized degradation logic.
-    Applies score penalties if the player takes too many steps without eating. 
-    """
+    """ Applies score penalties if the player takes too many steps without eating. """
     if PENALTY_INTERVAL <= 0:
         return
         
@@ -67,17 +64,15 @@ def apply_penalties(session, new_steps):
             session["score"] = max(0, session["score"] - PENALTY_AMOUNT)
 
 def flag_cheater(token, reason, log_msg):
-    """ 
-    Refactored: Centralized cheating flag execution to reduce code duplication.
-    """
-    active_sessions[token]["cheated"] = True
-    logger.warning(f"CHEAT ({reason}): {token[:8]} | {log_msg}")
+    """ Centralized cheating flag execution. """
+    if token in active_sessions:
+        active_sessions[token]["cheated"] = True
+        logger.warning(f"CHEAT ({reason}): {token[:8]} | {log_msg}")
 
 # --- Database Management ---
 def init_db():
     """ Creates the local database file and table if they don't exist. """
     try:
-        # Refactored: Using context manager ('with') for safe transaction handling
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute('''CREATE TABLE IF NOT EXISTS scores
                          (name TEXT, score INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
@@ -106,11 +101,12 @@ def get_rules():
 
 @app.route('/token', methods=['GET'])
 def get_token():
-    """ Spawns a new session with synchronized seed. """
+    """ Spawns a new session with synchronized seed and appropriate offset start position. """
     cleanup_stale_sessions()
     token = secrets.token_hex(16)
     original_seed = secrets.randbits(31) 
     
+    # Seed advancement logic (offset) required to maintain cryptographic sync with the C client
     current_seed = original_seed
     offset_x = 0
     if GAME_WIDTH % 2 == 0:
@@ -128,8 +124,8 @@ def get_token():
         "last_ping": time.time(),
         "cheated": False,
         "seed": current_seed,
-        "last_x": (GAME_WIDTH // 2) - offset_x,
-        "last_y": (GAME_HEIGHT // 2) - offset_y,
+        "head_x": (GAME_WIDTH // 2) - offset_x,
+        "head_y": (GAME_HEIGHT // 2) - offset_y,
         "last_steps": 0
     }
     
@@ -151,6 +147,7 @@ def eat_fruit(token, steps, fx, fy):
         return "Invalid steps", 400
 
     # 1. Fruit Validation
+    # Server iterates forward. Implicitly bypasses body-collision RNG skips.
     valid_fruit = False
     temp_seed = session["seed"]
     for _ in range(SPAWN_FRUIT_MAX_ATTEMPTS):
@@ -161,15 +158,15 @@ def eat_fruit(token, steps, fx, fy):
         
         if cand_x == fx and cand_y == fy:
             valid_fruit = True
-            session["seed"] = temp_seed
+            session["seed"] = temp_seed # Sync seed to the accepted fruit
             break
 
     if not valid_fruit:
         flag_cheater(token, "RNG", f"Client fruit at ({fx},{fy}) not in server sequence.")
         return "Invalid fruit", 400
 
-    # 2. Manhattan Distance (Speedhack/Teleport)
-    manhattan = abs(fx - session["last_x"]) + abs(fy - session["last_y"])
+    # 2. Manhattan Distance (Calculated from current head position)
+    manhattan = abs(fx - session["head_x"]) + abs(fy - session["head_y"])
     if delta_steps < manhattan:
         flag_cheater(token, "Movement", f"{delta_steps} steps taken for dist {manhattan}")
         return "Impossible move", 400
@@ -183,7 +180,7 @@ def eat_fruit(token, steps, fx, fy):
         return "Speedhack detected", 400
 
     # 4. Score & Penalty Calculation
-    apply_penalties(session, steps) # Refactored: Call the helper function
+    apply_penalties(session, steps)
     session["score"] += POINTS_PER_FRUIT
     session["fruits_eaten"] += 1
 
@@ -193,8 +190,8 @@ def eat_fruit(token, steps, fx, fy):
 
     # 5. Update State
     session["last_ping"] = now
-    session["last_x"] = fx
-    session["last_y"] = fy
+    session["head_x"] = fx  # Snake's head is now on the fruit
+    session["head_y"] = fy
     session["last_steps"] = steps
     
     return "Yum", 200
@@ -202,8 +199,7 @@ def eat_fruit(token, steps, fx, fy):
 @app.route('/cheat/<token>', methods=['GET'])
 def flag_cheat(token):
     """ Endpoint for the client to report itself if local anti-cheat triggers. """
-    if token in active_sessions:
-        flag_cheater(token, "Local", "Local detection triggered.")
+    flag_cheater(token, "Local", "Local detection triggered.")
     return "Flagged", 200
 
 @app.route('/submit/<token>/<name>/<int:steps>', methods=['GET'])
@@ -212,7 +208,10 @@ def submit_score(token, name, steps):
     Finalizes a session and saves the score to the database.
     Always returns 200 OK to ensure a seamless UI transition for the client.
     """
-    if token not in active_sessions:
+    # Pop detaches the session from active_sessions immediately to prevent double submissions
+    session = active_sessions.pop(token, None)
+
+    if not session:
         logger.warning(f"SUBMIT REJECTED: Expired or invalid token {token[:8]}")
         return "OK", 200
     
@@ -220,14 +219,13 @@ def submit_score(token, name, steps):
         logger.warning(f"SUBMIT REJECTED: Invalid name '{name}' from {token[:8]}")
         return "OK", 200
 
-    session = active_sessions.pop(token)
-    
     if session["cheated"]:
         logger.error(f"BANNED SUBMISSION: Player '{name}' attempted to submit from flagged session. Forcing score to 0.")
         session["score"] = 0
 
+    # Apply final penalties before saving
     if session["score"] > 0:
-        apply_penalties(session, steps) # Refactored: Call the helper function
+        apply_penalties(session, steps)
 
     final_score = session["score"]
     
