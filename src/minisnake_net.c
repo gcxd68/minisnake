@@ -324,13 +324,15 @@ void handle_leaderboard(t_data *d) {
 	char	name[MAX_NAME_LEN + 1];
 	int		ret = 0;
 
-	if (d->score) {
-		printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
-		fflush(stdout);
-		if (!read_name(name, sizeof(name))) return ;
-	}
-	show_loading();
+	printf(CURSOR_POS ERASE_LINE "%s", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL,
+		d->score ? "Name: " : "Press enter to continue...");
+	fflush(stdout);
 	if (d->score)
+		read_name(name, sizeof(name));
+	else
+        for (int c; (c = getchar()) != '\n' && c != EOF;);
+	show_loading();
+	if (d->score && *name)
 		ret = end_session(d, name);
 	if (ret || show_leaderboard(d) < 0)
 		printf(CLEAR_SCREEN "Network error");
