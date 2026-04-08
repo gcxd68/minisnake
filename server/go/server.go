@@ -61,6 +61,16 @@ func lcgRand(seed uint32) uint32 {
 	return (seed*1103515245 + 12345) & 0x7fffffff
 }
 
+// isAlphanumeric: Simple XSS prevention for the player's name
+func isAlphanumeric(s string) bool {
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}
+
 // applyPenalties: Deducts points if the player takes too many steps without eating
 func applyPenalties(session *Session, newSteps int) {
 	if PenaltyInterval <= 0 {
@@ -68,10 +78,8 @@ func applyPenalties(session *Session, newSteps int) {
 	}
 	for step := session.LastSteps + 1; step <= newSteps; step++ {
 		if step%PenaltyInterval == 0 {
-			session.Score -= PenaltyAmount
-			if session.Score < 0 {
-				session.Score = 0
-			}
+			// Leveraging Go 1.21+ built-in max() function
+			session.Score = max(0, session.Score-PenaltyAmount)
 		}
 	}
 }
@@ -115,14 +123,15 @@ func initDB() {
 	log.Println("[Server] Database initialized successfully.")
 }
 
+// cleanupStaleSessions: Removes sessions inactive for more than 15 minutes.
+// Executed securely via a background ticker to prevent DoS attacks on the mutex.
 func cleanupStaleSessions() {
 	sessionMutex.Lock()
 	defer sessionMutex.Unlock()
-	now := time.Now()
 	removed := 0
 	for token, session := range activeSessions {
-		// Remove sessions inactive for more than 15 minutes
-		if now.Sub(session.LastPing).Seconds() > 900 {
+		// Leveraging Go 1.21+ time.Since for readability
+		if time.Since(session.LastPing).Seconds() > 900 {
 			delete(activeSessions, token)
 			removed++
 		}
@@ -141,8 +150,6 @@ func handleRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleToken(w http.ResponseWriter, r *http.Request) {
-	go cleanupStaleSessions() // Non-blocking background cleanup
-
 	// Generate 16-byte hex token
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
@@ -153,7 +160,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	rand.Read(seedBytes)
 	originalSeed := (uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3])) & 0x7fffffff
 
-	// Seed advancement logic (offset) required to maintain cryptographic sync with the C client
+	// Seed advancement logic (offset) required to maintain strict cryptographic sync with the C client
 	currentSeed := originalSeed
 	offsetX := 0
 	if GameWidth%2 == 0 {
@@ -167,7 +174,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		offsetY = int(currentSeed % 2)
 	}
 
-	// Initialize session with the snake's starting position based on the offset
+	// Initialize session with the snake's exact starting position
 	sessionMutex.Lock()
 	activeSessions[token] = &Session{
 		Score:       0,
@@ -200,7 +207,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now()
 	deltaSteps := steps - session.LastSteps
 
 	if deltaSteps <= 0 {
@@ -212,8 +218,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Fruit Validation (Implicit body collision bypass)
-	// The server searches forward. If the client skipped RNG values due to body collisions,
-	// the server will naturally fast-forward to the matching valid fruit.
 	validFruit := false
 	tempSeed := session.Seed
 	for i := 0; i < SpawnFruitMaxAttempts; i++ {
@@ -237,7 +241,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Manhattan Distance (Calculated from current head position to new fruit)
+	// 2. Manhattan Distance (Calculated from current head position)
 	manhattan := int(math.Abs(float64(fx-session.HeadX)) + math.Abs(float64(fy-session.HeadY)))
 	if deltaSteps < manhattan {
 		session.Cheated = true
@@ -251,7 +255,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	currentDelaySec := (InitialDelay / 1000000.0) * math.Pow(SpeedupFactor, float64(session.FruitsEaten))
 	minPingInterval := currentDelaySec * float64(deltaSteps) * 0.8 // 20% network margin
 
-	if now.Sub(session.LastPing).Seconds() < minPingInterval {
+	if time.Since(session.LastPing).Seconds() < minPingInterval {
 		session.Cheated = true
 		sessionMutex.Unlock()
 		log.Printf("[%s] CHEAT (Time): %s | Ping too fast for %d steps.", ip, token[:8], deltaSteps)
@@ -272,8 +276,8 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5. Update State (Snake's head is now on the fruit it just ate)
-	session.LastPing = now
+	// 5. Update State
+	session.LastPing = time.Now()
 	session.HeadX = fx
 	session.HeadY = fy
 	session.LastSteps = steps
@@ -293,7 +297,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	steps, _ := strconv.Atoi(r.PathValue("steps"))
 	ip := getRemoteIP(r)
 
-	// Safely detach the session from the global map to prevent race conditions or double-submits
+	// Safely detach the session from the global map to prevent double-submits
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 	if exists {
@@ -308,7 +312,8 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(name) > 8 || len(name) == 0 {
+	// Strict XSS and format validation
+	if len(name) == 0 || len(name) > 8 || !isAlphanumeric(name) {
 		log.Printf("[%s] SUBMIT REJECTED: Invalid name '%s' from %s", ip, name, token[:8])
 		fmt.Fprint(w, "OK")
 		return
@@ -319,7 +324,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		session.Score = 0
 	}
 
-	// Apply final penalties based on steps taken since the last fruit was eaten
+	// Apply final penalties
 	if session.Score > 0 {
 		applyPenalties(session, steps)
 	}
@@ -330,7 +335,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		finalScore = 0
 	}
 
-	// Only strictly positive scores make it into the database
+	// Save to DB
 	if finalScore > 0 {
 		_, err := db.Exec("INSERT INTO scores (name, score) VALUES (?, ?)", name, finalScore)
 		if err != nil {
@@ -348,9 +353,9 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 
 func handleScores(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.PathValue("limit"))
-	if limit == 0 {
-		limit = 20
-	}
+
+	// Bound the limit to prevent OOM (Out Of Memory) or excessive database queries
+	limit = max(1, min(limit, 100))
 
 	rows, err := db.Query("SELECT name, score FROM scores ORDER BY score DESC, timestamp ASC LIMIT ?", limit)
 	if err != nil {
@@ -370,7 +375,6 @@ func handleScores(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Log error if .env is missing to prevent silent failures
 	if err := godotenv.Load(); err != nil {
 		log.Println("[Warning] No .env file found or error reading it. Relying on system environment variables.")
 	}
@@ -383,7 +387,16 @@ func main() {
 	initDB()
 	defer db.Close()
 
-	// HTTP Routing (Go 1.22+ syntax)
+	// Launch background task to securely clean stale sessions without blocking requests
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			cleanupStaleSessions()
+		}
+	}()
+
+	// HTTP Routing
 	http.HandleFunc("GET /rules", handleRules)
 	http.HandleFunc("GET /token", handleToken)
 	http.HandleFunc("GET /eat/{token}/{steps}/{fx}/{fy}", handleEat)

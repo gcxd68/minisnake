@@ -3,6 +3,7 @@ import time
 import secrets
 import sqlite3
 import logging
+import threading
 from flask import Flask, request
 from dotenv import load_dotenv
 
@@ -51,7 +52,7 @@ active_sessions = {}
 
 # --- Helper Functions ---
 def lcg_rand(seed):
-    """ Pseudo-random generator synchronized with the C client (LCG algorithm) """
+    """ Pseudo-random generator synchronized with the C client """
     return (seed * 1103515245 + 12345) & 0x7fffffff
 
 def apply_penalties(session, new_steps):
@@ -91,6 +92,19 @@ def cleanup_stale_sessions():
     if stale_tokens:
         logger.info(f"CLEANUP: Removed {len(stale_tokens)} abandoned sessions.")
 
+def background_cleanup_task():
+    """ Background thread to handle memory cleanup without slowing down endpoints """
+    while True:
+        time.sleep(300) # Run every 5 minutes
+        try:
+            cleanup_stale_sessions()
+        except Exception as e:
+            logger.error(f"Background cleanup error: {e}")
+
+# Launch the background cleanup task
+cleanup_thread = threading.Thread(target=background_cleanup_task, daemon=True)
+cleanup_thread.start()
+
 # --- API Routes ---
 @app.route('/rules', methods=['GET'])
 def get_rules():
@@ -102,11 +116,10 @@ def get_rules():
 @app.route('/token', methods=['GET'])
 def get_token():
     """ Spawns a new session with synchronized seed and appropriate offset start position. """
-    cleanup_stale_sessions()
     token = secrets.token_hex(16)
     original_seed = secrets.randbits(31) 
     
-    # Seed advancement logic (offset) required to maintain cryptographic sync with the C client
+    # Seed advancement logic (offset) required to maintain strict cryptographic sync with the C client
     current_seed = original_seed
     offset_x = 0
     if GAME_WIDTH % 2 == 0:
@@ -146,8 +159,7 @@ def eat_fruit(token, steps, fx, fy):
         flag_cheater(token, "Steps", f"Steps did not increase ({steps})")
         return "Invalid steps", 400
 
-    # 1. Fruit Validation
-    # Server iterates forward. Implicitly bypasses body-collision RNG skips.
+    # 1. Fruit Validation (Server iterates forward)
     valid_fruit = False
     temp_seed = session["seed"]
     for _ in range(SPAWN_FRUIT_MAX_ATTEMPTS):
@@ -165,7 +177,7 @@ def eat_fruit(token, steps, fx, fy):
         flag_cheater(token, "RNG", f"Client fruit at ({fx},{fy}) not in server sequence.")
         return "Invalid fruit", 400
 
-    # 2. Manhattan Distance (Calculated from current head position)
+    # 2. Manhattan Distance
     manhattan = abs(fx - session["head_x"]) + abs(fy - session["head_y"])
     if delta_steps < manhattan:
         flag_cheater(token, "Movement", f"{delta_steps} steps taken for dist {manhattan}")
@@ -204,10 +216,7 @@ def flag_cheat(token):
 
 @app.route('/submit/<token>/<name>/<int:steps>', methods=['GET'])
 def submit_score(token, name, steps):
-    """ 
-    Finalizes a session and saves the score to the database.
-    Always returns 200 OK to ensure a seamless UI transition for the client.
-    """
+    """ Finalizes a session and saves the score to the database. """
     # Pop detaches the session from active_sessions immediately to prevent double submissions
     session = active_sessions.pop(token, None)
 
@@ -215,6 +224,7 @@ def submit_score(token, name, steps):
         logger.warning(f"SUBMIT REJECTED: Expired or invalid token {token[:8]}")
         return "OK", 200
     
+    # Strict XSS prevention
     if not name.isalnum() or len(name) > 8:
         logger.warning(f"SUBMIT REJECTED: Invalid name '{name}' from {token[:8]}")
         return "OK", 200
@@ -223,7 +233,6 @@ def submit_score(token, name, steps):
         logger.error(f"BANNED SUBMISSION: Player '{name}' attempted to submit from flagged session. Forcing score to 0.")
         session["score"] = 0
 
-    # Apply final penalties before saving
     if session["score"] > 0:
         apply_penalties(session, steps)
 
@@ -249,6 +258,9 @@ def submit_score(token, name, steps):
 @app.route('/scores/<int:limit>', methods=['GET'])
 def get_scores(limit):
     """ Retrieves the top scores from the database. """
+    # Bound the limit to prevent OOM (Out Of Memory) or excessive database queries
+    limit = max(1, min(limit, 100))
+
     try:
         with sqlite3.connect(DB_PATH) as conn:
             cursor = conn.execute("SELECT name, score FROM scores ORDER BY score DESC, timestamp ASC LIMIT ?", (limit,))
