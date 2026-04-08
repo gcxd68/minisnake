@@ -1,73 +1,63 @@
-# Secrets and sensitive data
-net
+# Minisnake: Build Artifacts
+bin/
+obj/
+server/go/bin/
+
+# Client-Specific Generated Files
+include/net.h
 net.h
+
+# Backend: Environments & Dependencies
+server/python/venv/
+**/__pycache__/
+
+# Configuration & Secrets
+net
 .env
 
-# Build directories
-obj/
+# Databases
+*.db
 
-# Binaries and generated scripts
-minisnake
-
-# VS Code
+# IDEs & System Files
 .vscode/
-
-# CLion / JetBrains
 .idea/
+.DS_Store
+Thumbs.db
 
-# Valgrind
+# Debugging, Logs & Temporary Files
 vgcore.*
+core
+core.*
+*.log
+*.tmp
+*.swp
+*.swo
+*~
 
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
+# C/C++ Compiled Objects & Prerequisites
 *.o
 *.obj
-
-# Precompiled Headers
+*.slo
+*.lo
+*.d
 *.gch
 *.pch
 
-# Linker files
+# Linker & Debugger Files
 *.ilk
-
-# Debugger Files
 *.pdb
+*.dwo
 
-# Compiled Dynamic libraries
+# Compiled Libraries
 *.so
 *.dylib
 *.dll
-
-# Compiled Static libraries
 *.lai
 *.la
 *.a
 *.lib
 
-# Executables
+# Generic Executables
 *.exe
 *.out
 *.app
-
-# Debug information files
-*.dwo
-
-# Temporary files
-*~
-*.swp
-*.swo
-*.tmp
-
-# Logs
-*.log
-
-# macOS
-.DS_Store
-
-# Core dumps
-core
-core.*

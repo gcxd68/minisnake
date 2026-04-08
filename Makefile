@@ -1,49 +1,81 @@
-NAME	= minisnake
-CC		= cc
+# --- Names and Paths ---
+NAME        = bin/minisnake
+SERVER_NAME = server/go/bin/server
+OBJ_DIR     = obj/
+BIN_DIR     = bin/
+SRC_DIR     = src/
+INC_DIR     = include/
+
+# --- Compilation Flags ---
+CC          = cc
 
 # CFLAGS: Instructions for compiling .c into .o
-# -Wall -Wextra -Werror	: strict warnings, treated as errors
-# -O3					: aggressive compiler optimizations
-# -flto					: link-time optimization (enables cross-file optimization)
-# -pthread				: Enables POSIX threads for non-blocking HTTP requests
-CFLAGS  = -Wall -Wextra -Werror -O3 -flto -pthread
+# -Wall -Wextra -Werror : strict warnings, treated as errors
+# -O3                   : aggressive compiler optimizations
+# -flto                 : link-time optimization (enables cross-file optimization)
+# -pthread              : Enables POSIX threads for non-blocking HTTP requests
+# -I$(INC_DIR)          : Look for headers in the include folder
+CFLAGS      = -Wall -Wextra -Werror -O3 -flto -pthread -I$(INC_DIR)
 
 # LDFLAGS: Instructions for the final linking stage
-# -s					: strip debug symbols (hardens against reverse engineering)
-# -pthread				: Must be included in linking stage as well
-LDFLAGS	= -flto -s -pthread
+# -flto                 : Must be present here for link-time optimization to work
+# -s                    : strip debug symbols (hardens against reverse engineering)
+# -pthread              : Must be included in linking stage as well
+LDFLAGS     = -flto -s -pthread
 
-SRCS	= minisnake_game.c minisnake_sys.c minisnake_net.c
-OBJS	= $(SRCS:.c=.o)
+# --- Source Files ---
+SRCS        = $(SRC_DIR)minisnake_game.c \
+			  $(SRC_DIR)minisnake_sys.c \
+			  $(SRC_DIR)minisnake_net.c
 
-.PHONY: all clean fclean re
+# Transform src/file.c into obj/file.o
+OBJS        = $(SRCS:$(SRC_DIR)%.c=$(OBJ_DIR)%.o)
+
+# --- Rules ---
+.PHONY: all clean fclean re server
 
 .SILENT:
 
 all: $(NAME)
 
+# Link the client binary into the bin/ directory
 $(NAME): $(OBJS)
+	@mkdir -p $(BIN_DIR)
 	$(CC) $(OBJS) $(LDFLAGS) -o $(NAME)
 
-net.h:
-	@if [ -f net ]; \
-	then \
-		echo "/* Auto-generated file - DO NOT EDIT */" > net.h; \
-		echo "#ifndef NET_H" >> net.h; \
-		echo "# define NET_H\n" >> net.h; \
-		awk -F'=' 'NF==2 && !/^#/ {gsub(/^[ \t]+|[ \t]+$$/, "", $$1); gsub(/^[ \t]+|[ \t]+$$/, "", $$2); printf "# define %s \"%s\"\n", $$1, $$2}' net >> net.h; \
-		echo "\n#endif" >> net.h; \
+# Compile the Go server
+server:
+	@cd server/go && go mod tidy
+	@cd server/go && CGO_ENABLED=1 go build -ldflags="-w -s" -o bin/server .
+
+# Auto-generate net.h from 'net' config file in the include directory
+$(INC_DIR)net.h:
+	@if [ -f net ]; then \
+		echo "/* Auto-generated file - DO NOT EDIT */" > $(INC_DIR)net.h; \
+		echo "#ifndef NET_H" >> $(INC_DIR)net.h; \
+		echo "# define NET_H\n" >> $(INC_DIR)net.h; \
+		awk -F'=' 'NF==2 && !/^#/ {gsub(/^[ \t]+|[ \t]+$$/, "", $$1); gsub(/^[ \t]+|[ \t]+$$/, "", $$2); printf "# define %s \"%s\"\n", $$1, $$2}' net >> $(INC_DIR)net.h; \
+		echo "\n#endif" >> $(INC_DIR)net.h; \
 	else \
-		echo "No 'net' file found, building in offline mode."; \
+		echo "/* No net file found - Offline mode */" > $(INC_DIR)net.h; \
+		echo "#ifndef NET_H\n# define NET_H\n#endif" >> $(INC_DIR)net.h; \
+		echo "Notice: No 'net' file found, building in offline mode."; \
 	fi
 
-%.o: %.c minisnake.h net.h
+# Compile .o files into the obj/ directory
+$(OBJ_DIR)%.o: $(SRC_DIR)%.c $(INC_DIR)minisnake.h $(INC_DIR)net.h
+	@mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# Cleanup object files
 clean:
-	rm -f $(OBJS)
+	@rm -rf $(OBJ_DIR)
+	@if [ -d server/go ]; then cd server/go && go clean; fi
 
+# Full cleanup (objects + bin + generated headers)
 fclean: clean
-	rm -f $(NAME) net.h
+	@rm -rf $(BIN_DIR)
+	@rm -f $(INC_DIR)net.h
+	@rm -rf server/go/bin
 
 re: fclean all
