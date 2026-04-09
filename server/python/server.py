@@ -4,7 +4,7 @@ import secrets
 import sqlite3
 import logging
 import threading
-from flask import Flask, request
+from flask import Flask, request, abort
 from dotenv import load_dotenv
 
 # Load environment variables from the .env file
@@ -47,8 +47,17 @@ PENALTY_AMOUNT = 1
 SPAWN_FRUIT_MAX_ATTEMPTS = 10000
 MAX_SCORE = GAME_WIDTH * GAME_HEIGHT * POINTS_PER_FRUIT
 
-# Dictionary to store active game sessions
+# --- SECURITY LIMITS ---
+MAX_ACTIVE_SESSIONS = 5000
+MAX_REQ_PER_SEC = 20
+
+# Server States (Thread-Safe Architecture)
 active_sessions = {}
+ip_data_map = {}
+
+# We use two separate locks to prevent Deadlocks (mirroring the Go architecture)
+session_lock = threading.Lock() # Protects active_sessions
+ip_lock = threading.Lock()      # Protects ip_data_map
 
 # --- Helper Functions ---
 def lcg_rand(seed):
@@ -64,11 +73,28 @@ def apply_penalties(session, new_steps):
         if step % PENALTY_INTERVAL == 0:
             session["score"] = max(0, session["score"] - PENALTY_AMOUNT)
 
-def flag_cheater(token, reason, log_msg):
-    """ Centralized cheating flag execution. """
-    if token in active_sessions:
-        active_sessions[token]["cheated"] = True
-        logger.warning(f"CHEAT ({reason}): {token[:8]} | {log_msg}")
+# --- Security Functions ---
+@app.before_request
+def rate_limit_middleware():
+    """ Middleware to protect against DDoS and Siege (Rate Limit only) """
+    ip = request.remote_addr
+    now = time.time()
+    
+    with ip_lock:
+        if ip not in ip_data_map:
+            ip_data_map[ip] = {"req_count": 0, "window_start": now}
+        
+        data = ip_data_map[ip]
+        
+        # Enforce Rate Limit (20 req/sec)
+        if now - data["window_start"] > 1.0:
+            data["req_count"] = 0
+            data["window_start"] = now
+            
+        data["req_count"] += 1
+        if data["req_count"] > MAX_REQ_PER_SEC:
+            logger.warning(f"[SECURITY] SPAM BLOCKED from IP {ip}")
+            abort(429, description="Too Many Requests")
 
 # --- Database Management ---
 def init_db():
@@ -77,27 +103,34 @@ def init_db():
         with sqlite3.connect(DB_PATH) as conn:
             conn.execute('''CREATE TABLE IF NOT EXISTS scores
                          (name TEXT, score INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-        logger.info("Database initialized successfully.")
+        logger.info("[Server] Database initialized successfully.")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
 
 init_db()
 
-def cleanup_stale_sessions():
-    """ Removes sessions inactive for > 15 minutes. """
+def cleanup_stale_data():
+    """ Removes sessions inactive for > 15 minutes and clears old IP records. """
     now = time.time()
-    stale_tokens = [t for t, d in active_sessions.items() if now - d["last_ping"] > 900]
-    for t in stale_tokens:
-        del active_sessions[t]
-    if stale_tokens:
-        logger.info(f"CLEANUP: Removed {len(stale_tokens)} abandoned sessions.")
+    
+    # 1. Clean sessions safely
+    with session_lock:
+        stale_tokens = [t for t, d in active_sessions.items() if now - d["last_ping"] > 900]
+        for t in stale_tokens:
+            del active_sessions[t]
+            
+    # 2. Clean IP map safely (Prevent memory leaks from IP spoofing)
+    with ip_lock:
+        stale_ips = [ip for ip, d in ip_data_map.items() if now - d["window_start"] > 300]
+        for ip in stale_ips:
+            del ip_data_map[ip]
 
 def background_cleanup_task():
     """ Background thread to handle memory cleanup without slowing down endpoints """
     while True:
         time.sleep(300) # Run every 5 minutes
         try:
-            cleanup_stale_sessions()
+            cleanup_stale_data()
         except Exception as e:
             logger.error(f"Background cleanup error: {e}")
 
@@ -116,6 +149,13 @@ def get_rules():
 @app.route('/token', methods=['GET'])
 def get_token():
     """ Spawns a new session with synchronized seed and appropriate offset start position. """
+    ip = request.remote_addr
+    
+    with session_lock:
+        if len(active_sessions) >= MAX_ACTIVE_SESSIONS:
+            logger.error(f"[SECURITY] OOM LIMIT REACHED. Refused connection for {ip}")
+            abort(503, description="Server full")
+
     token = secrets.token_hex(16)
     original_seed = secrets.randbits(31) 
     
@@ -131,96 +171,114 @@ def get_token():
         current_seed = lcg_rand(current_seed)
         offset_y = current_seed % 2
 
-    active_sessions[token] = {
-        "score": 0,
-        "fruits_eaten": 0,
-        "last_ping": time.time(),
-        "cheated": False,
-        "seed": current_seed,
-        "head_x": (GAME_WIDTH // 2) - offset_x,
-        "head_y": (GAME_HEIGHT // 2) - offset_y,
-        "last_steps": 0
-    }
+    with session_lock:
+        active_sessions[token] = {
+            "score": 0,
+            "fruits_eaten": 0,
+            "last_ping": time.time(),
+            "cheated": False,
+            "seed": current_seed,
+            "head_x": (GAME_WIDTH // 2) - offset_x,
+            "head_y": (GAME_HEIGHT // 2) - offset_y,
+            "last_steps": 0
+        }
     
     logger.info(f"SESSION START: Token {token[:8]}... | Seed: {original_seed}")
     return f"{token}|{original_seed}", 200
 
 @app.route('/eat/<token>/<int:steps>/<int:fx>/<int:fy>', methods=['GET'])
 def eat_fruit(token, steps, fx, fy):
-    """ Validates a fruit consumption event and updates the session score. """
-    if token not in active_sessions or active_sessions[token]["cheated"]:
-        return "Unauthorized", 403
-    
+    """ Validates a fruit consumption event and updates the session score securely. """
+    ip = request.remote_addr
     now = time.time()
-    session = active_sessions[token]
-    delta_steps = steps - session["last_steps"]
-
-    if delta_steps <= 0:
-        flag_cheater(token, "Steps", f"Steps did not increase ({steps})")
-        return "Invalid steps", 400
-
-    # 1. Fruit Validation (Server iterates forward)
-    valid_fruit = False
-    temp_seed = session["seed"]
-    for _ in range(SPAWN_FRUIT_MAX_ATTEMPTS):
-        temp_seed = lcg_rand(temp_seed)
-        cand_x = (temp_seed >> 16) % GAME_WIDTH
-        temp_seed = lcg_rand(temp_seed)
-        cand_y = (temp_seed >> 16) % GAME_HEIGHT
+    
+    # The entire validation process is locked to prevent Race Conditions 
+    # from simultaneous requests arriving on the same token via Gunicorn threads.
+    with session_lock:
+        if token not in active_sessions or active_sessions[token]["cheated"]:
+            abort(403, description="Unauthorized")
         
-        if cand_x == fx and cand_y == fy:
-            valid_fruit = True
-            session["seed"] = temp_seed # Sync seed to the accepted fruit
-            break
+        session = active_sessions[token]
+        delta_steps = steps - session["last_steps"]
 
-    if not valid_fruit:
-        flag_cheater(token, "RNG", f"Client fruit at ({fx},{fy}) not in server sequence.")
-        return "Invalid fruit", 400
+        if delta_steps <= 0:
+            session["cheated"] = True
+            logger.warning(f"CHEAT (Steps): {token[:8]} | Steps did not increase ({steps})")
+            abort(400, description="Invalid steps")
 
-    # 2. Manhattan Distance
-    manhattan = abs(fx - session["head_x"]) + abs(fy - session["head_y"])
-    if delta_steps < manhattan:
-        flag_cheater(token, "Movement", f"{delta_steps} steps taken for dist {manhattan}")
-        return "Impossible move", 400
+        # 1. Fruit Validation
+        valid_fruit = False
+        temp_seed = session["seed"]
+        for _ in range(SPAWN_FRUIT_MAX_ATTEMPTS):
+            temp_seed = lcg_rand(temp_seed)
+            cand_x = (temp_seed >> 16) % GAME_WIDTH
+            temp_seed = lcg_rand(temp_seed)
+            cand_y = (temp_seed >> 16) % GAME_HEIGHT
+            
+            if cand_x == fx and cand_y == fy:
+                valid_fruit = True
+                session["seed"] = temp_seed # Sync seed
+                break
 
-    # 3. Time-based Anti-Spam
-    current_delay_sec = (INITIAL_DELAY / 1000000.0) * (SPEEDUP_FACTOR ** session["fruits_eaten"])
-    
-    # Hybrid tolerance: 25% margin against speedhacks + 0.5s fixed buffer against network jitter
-    min_ping_interval = max(0, (current_delay_sec * delta_steps * 0.75) - 0.5)
-    
-    if now - session["last_ping"] < min_ping_interval:
-        flag_cheater(token, "Time", f"Ping too fast for {delta_steps} steps.")
-        return "Speedhack detected", 400
+        if not valid_fruit:
+            session["cheated"] = True
+            logger.warning(f"CHEAT (RNG): {token[:8]} | Client fruit at ({fx},{fy}) not in server sequence.")
+            abort(400, description="Invalid fruit")
 
-    # 4. Score & Penalty Calculation
-    apply_penalties(session, steps)
-    session["score"] += POINTS_PER_FRUIT
-    session["fruits_eaten"] += 1
+        # 2. Manhattan Distance
+        manhattan = abs(fx - session["head_x"]) + abs(fy - session["head_y"])
+        if delta_steps < manhattan:
+            session["cheated"] = True
+            logger.warning(f"CHEAT (Movement): {token[:8]} | {delta_steps} steps taken for dist {manhattan}")
+            abort(400, description="Impossible move")
 
-    if session["score"] >= MAX_SCORE:
-        flag_cheater(token, "Limit", f"Score {session['score']} exceeded board capacity.")
-        return "Score limit exceeded", 400
+        # 3. Time-based Anti-Spam
+        current_delay_sec = (INITIAL_DELAY / 1000000.0) * (SPEEDUP_FACTOR ** session["fruits_eaten"])
+        # Hybrid tolerance: 25% margin against speedhacks + 0.5s fixed buffer against network jitter
+        min_ping_interval = max(0, (current_delay_sec * delta_steps * 0.75) - 0.5)
+        
+        if now - session["last_ping"] < min_ping_interval:
+            session["cheated"] = True
+            logger.warning(f"CHEAT (Time): {token[:8]} | Ping too fast for {delta_steps} steps.")
+            abort(400, description="Speedhack detected")
 
-    # 5. Update State
-    session["last_ping"] = now
-    session["head_x"] = fx  # Snake's head is now on the fruit
-    session["head_y"] = fy
-    session["last_steps"] = steps
+        # 4. Score & Penalty Calculation
+        apply_penalties(session, steps)
+        session["score"] += POINTS_PER_FRUIT
+        session["fruits_eaten"] += 1
+
+        if session["score"] >= MAX_SCORE:
+            session["cheated"] = True
+            logger.warning(f"CHEAT (Limit): {token[:8]} | Score {session['score']} exceeded capacity.")
+            abort(400, description="Score limit exceeded")
+
+        # 5. Update State
+        session["last_ping"] = now
+        session["head_x"] = fx
+        session["head_y"] = fy
+        session["last_steps"] = steps
     
     return "Yum", 200
 
 @app.route('/cheat/<token>', methods=['GET'])
 def flag_cheat(token):
     """ Endpoint for the client to report itself if local anti-cheat triggers. """
-    flag_cheater(token, "Local", "Local detection triggered.")
+    ip = request.remote_addr
+    with session_lock:
+        if token in active_sessions:
+            active_sessions[token]["cheated"] = True
+            
+    logger.warning(f"CHEAT (Local): {token[:8]} | TracerPid/Local anomaly detected. Session flagged.")
     return "Flagged", 200
 
 @app.route('/submit/<token>/<name>/<int:steps>', methods=['GET'])
 def submit_score(token, name, steps):
     """ Finalizes a session and saves the score to the database. """
+    ip = request.remote_addr
+    
     # Pop detaches the session from active_sessions immediately to prevent double submissions
-    session = active_sessions.pop(token, None)
+    with session_lock:
+        session = active_sessions.pop(token, None)
 
     if not session:
         logger.warning(f"SUBMIT REJECTED: Expired or invalid token {token[:8]}")
@@ -234,8 +292,7 @@ def submit_score(token, name, steps):
     if session["cheated"]:
         logger.error(f"BANNED SUBMISSION: Player '{name}' attempted to submit from flagged session. Forcing score to 0.")
         session["score"] = 0
-
-    if session["score"] > 0:
+    elif session["score"] > 0:
         apply_penalties(session, steps)
 
     final_score = session["score"]
@@ -255,7 +312,7 @@ def submit_score(token, name, steps):
         return "OK", 200
     except Exception as e:
         logger.error(f"Database error: {e}")
-        return "Backend Error", 500
+        abort(500, description="Backend Error")
 
 @app.route('/scores/<int:limit>', methods=['GET'])
 def get_scores(limit):
@@ -271,7 +328,7 @@ def get_scores(limit):
         return "".join([f"{r[0]}|{r[1]}|0|0\n" for r in rows]), 200
     except Exception as e:
         logger.error(f"Database error: {e}")
-        return "Backend Error", 500
+        abort(500, description="Backend Error")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=PORT)

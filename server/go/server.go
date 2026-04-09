@@ -33,6 +33,10 @@ const (
 	PenaltyAmount         = 1
 	SpawnFruitMaxAttempts = 10000
 	MaxScore              = GameWidth * GameHeight * PointsPerFruit
+
+	// --- SECURITY LIMITS ---
+	MaxActiveSessions = 5000 // Anti-OOM: Global limit of concurrent players
+	MaxReqPerSec      = 20   // Anti-Spam: 20 requests per second max per IP
 )
 
 // --- Structures ---
@@ -42,9 +46,15 @@ type Session struct {
 	LastPing    time.Time
 	Cheated     bool
 	Seed        uint32
-	HeadX       int // Represents the true X position of the snake's head
-	HeadY       int // Represents the true Y position of the snake's head
+	HeadX       int
+	HeadY       int
 	LastSteps   int
+}
+
+// Security Tracking per IP (Rate limiting only, no bans)
+type IPData struct {
+	ReqCount    int
+	WindowStart time.Time
 }
 
 // Global state
@@ -52,6 +62,9 @@ var (
 	db             *sql.DB
 	activeSessions = make(map[string]*Session)
 	sessionMutex   sync.RWMutex
+
+	ipDataMap = make(map[string]*IPData)
+	ipMutex   sync.Mutex
 )
 
 // --- Helper Functions ---
@@ -78,19 +91,8 @@ func applyPenalties(session *Session, newSteps int) {
 	}
 	for step := session.LastSteps + 1; step <= newSteps; step++ {
 		if step%PenaltyInterval == 0 {
-			// Leveraging Go 1.21+ built-in max() function
 			session.Score = max(0, session.Score-PenaltyAmount)
 		}
-	}
-}
-
-// flagCheater: Centralized cheating flag execution
-func flagCheater(token string, reason string, logMsg string, ip string) {
-	sessionMutex.Lock()
-	defer sessionMutex.Unlock()
-	if session, exists := activeSessions[token]; exists {
-		session.Cheated = true
-		log.Printf("[%s] CHEAT (%s): %s | %s", ip, reason, token[:8], logMsg)
 	}
 }
 
@@ -103,7 +105,58 @@ func getRemoteIP(r *http.Request) string {
 	return ip
 }
 
-// --- Database Management ---
+// --- Security Functions ---
+
+// rateLimitMiddleware protects the server from DDoS and Siege (Rate Limit only)
+func rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := getRemoteIP(r)
+
+		ipMutex.Lock()
+		data, exists := ipDataMap[ip]
+		if !exists {
+			data = &IPData{WindowStart: time.Now()}
+			ipDataMap[ip] = data
+		}
+
+		// Enforce Rate Limit (20 req/sec)
+		if time.Since(data.WindowStart) > time.Second {
+			data.ReqCount = 0
+			data.WindowStart = time.Now()
+		}
+		data.ReqCount++
+		if data.ReqCount > MaxReqPerSec {
+			ipMutex.Unlock()
+			log.Printf("[SECURITY] SPAM BLOCKED from IP %s", ip)
+			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+			return
+		}
+		ipMutex.Unlock()
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// cleanupStaleData: Removes inactive sessions and old IP records
+func cleanupStaleData() {
+	// Cleanup inactive sessions
+	sessionMutex.Lock()
+	for token, session := range activeSessions {
+		if time.Since(session.LastPing).Seconds() > 900 {
+			delete(activeSessions, token)
+		}
+	}
+	sessionMutex.Unlock()
+
+	// Cleanup IP map (Prevent memory leaks from random IP spoofing)
+	ipMutex.Lock()
+	for ip, data := range ipDataMap {
+		if time.Since(data.WindowStart) > 5*time.Minute {
+			delete(ipDataMap, ip)
+		}
+	}
+	ipMutex.Unlock()
+}
 
 func initDB() {
 	var err error
@@ -113,32 +166,12 @@ func initDB() {
 	}
 
 	query := `CREATE TABLE IF NOT EXISTS scores (
-		name TEXT, 
-		score INTEGER, 
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+		name TEXT, score INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 	)`
 	if _, err = db.Exec(query); err != nil {
 		log.Fatalf("Database table creation failed: %v", err)
 	}
 	log.Println("[Server] Database initialized successfully.")
-}
-
-// cleanupStaleSessions: Removes sessions inactive for more than 15 minutes.
-// Executed securely via a background ticker to prevent DoS attacks on the mutex.
-func cleanupStaleSessions() {
-	sessionMutex.Lock()
-	defer sessionMutex.Unlock()
-	removed := 0
-	for token, session := range activeSessions {
-		// Leveraging Go 1.21+ time.Since for readability
-		if time.Since(session.LastPing).Seconds() > 900 {
-			delete(activeSessions, token)
-			removed++
-		}
-	}
-	if removed > 0 {
-		log.Printf("[Server] CLEANUP: Removed %d abandoned sessions.", removed)
-	}
 }
 
 // --- API Routes ---
@@ -150,17 +183,26 @@ func handleRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleToken(w http.ResponseWriter, r *http.Request) {
-	// Generate 16-byte hex token
+	ip := getRemoteIP(r)
+
+	// Anti-OOM Protection
+	sessionMutex.RLock()
+	count := len(activeSessions)
+	sessionMutex.RUnlock()
+	if count >= MaxActiveSessions {
+		log.Printf("[SECURITY] OOM LIMIT REACHED. Refused connection for %s", ip)
+		http.Error(w, "Server full", http.StatusServiceUnavailable)
+		return
+	}
+
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
 	token := hex.EncodeToString(bytes)
 
-	// Generate 31-bit seed
 	seedBytes := make([]byte, 4)
 	rand.Read(seedBytes)
 	originalSeed := (uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3])) & 0x7fffffff
 
-	// Seed advancement logic (offset) required to maintain strict cryptographic sync with the C client
 	currentSeed := originalSeed
 	offsetX := 0
 	if GameWidth%2 == 0 {
@@ -174,7 +216,6 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		offsetY = int(currentSeed % 2)
 	}
 
-	// Initialize session with the snake's exact starting position
 	sessionMutex.Lock()
 	activeSessions[token] = &Session{
 		Score:       0,
@@ -188,7 +229,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionMutex.Unlock()
 
-	log.Printf("[%s] SESSION START: Token %s... | Seed: %d", getRemoteIP(r), token[:8], originalSeed)
+	log.Printf("[%s] SESSION START: Token %s... | Seed: %d", ip, token[:8], originalSeed)
 	fmt.Fprintf(w, "%s|%d", token, originalSeed)
 }
 
@@ -217,7 +258,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Fruit Validation (Implicit body collision bypass)
+	// 1. Fruit Validation
 	validFruit := false
 	tempSeed := session.Seed
 	for i := 0; i < SpawnFruitMaxAttempts; i++ {
@@ -228,7 +269,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 		if candX == fx && candY == fy {
 			validFruit = true
-			session.Seed = tempSeed // Sync seed to the accepted fruit
+			session.Seed = tempSeed
 			break
 		}
 	}
@@ -241,7 +282,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Manhattan Distance (Calculated from current head position)
+	// 2. Manhattan Distance
 	manhattan := int(math.Abs(float64(fx-session.HeadX)) + math.Abs(float64(fy-session.HeadY)))
 	if deltaSteps < manhattan {
 		session.Cheated = true
@@ -253,9 +294,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Time-based Anti-Spam
 	currentDelaySec := (InitialDelay / 1000000.0) * math.Pow(SpeedupFactor, float64(session.FruitsEaten))
-	
-	// Hybrid tolerance: 25% margin against speedhacks + 0.5s fixed buffer against network jitter
-	minPingInterval := math.Max(0, (currentDelaySec * float64(deltaSteps) * 0.75) - 0.5)
+	minPingInterval := math.Max(0, (currentDelaySec*float64(deltaSteps)*0.75)-0.5)
 
 	if time.Since(session.LastPing).Seconds() < minPingInterval {
 		session.Cheated = true
@@ -289,7 +328,16 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCheat(w http.ResponseWriter, r *http.Request) {
-	flagCheater(r.PathValue("token"), "Local", "Local detection triggered.", getRemoteIP(r))
+	ip := getRemoteIP(r)
+	token := r.PathValue("token")
+
+	sessionMutex.Lock()
+	if session, exists := activeSessions[token]; exists {
+		session.Cheated = true
+	}
+	sessionMutex.Unlock()
+
+	log.Printf("[%s] CHEAT (Local): %s | TracerPid/Local anomaly detected. Session flagged.", ip, token[:8])
 	fmt.Fprint(w, "Flagged")
 }
 
@@ -299,7 +347,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	steps, _ := strconv.Atoi(r.PathValue("steps"))
 	ip := getRemoteIP(r)
 
-	// Safely detach the session from the global map to prevent double-submits
+	// Safely detach the session to prevent double-submits
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 	if exists {
@@ -307,14 +355,12 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionMutex.Unlock()
 
-	// Always return 200 OK for UI fluidity
 	if !exists {
 		log.Printf("[%s] SUBMIT REJECTED: Expired or invalid token %s", ip, token[:8])
 		fmt.Fprint(w, "OK")
 		return
 	}
 
-	// Strict XSS and format validation
 	if len(name) == 0 || len(name) > 8 || !isAlphanumeric(name) {
 		log.Printf("[%s] SUBMIT REJECTED: Invalid name '%s' from %s", ip, name, token[:8])
 		fmt.Fprint(w, "OK")
@@ -324,10 +370,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	if session.Cheated {
 		log.Printf("[%s] BANNED SUBMISSION: Player '%s' attempted to submit from flagged session. Forcing score to 0.", ip, name)
 		session.Score = 0
-	}
-
-	// Apply final penalties
-	if session.Score > 0 {
+	} else if session.Score > 0 {
 		applyPenalties(session, steps)
 	}
 
@@ -337,7 +380,6 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		finalScore = 0
 	}
 
-	// Save to DB
 	if finalScore > 0 {
 		_, err := db.Exec("INSERT INTO scores (name, score) VALUES (?, ?)", name, finalScore)
 		if err != nil {
@@ -346,8 +388,6 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("[%s] SCORE SAVED: '%s' | Score: %d | Fruits: %d", ip, name, finalScore, session.FruitsEaten)
-	} else {
-		log.Printf("[%s] SCORE IGNORED (Zero or Cheated): '%s' submission processed but not saved to DB.", ip, name)
 	}
 
 	fmt.Fprint(w, "OK")
@@ -355,8 +395,6 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 
 func handleScores(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.PathValue("limit"))
-
-	// Bound the limit to prevent OOM (Out Of Memory) or excessive database queries
 	limit = max(1, min(limit, 100))
 
 	rows, err := db.Query("SELECT name, score FROM scores ORDER BY score DESC, timestamp ASC LIMIT ?", limit)
@@ -389,25 +427,29 @@ func main() {
 	initDB()
 	defer db.Close()
 
-	// Launch background task to securely clean stale sessions without blocking requests
+	// Background Cleanup Task
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
-			cleanupStaleSessions()
+			cleanupStaleData()
 		}
 	}()
 
-	// HTTP Routing
-	http.HandleFunc("GET /rules", handleRules)
-	http.HandleFunc("GET /token", handleToken)
-	http.HandleFunc("GET /eat/{token}/{steps}/{fx}/{fy}", handleEat)
-	http.HandleFunc("GET /cheat/{token}", handleCheat)
-	http.HandleFunc("GET /submit/{token}/{name}/{steps}", handleSubmit)
-	http.HandleFunc("GET /scores/{limit}", handleScores)
+	// Native HTTP routing without versioning for retro-compatibility
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /rules", handleRules)
+	mux.HandleFunc("GET /token", handleToken)
+	mux.HandleFunc("GET /eat/{token}/{steps}/{fx}/{fy}", handleEat)
+	mux.HandleFunc("GET /cheat/{token}", handleCheat)
+	mux.HandleFunc("GET /submit/{token}/{name}/{steps}", handleSubmit)
+	mux.HandleFunc("GET /scores/{limit}", handleScores)
 
-	log.Printf("[Server] Starting backend on 0.0.0.0:%s", port)
-	if err := http.ListenAndServe("0.0.0.0:"+port, nil); err != nil {
+	// Wrap mux with our Rate Limiter Middleware
+	handler := rateLimitMiddleware(mux)
+
+	log.Printf("[Server] Starting secure backend on 0.0.0.0:%s", port)
+	if err := http.ListenAndServe("0.0.0.0:"+port, handler); err != nil {
 		log.Fatalf("Server crashed: %v", err)
 	}
 }

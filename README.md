@@ -94,7 +94,10 @@ The anti-cheat backend incorporates several robust validation layers:
 1. **Synchronized PRNG**: Server and client utilize an identical Linear Congruential Generator (LCG) dropping low-order bits (`>> 16`) to predict exactly where fruits must spawn safely.
 2. **Speedhack & Teleport Filters**: Enforces minimum pathing (Manhattan distance) and minimum time delays factoring in the game's actual exponential speed-up.
 3. **Dynamic Degradation**: Penalty calculations are securely mirrored to slowly decay the score if the snake deliberately avoids eating fruits over time.
-4. **Structured Logging**: Fully timestamped, level-based logs track all warnings natively.
+4. **Anti-Spam**: Strict rate limiting (20 req/sec) to mitigate DDoS/Siege attacks.
+5. **Anti-OOM Protection**: Global limit of concurrent active sessions (5000) with safe background memory cleanup to prevent resource exhaustion and IP spoofing leaks.
+6. **Thread-Safe Architecture**: Full mutex/lock protection on state maps in both Go and Python proxy variants.
+7. **Structured Logging**: Fully timestamped, level-based logs track all warnings natively.
 
 #### 1. Server Setup (VPS)
 We provide two drop-in options for the backend validation proxy: **Go** (High performance, statically linked) and **Python** (Gunicorn, legacy fallback). Both implement identical scoring constraints.
