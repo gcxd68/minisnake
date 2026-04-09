@@ -254,9 +254,8 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	// 3. Time-based Anti-Spam
 	currentDelaySec := (InitialDelay / 1000000.0) * math.Pow(SpeedupFactor, float64(session.FruitsEaten))
 	
-	// Apply a 50% network margin tolerance and subtract a fixed 0.3s buffer
-	// to absorb lag spikes over very short distances.
-	minPingInterval := math.Max(0, (currentDelaySec * float64(deltaSteps) * 0.5) - 0.3)
+	// Hybrid tolerance: 25% margin against speedhacks + 0.5s fixed buffer against network jitter
+	minPingInterval := math.Max(0, (currentDelaySec * float64(deltaSteps) * 0.75) - 0.5)
 
 	if time.Since(session.LastPing).Seconds() < minPingInterval {
 		session.Cheated = true

@@ -186,9 +186,8 @@ def eat_fruit(token, steps, fx, fy):
     # 3. Time-based Anti-Spam
     current_delay_sec = (INITIAL_DELAY / 1000000.0) * (SPEEDUP_FACTOR ** session["fruits_eaten"])
     
-    # Apply a 50% network margin tolerance and subtract a fixed 0.3s buffer 
-    # to absorb lag spikes over very short distances.
-    min_ping_interval = max(0, (current_delay_sec * delta_steps * 0.5) - 0.3)
+    # Hybrid tolerance: 25% margin against speedhacks + 0.5s fixed buffer against network jitter
+    min_ping_interval = max(0, (current_delay_sec * delta_steps * 0.75) - 0.5)
     
     if now - session["last_ping"] < min_ping_interval:
         flag_cheater(token, "Time", f"Ping too fast for {delta_steps} steps.")
