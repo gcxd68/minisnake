@@ -67,7 +67,7 @@ $(OBJ_DIR)%.o: $(SRC_DIR)%.c $(INC_DIR)minisnake.h $(INC_DIR)net.h
 	@mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# RULES: CLIENT (Minisnake C)
+# Client Cleanup
 clean:
 	@rm -rf $(OBJ_DIR)
 
@@ -77,7 +77,7 @@ fclean: clean
 
 re: fclean all
 
-# RULES: SERVER (Go Backend)
+# Server Cleanup
 clean-server:
 	@if [ -d server/go/bin ]; then cd server/go && go clean 2>/dev/null || true; fi
 
@@ -86,7 +86,7 @@ fclean-server: clean-server
 
 re-server: fclean-server server
 
-# RULES: GLOBAL (Everything)
+# Global Cleanup
 clean-all: clean clean-server
 fclean-all: fclean fclean-server
 re-all: fclean-all all server
