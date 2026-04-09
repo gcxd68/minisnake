@@ -11,6 +11,7 @@ A lightweight, terminal-based Snake game written in C with minimal dependencies.
 - 📏 Customizable game board dimensions
 - 🛡️ Advanced server-side anti-cheat with strict PRNG synchronization
 - 🎯 Score tracking
+- 🛠️ Dedicated POSIX system interactions abstracting raw terminal limits (`minisnake_sys.c`)
 
 ## Requirements
 
@@ -30,7 +31,7 @@ chmod +x minisnake
 ./minisnake online
 ```
 
-Launches a dedicated gnome-terminal window with a fixed 25x20 board. After the game, enter your login to submit your score to the global leaderboard.
+Launches a dedicated gnome-terminal window with a fixed 25x20 board. After the game, if your score is greater than zero, enter your login to submit your score to the global leaderboard. Otherwise, you will simply be prompted to press Enter to continue.
 
 > **Note:** Online mode is only available in pre-built releases. If you compile from source without `net.h`, online mode will not be available.
 
@@ -96,16 +97,20 @@ The anti-cheat backend incorporates several robust validation layers:
 4. **Structured Logging**: Fully timestamped, level-based logs track all warnings natively.
 
 #### 1. Server Setup (VPS)
-1. Go to the `server/` directory and create an `.env` file based on `.env.example` (or create one). Provide the desired port for the Python proxy:
+We provide two drop-in options for the backend validation proxy: **Go** (High performance, statically linked) and **Python** (Gunicorn, legacy fallback). Both implement identical scoring constraints.
+
+**Option A: Go Backend (Recommended)**
+1. Ensure you have Go installed on your server (or simply build the binary locally matching your VPS architecture).
+2. Configure `.env` in `server/go/`, matching the example file (if needed) for port configuration.
+3. Build the Go server using `make server` from the root directory, which will output the static binary to `server/go/bin/server`.
+4. Run the executable in a background service (e.g., using a systemd worker).
+
+**Option B: Python Backend (Legacy/Alternative)**
+1. Go to the `server/python/` directory and create an `.env` file based on `.env.example`. Provide the desired port:
    ```text
    PORT=YOUR_SERVER_PORT
    ```
-   > **Note:** The deployment script binds to port `8000` by default, so ensure `PORT` matches or is configured accordingly.
-2. Run the automated deployment script. It will detect your package manager, install dependencies, set up a Python virtual environment, configure the firewall (if using UFW), and start the server in the background using Gunicorn:
-   ```bash
-   chmod +x deploy.sh
-   ./deploy.sh
-   ```
+2. Run the automated deployment script (`./deploy.sh`) to set up a virtual environment and start the Gunicorn worker.
 
 #### 2. Client Setup (Game)
 1. Create a `net` file in the root directory (you can use `net.example` as a template) and add the **VPS hostname/IP** and **port** you defined earlier:
@@ -125,10 +130,15 @@ The anti-cheat backend incorporates several robust validation layers:
 
 | Target | Description |
 |--------|-------------|
-| `make` | Compile the project |
-| `make clean` | Remove object files |
-| `make fclean` | Remove object files and executable |
-| `make re` | Rebuild everything from scratch |
+| `make` | Compile the main client project C |
+| `make clean` | Remove client object files |
+| `make fclean` | Remove client object files and binaries |
+| `make re` | Rebuild client C from scratch |
+| `make server` | Build the standalone high-performance Go backend |
+| `make clean-server` | Clean Go backend cache |
+| `make fclean-server`| Remove Go backend cache and binary |
+| `make re-server` | Rebuild Go backend from scratch |
+| `make re-all` | Full wipe and rebuild of both client and server |
 
 ## Configuration
 

@@ -32,7 +32,7 @@ SRCS        = $(SRC_DIR)minisnake_game.c \
 OBJS        = $(SRCS:$(SRC_DIR)%.c=$(OBJ_DIR)%.o)
 
 # --- Rules ---
-.PHONY: all clean fclean re server
+.PHONY: all clean fclean re server clean-server fclean-server re-server clean-all fclean-all re-all
 
 .SILENT:
 
@@ -67,15 +67,26 @@ $(OBJ_DIR)%.o: $(SRC_DIR)%.c $(INC_DIR)minisnake.h $(INC_DIR)net.h
 	@mkdir -p $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Cleanup object files
+# RULES: CLIENT (Minisnake C)
 clean:
 	@rm -rf $(OBJ_DIR)
-	@if [ -d server/go ]; then cd server/go && go clean; fi
 
-# Full cleanup (objects + bin + generated headers)
 fclean: clean
 	@rm -rf $(BIN_DIR)
 	@rm -f $(INC_DIR)net.h
-	@rm -rf server/go/bin
 
 re: fclean all
+
+# RULES: SERVER (Go Backend)
+clean-server:
+	@if [ -d server/go/bin ]; then cd server/go && go clean 2>/dev/null || true; fi
+
+fclean-server: clean-server
+	@rm -rf server/go/bin
+
+re-server: fclean-server server
+
+# RULES: GLOBAL (Everything)
+clean-all: clean clean-server
+fclean-all: fclean fclean-server
+re-all: fclean-all all server
