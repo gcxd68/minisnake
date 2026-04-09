@@ -63,21 +63,24 @@ static void anticheat(t_data *d) {
 
 #endif
 
-static void	process_input(t_data *d) {
-	static const char	keys[] = MOVE_KEYS;
+static void process_input(t_data *d) {
+	static const char	move_keys[] = MOVE_KEYS;
+	static const char	arrow_keys[] = ARROW_KEYS;
 	char				*pos;
 	int					c, i;
 
 	d->dir[1] = d->dir[0];
 	for (i = 0; d->input_q[i] != EOF; i++);
-	while ((c = getchar()) != EOF)
-		if (i < INPUT_Q_SIZE)
-			d->input_q[i++] = c;
-	if (toupper(d->input_q[0]) == *EXIT_KEY)
+	while ((c = getchar()) != EOF) {
+		c = (c == '\033' && getchar() == '[') ? getchar() + 256 : toupper(c);
+		if (i < INPUT_Q_SIZE) d->input_q[i++] = c;
+	}
+	if ((c = d->input_q[0]) == *EXIT_KEY)
 		d->game_over = 1;
-	else if ((pos = strchr(keys, toupper(d->input_q[0]))))
-		if ((pos - keys + 2) >> 1 != (d->dir[0] + 1) >> 1)
-			d->dir[0] = pos - keys + 1;
+	const char *base = (c > 255) ? arrow_keys : move_keys;
+	pos = strchr(base, (c > 255) ? c - 256 : c);
+	if (pos && (pos - base + 2) >> 1 != (d->dir[0] + 1) >> 1)
+		d->dir[0] = pos - base + 1;
 	for (i = 0; i < INPUT_Q_SIZE; i++)
 		d->input_q[i] = d->input_q[i + 1];
 }
@@ -98,8 +101,7 @@ static void	update_game(t_data *d) {
 	d->steps++;
 	if (d->penalty_interval > 0 && d->steps % d->penalty_interval == 0)
 		d->score -= d->penalty_amount;
-	if (d->score < 0)
-		d->score = 0;
+	d->score = MAX(d->score, 0);
 	if (d->grow && d->grow--)
 		d->size++;
 	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));

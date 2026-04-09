@@ -58,10 +58,10 @@ Custom mode is offline only. Playing without arguments defaults to 25x20. The ga
 
 | Key | Action |
 |-----|--------|
-| `W` | Move Up |
-| `A` | Move Left |
-| `S` | Move Down |
-| `D` | Move Right |
+| `W` / `↑` | Move Up |
+| `A` / `←` | Move Left |
+| `S` / `↓` | Move Down |
+| `D` / `→` | Move Right |
 | `X` | Quit |
 
 ## Gameplay

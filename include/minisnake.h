@@ -144,6 +144,7 @@
 
 /* UI & TEXT: Messages and terminal interaction */
 # define MOVE_KEYS				"ADWS"
+# define ARROW_KEYS				"DCAB"
 # define EXIT_KEY				"X"
 # define INSTRUCTIONS			"Use " MOVE_KEYS " to move, " EXIT_KEY " to quit"
 # define MSG_LOSS				"GAME OVER"
