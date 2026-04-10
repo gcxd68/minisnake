@@ -100,12 +100,13 @@ func loadRules() {
 		}
 	}
 
-	// 3. Dynamically calculate the maximum possible score
+	// 3. Dynamically calculate the maximum possible score (used internally for security)
 	Rules.MaxScore = Rules.GameWidth * Rules.GameHeight * Rules.PointsPerFruit
 
 	// 4. Log active configuration for observability
-	log.Printf("[Server] Active Rules: %dx%d | PPF: %d | Delay: %.0f | MaxScore: %d",
-		Rules.GameWidth, Rules.GameHeight, Rules.PointsPerFruit, Rules.InitialDelay, Rules.MaxScore)
+	log.Printf("[Server] Active Rules: %dx%d | Delay: %.0f | Speedup: %.3f | PPF: %d | Size: %d | Penalty: %d | Interval: %d",
+		Rules.GameWidth, Rules.GameHeight, Rules.InitialDelay, Rules.SpeedupFactor,
+		Rules.PointsPerFruit, Rules.InitialSize, Rules.PenaltyAmount, Rules.PenaltyInterval)
 }
 
 // --- Helper Functions ---

@@ -63,11 +63,11 @@ except FileNotFoundError:
 except Exception as e:
     logger.warning(f"Error parsing rules.json, relying on defaults: {e}")
 
-# 2. Dynamically calculate the maximum possible score
+# 2. Dynamically calculate the maximum possible score (used internally for security)
 MAX_SCORE = rules["GameWidth"] * rules["GameHeight"] * rules["PointsPerFruit"]
 
 # 3. Log active configuration for observability
-logger.info(f"Active Rules: {rules['GameWidth']}x{rules['GameHeight']} | PPF: {rules['PointsPerFruit']} | Delay: {rules['InitialDelay']} | MaxScore: {MAX_SCORE}")
+logger.info(f"Active Rules: {rules['GameWidth']}x{rules['GameHeight']} | Delay: {int(rules['InitialDelay'])} | Speedup: {rules['SpeedupFactor']} | PPF: {rules['PointsPerFruit']} | Size: {rules['InitialSize']} | Penalty: {rules['PenaltyAmount']} | Interval: {rules['PenaltyInterval']}")
 
 # --- Server States (Thread-Safe Architecture) ---
 active_sessions = {}
