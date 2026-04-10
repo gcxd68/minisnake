@@ -73,7 +73,12 @@ After the game, if your score is greater than zero, you will be prompted to ente
 
 ## Server Setup
 
-The online leaderboard functions via a secure Server-Side Scoring Architecture proxy. The C client never submits its score directly; instead, it sends an asynchronous HTTP ping per fruit. The server securely enforces pathing constraints, speedhacks limits, rate limiting (DDoS protection), and synchronized PRNG.
+The online leaderboard functions via a secure Server-Side Scoring Architecture proxy. The C client never submits its score directly; instead, it sends an asynchronous HTTP ping per fruit. Both backend options (Go and Python) securely enforce several critical validations:
+
+- **Time Corridor (Anti-Spam & Anti-Pause):** A dynamic time window is calculated based on game speed and path length. Taking too little time flags a speedhack, while taking too much time flags pausing (e.g., using a debugger).
+- **Maximum Score Authorization:** The server strictly validates that no submitted score exceeds the theoretical maximum capacity (`Width * Height * PointsPerFruit`). 
+- **Detailed Audit Logging:** The server maintains precise, modified final logs for every single game session, capturing the player's IP, token, final score, and exact number of fruits eaten, or explicitly logging why a score was ignored/rejected.
+- **Pathing and PRNG Constraints:** The server verifies Manhattan distances and synchronizes the fruit generation sequence to block teleports or RNG manipulation.
 
 ### 1. Backend Service Options
 You have two drop-in options for the backend proxy:
