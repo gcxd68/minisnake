@@ -96,7 +96,7 @@ A Gunicorn fallback option.
 2. Initialize `.env` from `.env.example` adding your `PORT`.
 3. Run the deployment script (`./deploy.sh`) to start the worker.
 
-### 2. Dynamic Server Configuration (New!)
+### 2. Dynamic Server Configuration
 You can now dynamically adjust the game constraints (points, speed, grid boundaries) directly from the server without having to rebuild the proxy.
 
 1. Rename `server/rules.json.example` to `rules.json` and place it in the same directory where your active backend server is executed.

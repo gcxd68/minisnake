@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -18,28 +19,30 @@ import (
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 )
 
-// --- Configuration & Game Rules ---
+// --- Server & Security Constants ---
 const (
-	Port                  = "8000"
-	DBPath                = "scores.db"
-	GameWidth             = 25
-	GameHeight            = 20
-	InitialDelay          = 250000.0
-	SpeedupFactor         = 0.985
-	PointsPerFruit        = 10
-	CheatTimeout          = 5000
-	InitialSize           = 1
-	PenaltyInterval       = 10
-	PenaltyAmount         = 1
-	SpawnFruitMaxAttempts = 10000
-	MaxScore              = GameWidth * GameHeight * PointsPerFruit
-
-	// --- SECURITY LIMITS ---
+	Port              = "8000"
+	DBPath            = "scores.db"
 	MaxActiveSessions = 5000 // Anti-OOM: Global limit of concurrent players
 	MaxReqPerSec      = 20   // Anti-Spam: 20 requests per second max per IP
 )
 
-// --- Structures ---
+// --- Dynamic Game Rules Structure ---
+type GameRules struct {
+	GameWidth             int
+	GameHeight            int
+	InitialDelay          float64
+	SpeedupFactor         float64
+	PointsPerFruit        int
+	CheatTimeout          int
+	InitialSize           int
+	PenaltyInterval       int
+	PenaltyAmount         int
+	SpawnFruitMaxAttempts int
+	MaxScore              int `json:"-"` // Calculated dynamically to prevent security override
+}
+
+// --- Game Structures ---
 type Session struct {
 	Score       int
 	FruitsEaten int
@@ -59,6 +62,7 @@ type IPData struct {
 
 // Global state
 var (
+	Rules          GameRules
 	db             *sql.DB
 	activeSessions = make(map[string]*Session)
 	sessionMutex   sync.RWMutex
@@ -66,6 +70,43 @@ var (
 	ipDataMap = make(map[string]*IPData)
 	ipMutex   sync.Mutex
 )
+
+// --- Configuration Logic ---
+
+// loadRules: Initializes default game rules and overrides them if rules.json exists
+func loadRules() {
+	// 1. Set hardcoded base default values
+	Rules = GameRules{
+		GameWidth:             25,
+		GameHeight:            20,
+		InitialDelay:          250000.0,
+		SpeedupFactor:         0.985,
+		PointsPerFruit:        10,
+		CheatTimeout:          5000,
+		InitialSize:           1,
+		PenaltyInterval:       10,
+		PenaltyAmount:         1,
+		SpawnFruitMaxAttempts: 10000,
+	}
+
+	// 2. Override with external JSON file if available
+	file, err := os.Open("rules.json")
+	if err == nil {
+		defer file.Close()
+		if err := json.NewDecoder(file).Decode(&Rules); err == nil {
+			log.Println("[Server] Custom game rules loaded from rules.json")
+		} else {
+			log.Printf("[Server] Error parsing rules.json, relying on defaults: %v", err)
+		}
+	}
+
+	// 3. Dynamically calculate the maximum possible score
+	Rules.MaxScore = Rules.GameWidth * Rules.GameHeight * Rules.PointsPerFruit
+
+	// 4. Log active configuration for observability
+	log.Printf("[Server] Active Rules: %dx%d | PPF: %d | Delay: %.0f | MaxScore: %d",
+		Rules.GameWidth, Rules.GameHeight, Rules.PointsPerFruit, Rules.InitialDelay, Rules.MaxScore)
+}
 
 // --- Helper Functions ---
 
@@ -86,12 +127,12 @@ func isAlphanumeric(s string) bool {
 
 // applyPenalties: Deducts points if the player takes too many steps without eating
 func applyPenalties(session *Session, newSteps int) {
-	if PenaltyInterval <= 0 {
+	if Rules.PenaltyInterval <= 0 {
 		return
 	}
 	for step := session.LastSteps + 1; step <= newSteps; step++ {
-		if step%PenaltyInterval == 0 {
-			session.Score = max(0, session.Score-PenaltyAmount)
+		if step%Rules.PenaltyInterval == 0 {
+			session.Score = max(0, session.Score-Rules.PenaltyAmount)
 		}
 	}
 }
@@ -105,9 +146,8 @@ func getRemoteIP(r *http.Request) string {
 	return ip
 }
 
-// --- Security Functions ---
+// --- Middleware & Security ---
 
-// rateLimitMiddleware protects the server from DDoS and Siege (Rate Limit only)
 func rateLimitMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := getRemoteIP(r)
@@ -119,7 +159,6 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 			ipDataMap[ip] = data
 		}
 
-		// Enforce Rate Limit (20 req/sec)
 		if time.Since(data.WindowStart) > time.Second {
 			data.ReqCount = 0
 			data.WindowStart = time.Now()
@@ -137,9 +176,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// cleanupStaleData: Removes inactive sessions and old IP records
 func cleanupStaleData() {
-	// Cleanup inactive sessions
 	sessionMutex.Lock()
 	for token, session := range activeSessions {
 		if time.Since(session.LastPing).Seconds() > 900 {
@@ -148,7 +185,6 @@ func cleanupStaleData() {
 	}
 	sessionMutex.Unlock()
 
-	// Cleanup IP map (Prevent memory leaks from random IP spoofing)
 	ipMutex.Lock()
 	for ip, data := range ipDataMap {
 		if time.Since(data.WindowStart) > 5*time.Minute {
@@ -174,26 +210,25 @@ func initDB() {
 	log.Println("[Server] Database initialized successfully.")
 }
 
-// --- API Routes ---
+// --- API Handlers ---
 
 func handleRules(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%d|%d|%d|%f|%d|%d|%d|%d|%d|%d",
-		GameWidth, GameHeight, int(InitialDelay), SpeedupFactor, PointsPerFruit,
-		CheatTimeout, InitialSize, PenaltyInterval, PenaltyAmount, SpawnFruitMaxAttempts)
+		Rules.GameWidth, Rules.GameHeight, int(Rules.InitialDelay), Rules.SpeedupFactor, Rules.PointsPerFruit,
+		Rules.CheatTimeout, Rules.InitialSize, Rules.PenaltyInterval, Rules.PenaltyAmount, Rules.SpawnFruitMaxAttempts)
 }
 
 func handleToken(w http.ResponseWriter, r *http.Request) {
 	ip := getRemoteIP(r)
 
-	// Anti-OOM Protection
 	sessionMutex.RLock()
-	count := len(activeSessions)
-	sessionMutex.RUnlock()
-	if count >= MaxActiveSessions {
+	if len(activeSessions) >= MaxActiveSessions {
+		sessionMutex.RUnlock()
 		log.Printf("[SECURITY] OOM LIMIT REACHED. Refused connection for %s", ip)
 		http.Error(w, "Server full", http.StatusServiceUnavailable)
 		return
 	}
+	sessionMutex.RUnlock()
 
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
@@ -205,13 +240,13 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 
 	currentSeed := originalSeed
 	offsetX := 0
-	if GameWidth%2 == 0 {
+	if Rules.GameWidth%2 == 0 {
 		currentSeed = lcgRand(currentSeed)
 		offsetX = int(currentSeed % 2)
 	}
 
 	offsetY := 0
-	if GameHeight%2 == 0 {
+	if Rules.GameHeight%2 == 0 {
 		currentSeed = lcgRand(currentSeed)
 		offsetY = int(currentSeed % 2)
 	}
@@ -223,8 +258,8 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		LastPing:    time.Now(),
 		Cheated:     false,
 		Seed:        currentSeed,
-		HeadX:       (GameWidth / 2) - offsetX,
-		HeadY:       (GameHeight / 2) - offsetY,
+		HeadX:       (Rules.GameWidth / 2) - offsetX,
+		HeadY:       (Rules.GameHeight / 2) - offsetY,
 		LastSteps:   0,
 	}
 	sessionMutex.Unlock()
@@ -249,7 +284,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deltaSteps := steps - session.LastSteps
-
 	if deltaSteps <= 0 {
 		session.Cheated = true
 		sessionMutex.Unlock()
@@ -258,14 +292,14 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Fruit Validation
+	// 1. RNG Validation
 	validFruit := false
 	tempSeed := session.Seed
-	for i := 0; i < SpawnFruitMaxAttempts; i++ {
+	for i := 0; i < Rules.SpawnFruitMaxAttempts; i++ {
 		tempSeed = lcgRand(tempSeed)
-		candX := int((tempSeed >> 16) % GameWidth)
+		candX := int((tempSeed >> 16) % uint32(Rules.GameWidth))
 		tempSeed = lcgRand(tempSeed)
-		candY := int((tempSeed >> 16) % GameHeight)
+		candY := int((tempSeed >> 16) % uint32(Rules.GameHeight))
 
 		if candX == fx && candY == fy {
 			validFruit = true
@@ -282,7 +316,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Manhattan Distance
+	// 2. Physical Validation (Manhattan Distance)
 	manhattan := int(math.Abs(float64(fx-session.HeadX)) + math.Abs(float64(fy-session.HeadY)))
 	if deltaSteps < manhattan {
 		session.Cheated = true
@@ -292,18 +326,16 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Time-based Anti-Spam & Anti-Pause (The Time Corridor)
-	currentDelaySec := (InitialDelay / 1000000.0) * math.Pow(SpeedupFactor, float64(session.FruitsEaten))
+	// 3. The Time Corridor (Anti-Speedhack & Anti-Pause)
+	// Calculate the speed active DURING the travel (before current fruit acceleration)
+	currentDelaySec := (Rules.InitialDelay / 1000000.0) * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
 	expectedTime := currentDelaySec * float64(deltaSteps)
 
-	// Floor: Too fast (Speedhack)
-	minPingInterval := math.Max(0, (expectedTime*0.75)-0.5)
-	// Ceiling: Too slow (Pause LLDB/GDB)
-	maxPingInterval := expectedTime + (float64(CheatTimeout) / 1000.0) + 5.0
-
 	actualTime := time.Since(session.LastPing).Seconds()
+	minTime := math.Max(0, (expectedTime*0.75)-0.5)                        // Floor (Speedhack)
+	maxTime := expectedTime + (float64(Rules.CheatTimeout) / 1000.0) + 5.0 // Ceiling (LLDB/Pause)
 
-	if actualTime < minPingInterval {
+	if actualTime < minTime {
 		session.Cheated = true
 		sessionMutex.Unlock()
 		log.Printf("[%s] CHEAT (Time): %s | Speedhack. Expected ~%.1fs, took %.1fs", ip, token[:8], expectedTime, actualTime)
@@ -311,7 +343,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if actualTime > maxPingInterval {
+	if actualTime > maxTime {
 		session.Cheated = true
 		sessionMutex.Unlock()
 		log.Printf("[%s] CHEAT (Timeout): %s | Paused/Lag. Expected ~%.1fs, took %.1fs", ip, token[:8], expectedTime, actualTime)
@@ -321,10 +353,11 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	// 4. Update Score & Penalties
 	applyPenalties(session, steps)
-	session.Score += PointsPerFruit
+	session.Score += Rules.PointsPerFruit
 	session.FruitsEaten++
 
-	if session.Score > MaxScore {
+	// Check against dynamic MaxScore (strictly greater than)
+	if session.Score > Rules.MaxScore {
 		session.Cheated = true
 		sessionMutex.Unlock()
 		log.Printf("[%s] CHEAT (Limit): %s | Score %d exceeded capacity.", ip, token[:8], session.Score)
@@ -332,11 +365,8 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5. Update State
 	session.LastPing = time.Now()
-	session.HeadX = fx
-	session.HeadY = fy
-	session.LastSteps = steps
+	session.HeadX, session.HeadY, session.LastSteps = fx, fy, steps
 	sessionMutex.Unlock()
 
 	fmt.Fprint(w, "Yum")
@@ -352,7 +382,7 @@ func handleCheat(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionMutex.Unlock()
 
-	log.Printf("[%s] CHEAT (Local): %s | TracerPid/Local anomaly detected. Session flagged.", ip, token[:8])
+	log.Printf("[%s] CHEAT (Local): %s | TracerPid/Local anomaly reported by client.", ip, token[:8])
 	fmt.Fprint(w, "Flagged")
 }
 
@@ -362,7 +392,6 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	steps, _ := strconv.Atoi(r.PathValue("steps"))
 	ip := getRemoteIP(r)
 
-	// Safely detach the session to prevent double-submits
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 	if exists {
@@ -383,15 +412,15 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if session.Cheated {
-		log.Printf("[%s] BANNED SUBMISSION: Player '%s' attempted to submit from flagged session %s. Forcing score to 0.", ip, name, token[:8])
+		log.Printf("[%s] BANNED SUBMISSION: Player '%s' attempted to submit from flagged session %s.", ip, name, token[:8])
 		session.Score = 0
 	} else if session.Score > 0 {
 		applyPenalties(session, steps)
 	}
 
 	finalScore := session.Score
-	if finalScore < 0 || finalScore > MaxScore {
-		log.Printf("[%s] SUBMIT REJECTED: Impossible score %d for '%s' (Token: %s). Forcing score to 0.", ip, finalScore, name, token[:8])
+	if finalScore < 0 || finalScore > Rules.MaxScore {
+		log.Printf("[%s] SUBMIT REJECTED: Impossible score %d for '%s' (Session: %s).", ip, finalScore, name, token[:8])
 		finalScore = 0
 	}
 
@@ -404,7 +433,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[%s] SCORE SAVED: %s | Player: '%s' | Score: %d | Fruits: %d", ip, token[:8], name, finalScore, session.FruitsEaten)
 	} else {
-		log.Printf("[%s] SCORE IGNORED: %s | Player: '%s' submission processed but not saved to DB (Zero or Cheated).", ip, token[:8], name)
+		log.Printf("[%s] SCORE IGNORED: %s | Player: '%s' processed but not saved (Zero or Cheated).", ip, token[:8], name)
 	}
 
 	fmt.Fprint(w, "OK")
@@ -432,19 +461,11 @@ func handleScores(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("[Warning] No .env file found or error reading it. Relying on system environment variables.")
-	}
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = Port
-	}
-
+	godotenv.Load()
+	loadRules()
 	initDB()
 	defer db.Close()
 
-	// Background Cleanup Task
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
@@ -453,7 +474,6 @@ func main() {
 		}
 	}()
 
-	// Native HTTP routing without versioning for retro-compatibility
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /rules", handleRules)
 	mux.HandleFunc("GET /token", handleToken)
@@ -462,11 +482,10 @@ func main() {
 	mux.HandleFunc("GET /submit/{token}/{name}/{steps}", handleSubmit)
 	mux.HandleFunc("GET /scores/{limit}", handleScores)
 
-	// Wrap mux with our Rate Limiter Middleware
 	handler := rateLimitMiddleware(mux)
 
-	log.Printf("[Server] Starting secure backend on 0.0.0.0:%s", port)
-	if err := http.ListenAndServe("0.0.0.0:"+port, handler); err != nil {
+	log.Printf("[Server] Starting secure backend on 0.0.0.0:%s", Port)
+	if err := http.ListenAndServe("0.0.0.0:"+Port, handler); err != nil {
 		log.Fatalf("Server crashed: %v", err)
 	}
 }
