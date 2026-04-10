@@ -303,9 +303,10 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	tempSeed := session.Seed
 	for i := 0; i < Rules.SpawnFruitMaxAttempts; i++ {
 		tempSeed = lcgRand(tempSeed)
-		candX := int((tempSeed >> 16) % Rules.GameWidth)
+		// Explicitly cast to int AFTER bitwise shift to avoid Go strict typing errors
+		candX := int(tempSeed>>16) % Rules.GameWidth
 		tempSeed = lcgRand(tempSeed)
-		candY := int((tempSeed >> 16) % Rules.GameHeight)
+		candY := int(tempSeed>>16) % Rules.GameHeight
 
 		if candX == fx && candY == fy {
 			validFruit = true
