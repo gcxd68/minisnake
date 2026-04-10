@@ -4,6 +4,7 @@ import secrets
 import sqlite3
 import logging
 import threading
+import json
 from flask import Flask, request, abort
 from dotenv import load_dotenv
 
@@ -35,21 +36,55 @@ logger.addFilter(ContextFilter())
 PORT = int(os.environ.get("PORT", 8000))
 DB_PATH = 'scores.db'
 
-GAME_WIDTH = 25
-GAME_HEIGHT = 20
-INITIAL_DELAY = 250000
-SPEEDUP_FACTOR = 0.985
-POINTS_PER_FRUIT = 10
-CHEAT_TIMEOUT = 5000
-INITIAL_SIZE = 1
-PENALTY_INTERVAL = 10
-PENALTY_AMOUNT = 1
-SPAWN_FRUIT_MAX_ATTEMPTS = 10000
-MAX_SCORE = GAME_WIDTH * GAME_HEIGHT * POINTS_PER_FRUIT
-
 # --- SECURITY LIMITS ---
 MAX_ACTIVE_SESSIONS = 5000
 MAX_REQ_PER_SEC = 20
+
+class GameRules:
+    """ Stores game rules, populated with defaults and overridable via rules.json """
+    GameWidth = 25
+    GameHeight = 20
+    InitialDelay = 250000.0
+    SpeedupFactor = 0.985
+    PointsPerFruit = 10
+    CheatTimeout = 5000
+    InitialSize = 1
+    PenaltyInterval = 10
+    PenaltyAmount = 1
+    SpawnFruitMaxAttempts = 10000
+    MaxScore = 0 # Calculated dynamically
+
+rules = GameRules()
+
+def load_rules():
+    """ Loads custom rules from rules.json if it exists, and calculates MaxScore safely """
+    VALID_KEYS = {
+        "GameWidth", "GameHeight", "InitialDelay", "SpeedupFactor", 
+        "PointsPerFruit", "CheatTimeout", "InitialSize", 
+        "PenaltyInterval", "PenaltyAmount", "SpawnFruitMaxAttempts"
+    }
+
+    try:
+        with open("rules.json", "r") as f:
+            custom_rules = json.load(f)
+            # Explicitly whitelist acceptable keys to prevent internal attribute injection
+            for key, value in custom_rules.items():
+                if key in VALID_KEYS:
+                    setattr(rules, key, value)
+        logger.info("[Server] Custom game rules loaded from rules.json")
+    except FileNotFoundError:
+        pass # Silently proceed with defaults
+    except Exception as e:
+        logger.warning(f"[Server] Error parsing rules.json, relying on defaults: {e}")
+
+    # Dynamically calculate the maximum possible score safely
+    rules.MaxScore = rules.GameWidth * rules.GameHeight * rules.PointsPerFruit
+    
+    # Log active configuration for easy debugging
+    logger.info(f"[Server] Rules: {rules.GameWidth}x{rules.GameHeight} | Delay: {rules.InitialDelay} | Speedup: {rules.SpeedupFactor} | PPF: {rules.PointsPerFruit} | MaxScore: {rules.MaxScore}")
+
+# Load rules immediately on startup
+load_rules()
 
 # Server States (Thread-Safe Architecture)
 active_sessions = {}
@@ -66,12 +101,12 @@ def lcg_rand(seed):
 
 def apply_penalties(session, new_steps):
     """ Applies score penalties if the player takes too many steps without eating. """
-    if PENALTY_INTERVAL <= 0:
+    if rules.PenaltyInterval <= 0:
         return
         
     for step in range(session["last_steps"] + 1, new_steps + 1):
-        if step % PENALTY_INTERVAL == 0:
-            session["score"] = max(0, session["score"] - PENALTY_AMOUNT)
+        if step % rules.PenaltyInterval == 0:
+            session["score"] = max(0, session["score"] - rules.PenaltyAmount)
 
 # --- Security Functions ---
 @app.before_request
@@ -142,9 +177,9 @@ cleanup_thread.start()
 @app.route('/rules', methods=['GET'])
 def get_rules():
     """ Public endpoint to fetch game dimensions and rules. """
-    rules = [GAME_WIDTH, GAME_HEIGHT, INITIAL_DELAY, SPEEDUP_FACTOR, POINTS_PER_FRUIT, 
-             CHEAT_TIMEOUT, INITIAL_SIZE, PENALTY_INTERVAL, PENALTY_AMOUNT, SPAWN_FRUIT_MAX_ATTEMPTS]
-    return "|".join(map(str, rules)), 200
+    game_rules = [rules.GameWidth, rules.GameHeight, rules.InitialDelay, rules.SpeedupFactor, rules.PointsPerFruit, 
+                  rules.CheatTimeout, rules.InitialSize, rules.PenaltyInterval, rules.PenaltyAmount, rules.SpawnFruitMaxAttempts]
+    return "|".join(map(str, game_rules)), 200
 
 @app.route('/token', methods=['GET'])
 def get_token():
@@ -162,12 +197,12 @@ def get_token():
     # Seed advancement logic (offset) required to maintain strict cryptographic sync with the C client
     current_seed = original_seed
     offset_x = 0
-    if GAME_WIDTH % 2 == 0:
+    if rules.GameWidth % 2 == 0:
         current_seed = lcg_rand(current_seed)
         offset_x = current_seed % 2
 
     offset_y = 0
-    if GAME_HEIGHT % 2 == 0:
+    if rules.GameHeight % 2 == 0:
         current_seed = lcg_rand(current_seed)
         offset_y = current_seed % 2
 
@@ -178,8 +213,8 @@ def get_token():
             "last_ping": time.time(),
             "cheated": False,
             "seed": current_seed,
-            "head_x": (GAME_WIDTH // 2) - offset_x,
-            "head_y": (GAME_HEIGHT // 2) - offset_y,
+            "head_x": (rules.GameWidth // 2) - offset_x,
+            "head_y": (rules.GameHeight // 2) - offset_y,
             "last_steps": 0
         }
     
@@ -209,11 +244,11 @@ def eat_fruit(token, steps, fx, fy):
         # 1. Fruit Validation
         valid_fruit = False
         temp_seed = session["seed"]
-        for _ in range(SPAWN_FRUIT_MAX_ATTEMPTS):
+        for _ in range(rules.SpawnFruitMaxAttempts):
             temp_seed = lcg_rand(temp_seed)
-            cand_x = (temp_seed >> 16) % GAME_WIDTH
+            cand_x = (temp_seed >> 16) % rules.GameWidth
             temp_seed = lcg_rand(temp_seed)
-            cand_y = (temp_seed >> 16) % GAME_HEIGHT
+            cand_y = (temp_seed >> 16) % rules.GameHeight
             
             if cand_x == fx and cand_y == fy:
                 valid_fruit = True
@@ -233,7 +268,7 @@ def eat_fruit(token, steps, fx, fy):
             abort(400, description="Impossible move")
 
         # 3. Time-based Anti-Spam
-        current_delay_sec = (INITIAL_DELAY / 1000000.0) * (SPEEDUP_FACTOR ** session["fruits_eaten"])
+        current_delay_sec = (rules.InitialDelay / 1000000.0) * (rules.SpeedupFactor ** session["fruits_eaten"])
         # Hybrid tolerance: 25% margin against speedhacks + 0.5s fixed buffer against network jitter
         min_ping_interval = max(0, (current_delay_sec * delta_steps * 0.75) - 0.5)
         
@@ -244,10 +279,10 @@ def eat_fruit(token, steps, fx, fy):
 
         # 4. Score & Penalty Calculation
         apply_penalties(session, steps)
-        session["score"] += POINTS_PER_FRUIT
+        session["score"] += rules.PointsPerFruit
         session["fruits_eaten"] += 1
 
-        if session["score"] >= MAX_SCORE:
+        if session["score"] >= rules.MaxScore:
             session["cheated"] = True
             logger.warning(f"CHEAT (Limit): {token[:8]} | Score {session['score']} exceeded capacity.")
             abort(400, description="Score limit exceeded")
@@ -297,7 +332,7 @@ def submit_score(token, name, steps):
 
     final_score = session["score"]
     
-    if final_score < 0 or final_score > MAX_SCORE:
+    if final_score < 0 or final_score > rules.MaxScore:
         logger.warning(f"SUBMIT REJECTED: Impossible score {final_score} for '{name}'. Forcing score to 0.")
         final_score = 0
 
