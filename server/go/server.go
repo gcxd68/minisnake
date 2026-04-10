@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,21 +179,37 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 }
 
 func cleanupStaleData() {
+	var removedTokens []string
+
 	sessionMutex.Lock()
 	for token, session := range activeSessions {
+		// Removes sessions inactive for > 15 minutes
 		if time.Since(session.LastPing).Seconds() > 900 {
+			removedTokens = append(removedTokens, token[:8])
 			delete(activeSessions, token)
 		}
 	}
 	sessionMutex.Unlock()
 
+	removedIPs := 0
 	ipMutex.Lock()
 	for ip, data := range ipDataMap {
+		// Removes IP records older than 5 minutes
 		if time.Since(data.WindowStart) > 5*time.Minute {
 			delete(ipDataMap, ip)
+			removedIPs++
 		}
 	}
 	ipMutex.Unlock()
+
+	// Only log if something was actually cleaned up (prevents log spam)
+	if len(removedTokens) > 0 || removedIPs > 0 {
+		if len(removedTokens) > 0 {
+			log.Printf("[CLEANUP] Swept %d ghost sessions (%s) and %d stale IP records.", len(removedTokens), strings.Join(removedTokens, ", "), removedIPs)
+		} else {
+			log.Printf("[CLEANUP] Swept 0 ghost sessions and %d stale IP records.", removedIPs)
+		}
+	}
 }
 
 func initDB() {

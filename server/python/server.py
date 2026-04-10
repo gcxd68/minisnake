@@ -132,6 +132,8 @@ def cleanup_stale_data():
     
     with session_lock:
         stale_tokens = [t for t, d in active_sessions.items() if now - d["last_ping"] > 900]
+        # Keep track of the first 8 characters for the log
+        removed_tokens_short = [t[:8] for t in stale_tokens]
         for t in stale_tokens:
             del active_sessions[t]
             
@@ -139,6 +141,12 @@ def cleanup_stale_data():
         stale_ips = [ip for ip, d in ip_data_map.items() if now - d["window_start"] > 300]
         for ip in stale_ips:
             del ip_data_map[ip]
+        removed_ips = len(stale_ips)
+
+    # Only log if something was actually cleaned up
+    if len(stale_tokens) > 0 or removed_ips > 0:
+        tokens_str = f" ({', '.join(removed_tokens_short)})" if removed_tokens_short else ""
+        logger.info(f"[CLEANUP] Swept {len(stale_tokens)} ghost sessions{tokens_str} and {removed_ips} stale IP records.")
 
 def background_cleanup_task():
     """ Background thread to handle memory cleanup without slowing down endpoints """
