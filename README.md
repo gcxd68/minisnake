@@ -102,6 +102,8 @@ A Gunicorn fallback option.
 You can now dynamically adjust the game constraints (points, speed, grid boundaries) directly from the server without having to rebuild the proxy.
 
 1. Rename `server/rules.json.example` to `rules.json` and place it in the same directory where your active backend server is executed.
+*Note: The Go backend intrinsically enforces valid JSON structures via Go structs, while the Python backend intercepts and filters all loaded keys against a secure internal whitelist to prevent injection.*
+
 2. Override any desired rules:
 ```json
 {

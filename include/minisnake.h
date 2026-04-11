@@ -232,5 +232,4 @@ int			start_session(t_data *d);
 void		notify_server(t_data *d, const char *action);
 void		handle_leaderboard(t_data *d);
 
-
 #endif

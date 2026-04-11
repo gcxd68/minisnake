@@ -53,12 +53,15 @@ rules = {
     "SpawnFruitMaxAttempts": 10000
 }
 
-# 1. Override with external JSON file if available
+# 1. Securely override with external JSON file using a whitelist
+VALID_KEYS = set(rules.keys())
 try:
     with open("rules.json", "r") as f:
         custom_rules = json.load(f)
-        rules.update(custom_rules)
-        logger.info("Custom game rules loaded from rules.json")
+        for key, value in custom_rules.items():
+            if key in VALID_KEYS:
+                rules[key] = value
+        logger.info("Custom game rules loaded and filtered from rules.json")
 except FileNotFoundError:
     pass
 except Exception as e:

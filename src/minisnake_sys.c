@@ -46,12 +46,13 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 			fprintf(stderr, "WARNING: Your client version is outdated.\n"
 				"Please download the latest release from: https://github.com/gcxd68/minisnake/releases\n");
 			if (!ask_confirm("Would you like to play in Offline Mode instead? (y/n): "))
-				return (EXIT_SUCCESS); /* User chose 'n', exit cleanly */
+				return (EXIT_SUCCESS); 
 		}
 		
-		/* 2. Override local dimensions with server competitive rules if version is valid */
+		/* 2. server_sync_rules only runs if version was valid (ver_status == 1) */
 		if (ver_status == 1 && server_sync_rules(d))
 			d->online = 1;
+
 #else
 
 		/* If network is NOT compiled in, but the user explicitly typed "online", warn them */
@@ -61,6 +62,7 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 		}
 		/* If argc == 1, we silently drop to offline mode with default dimensions */
 #endif
+
 	} else if (argc == 3) {
 		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
 			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))

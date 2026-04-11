@@ -3,10 +3,11 @@
 #ifndef ONLINE_BUILD
 
 /* STUBS: network functions are disabled in offline builds */
-void    handle_leaderboard(t_data *d) { (void)d; }
+int		check_client_version(void) { return (0); }
 int		server_sync_rules(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
 void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
+void    handle_leaderboard(t_data *d) { (void)d; }
 
 #else
 
