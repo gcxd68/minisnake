@@ -381,16 +381,22 @@ def submit_score(token, name, steps):
 
 @app.route('/scores/<int:limit>', methods=['GET'])
 def get_scores(limit):
-    """ Retrieves the top scores from the database. """
+    """ Retrieves the top scores or sends an update notice to legacy clients. """
     
-    # NEW: Payload Hijacking for Legacy Clients
+    # Payload Hijacking for Legacy Clients (v0.5)
+    # Formatted to display as a list of entries in the name column
     if request.headers.get('X-Client-Version') != REQUIRED_CLIENT_VERSION:
-        fake_lb = (
-            "⚠️ UPDATE ⚠️|REQUIRED|0|0\n"
-            "NEW VERSION |AVAILABLE|0|0\n"
-            "PLEASE PULL |FROM GIT|0|0\n"
+        update_msg = (
+            "UPDATE REQUIRED!| |0|0\n"
+            " | |0|0\n"
+            "PLEASE GET  | |0|0\n"
+            "THE LATEST  | |0|0\n"
+            "VERSION AT  | |0|0\n"
+            "GITHUB.COM/ | |0|0\n"
+            "GCXD68/     | |0|0\n"
+            "MINISNAKE   | |0|0\n"
         )
-        return fake_lb, 200
+        return update_msg, 200
 
     limit = max(1, min(limit, 100))
 

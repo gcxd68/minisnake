@@ -505,9 +505,14 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 func handleScores(w http.ResponseWriter, r *http.Request) {
 	// Payload Hijacking for Legacy Clients
 	if r.Header.Get("X-Client-Version") != RequiredClientVersion {
-		fmt.Fprint(w, "⚠️ UPDATE ⚠️|REQUIRED|0|0\n")
-		fmt.Fprint(w, "NEW VERSION |AVAILABLE|0|0\n")
-		fmt.Fprint(w, "PLEASE PULL |FROM GIT|0|0\n")
+		fmt.Fprint(w, "UPDATE REQUIRED!| |0|0\n")
+		fmt.Fprint(w, " | |0|0\n")
+		fmt.Fprint(w, "PLEASE GET  | |0|0\n")
+		fmt.Fprint(w, "THE LATEST  | |0|0\n")
+		fmt.Fprint(w, "VERSION AT  | |0|0\n")
+		fmt.Fprint(w, "GITHUB.COM/ | |0|0\n")
+		fmt.Fprint(w, "GCXD68/     | |0|0\n")
+		fmt.Fprint(w, "MINISNAKE   | |0|0\n")
 		return
 	}
 
