@@ -272,7 +272,9 @@ def eat_fruit(token, steps, fx, fy):
         expected_time = current_delay_sec * delta_steps
         
         actual_time = now - session["last_ping"]
-        min_time = max(0, (expected_time * 0.75) - 0.5)               # Floor (Speedhack)
+        
+        # Absorbs 1s of fixed network lag (packet bunching), but remains strict (75%) on long distances
+        min_time = max(0, (expected_time * 0.75) - 1.0)                   # Floor (Speedhack)
         max_time = expected_time + (rules["CheatTimeout"] / 1000.0) + 5.0 # Ceiling (LLDB/Pause)
         
         if actual_time < min_time:

@@ -363,7 +363,9 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	expectedTime := currentDelaySec * float64(deltaSteps)
 
 	actualTime := time.Since(session.LastPing).Seconds()
-	minTime := math.Max(0, (expectedTime*0.75)-0.5)                        // Floor (Speedhack)
+
+	// Absorbs 1s of fixed network lag (packet bunching), but remains strict (75%) on long distances
+	minTime := math.Max(0, (expectedTime*0.75)-1.0)                        // Floor (Speedhack)
 	maxTime := expectedTime + (float64(Rules.CheatTimeout) / 1000.0) + 5.0 // Ceiling (LLDB/Pause)
 
 	if actualTime < minTime {
