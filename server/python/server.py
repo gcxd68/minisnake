@@ -384,14 +384,14 @@ def get_scores(limit):
     """ Retrieves the top scores or sends an update notice to legacy clients. """
     
     # Payload Hijacking for Legacy Clients (v0.5)
-    # Formatted to display as a list of entries in the name column
+    # Formatted to display a clear update notice within the old client's UI
     if request.headers.get('X-Client-Version') != REQUIRED_CLIENT_VERSION:
         update_msg = (
             "UPDATE REQUIRED!| |0|0\n"
             " | |0|0\n"
-            "PLEASE GET  | |0|0\n"
-            "THE LATEST  | |0|0\n"
-            "VERSION AT  | |0|0\n"
+            "PLEASE GET THE | |0|0\n"
+            "LATEST VERSION AT: | |0|0\n"
+            " | |0|0\n"
             "GITHUB.COM/ | |0|0\n"
             "GCXD68/     | |0|0\n"
             "MINISNAKE/  | |0|0\n"

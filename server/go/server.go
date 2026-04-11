@@ -507,9 +507,9 @@ func handleScores(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("X-Client-Version") != RequiredClientVersion {
 		fmt.Fprint(w, "UPDATE REQUIRED!| |0|0\n")
 		fmt.Fprint(w, " | |0|0\n")
-		fmt.Fprint(w, "PLEASE GET  | |0|0\n")
-		fmt.Fprint(w, "THE LATEST  | |0|0\n")
-		fmt.Fprint(w, "VERSION AT  | |0|0\n")
+		fmt.Fprint(w, "PLEASE GET THE | |0|0\n")
+		fmt.Fprint(w, "LATEST VERSION AT: | |0|0\n")
+		fmt.Fprint(w, " | |0|0\n")
 		fmt.Fprint(w, "GITHUB.COM/ | |0|0\n")
 		fmt.Fprint(w, "GCXD68/     | |0|0\n")
 		fmt.Fprint(w, "MINISNAKE/  | |0|0\n")
