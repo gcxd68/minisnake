@@ -168,9 +168,12 @@ cleanup_thread.start()
 @app.route('/rules', methods=['GET'])
 def get_rules():
     """ Public endpoint to fetch game dimensions and rules. """
+    version = request.headers.get('X-Client-Version')
     
-    # Dedicated early version check
-    if request.headers.get('X-Client-Version') != REQUIRED_CLIENT_VERSION:
+    # Only block if a version is provided and it does not match the requirement.
+    # This allows legacy clients (v0.5) to enter the game and see the 
+    # update notice at the leaderboard screen.
+    if version is not None and version != REQUIRED_CLIENT_VERSION:
         return "UPDATE", 200
 
     rule_values = [

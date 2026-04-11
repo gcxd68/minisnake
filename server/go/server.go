@@ -232,11 +232,18 @@ func initDB() {
 // --- API Handlers ---
 
 func handleRules(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Client-Version") != RequiredClientVersion {
+	version := r.Header.Get("X-Client-Version")
+
+	/* If the client identifies itself (v1.0+) but the version is outdated.
+	   Legacy clients (v0.5) send an empty string and will pass this check
+	   to be caught later by the leaderboard logic.
+	*/
+	if version != "" && version != RequiredClientVersion {
 		fmt.Fprint(w, "UPDATE")
 		return
 	}
 
+	/* Send game rules to valid v1.0+ clients and legacy v0.5 clients */
 	fmt.Fprintf(w, "%d|%d|%d|%f|%d|%d|%d|%d|%d|%d",
 		Rules.GameWidth, Rules.GameHeight, int(Rules.InitialDelay), Rules.SpeedupFactor, Rules.PointsPerFruit,
 		Rules.CheatTimeout, Rules.InitialSize, Rules.PenaltyInterval, Rules.PenaltyAmount, Rules.SpawnFruitMaxAttempts)

@@ -77,7 +77,7 @@ The online leaderboard functions via a secure Server-Side Scoring Architecture p
 
 - **Time Corridor (Anti-Spam & Anti-Pause):** A dynamic time window is calculated based on game speed and path length. Taking too little time flags a speedhack, while taking too much time flags pausing (e.g., using a debugger).
 - **Maximum Score Authorization:** The server strictly validates that no submitted score exceeds the theoretical maximum capacity (`Width * Height * PointsPerFruit`). 
-- **Client Version Integrity:** Client requests are tagged with a version header. Outdated clients are instantly hijacked at the start or at the leaderboard screen with an override payload, prompting players to update or explicitly fall back to Offline Mode.
+- **Client Version Integrity:** Client requests are tagged with a version header. Outdated clients are gracefully blocked with an update notice, either at launch (prompting a fallback to Offline Mode) or hijacked directly at the leaderboard screen.
 - **Detailed Audit Logging:** The server maintains precise, modified final logs for every single game session, capturing the player's IP, token, final score, and exact number of fruits eaten, or explicitly logging why a score was ignored/rejected.
 - **Active Memory Management:** The server automatically tracks and sweeps stale IPs and abandoned "ghost" sessions, gracefully logging memory reclamation without spamming stdout.
 - **Pathing and PRNG Constraints:** The server verifies Manhattan distances and synchronizes the fruit generation sequence to block teleports or RNG manipulation.
