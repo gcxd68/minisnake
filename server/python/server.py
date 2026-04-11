@@ -394,7 +394,8 @@ def get_scores(limit):
             "VERSION AT  | |0|0\n"
             "GITHUB.COM/ | |0|0\n"
             "GCXD68/     | |0|0\n"
-            "MINISNAKE   | |0|0\n"
+            "MINISNAKE/  | |0|0\n"
+            "RELEASES    | |0|0\n"
         )
         return update_msg, 200
 

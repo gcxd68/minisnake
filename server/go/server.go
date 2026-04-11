@@ -512,7 +512,8 @@ func handleScores(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "VERSION AT  | |0|0\n")
 		fmt.Fprint(w, "GITHUB.COM/ | |0|0\n")
 		fmt.Fprint(w, "GCXD68/     | |0|0\n")
-		fmt.Fprint(w, "MINISNAKE   | |0|0\n")
+		fmt.Fprint(w, "MINISNAKE/  | |0|0\n")
+		fmt.Fprint(w, "RELEASES    | |0|0\n")
 		return
 	}
 
