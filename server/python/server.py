@@ -165,6 +165,11 @@ cleanup_thread.start()
 @app.route('/rules', methods=['GET'])
 def get_rules():
     """ Public endpoint to fetch game dimensions and rules. """
+    
+    # Dedicated early version check
+    if request.headers.get('X-Client-Version') != REQUIRED_CLIENT_VERSION:
+        return "UPDATE", 200
+
     rule_values = [
         rules["GameWidth"], rules["GameHeight"], int(rules["InitialDelay"]), 
         rules["SpeedupFactor"], rules["PointsPerFruit"], rules["CheatTimeout"], 

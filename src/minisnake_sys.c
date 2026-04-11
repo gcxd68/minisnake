@@ -12,6 +12,21 @@ static int	parse_dimension(const char *str, int min, int max, int *out, const ch
 	return (2);
 }
 
+/* Read a single character and flush the rest of the line */
+static int	read_char(void) {
+	int c = getchar();
+	if (c != '\n' && c != EOF)
+		for (int next; (next = getchar()) != '\n' && next != EOF;);
+	return (c);
+}
+
+static int	ask_confirm(const char *question) {
+	printf("%s", question);
+	fflush(stdout);
+	int c = read_char();
+	return (c == 'y' || c == 'Y');
+}
+
 static int	parse_args(int argc, char **argv, t_data *d) {
 	/* Validate compile-time constant at runtime in case someone changes it incorrectly */
 	if (DEF_SPEEDUP_FACTOR < 0.0f || DEF_SPEEDUP_FACTOR >= 1.0f) {
@@ -24,8 +39,18 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 		d->height = DEF_HEIGHT;
 
 #ifdef ONLINE_BUILD
-		/* Override local dimensions with server competitive rules before spawning the terminal GUI */
-		if (server_sync_rules(d))
+		/* 1. Dedicated version compatibility check */
+		int ver_status = check_client_version();
+		
+		if (ver_status == -1) {
+			fprintf(stderr, "WARNING: Your client version is outdated.\n"
+				"Please download the latest release from: https://github.com/gcxd68/minisnake/releases\n");
+			if (!ask_confirm("Would you like to play in Offline Mode instead? (y/n): "))
+				return (EXIT_SUCCESS); /* User chose 'n', exit cleanly */
+		}
+		
+		/* 2. Override local dimensions with server competitive rules if version is valid */
+		if (ver_status == 1 && server_sync_rules(d))
 			d->online = 1;
 #else
 
@@ -53,21 +78,6 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 		return (2);
 	}
 	return (0);
-}
-
-/* Read a single character and flush the rest of the line */
-static int	read_char(void) {
-	int c = getchar();
-	if (c != '\n' && c != EOF)
-		for (int next; (next = getchar()) != '\n' && next != EOF;);
-	return (c);
-}
-
-static int	ask_confirm(const char *question) {
-	printf("%s", question);
-	fflush(stdout);
-	int c = read_char();
-	return (c == 'y' || c == 'Y');
 }
 
 static int	install_dependencies(void) {

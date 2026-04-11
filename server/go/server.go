@@ -232,6 +232,11 @@ func initDB() {
 // --- API Handlers ---
 
 func handleRules(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Client-Version") != RequiredClientVersion {
+		fmt.Fprint(w, "UPDATE")
+		return
+	}
+
 	fmt.Fprintf(w, "%d|%d|%d|%f|%d|%d|%d|%d|%d|%d",
 		Rules.GameWidth, Rules.GameHeight, int(Rules.InitialDelay), Rules.SpeedupFactor, Rules.PointsPerFruit,
 		Rules.CheatTimeout, Rules.InitialSize, Rules.PenaltyInterval, Rules.PenaltyAmount, Rules.SpawnFruitMaxAttempts)

@@ -24,9 +24,10 @@
 #  endif
 # endif
 
-/* GAME CONFIGURATION: Dimensions, speeds, and rules */
+/* Client software version for backend synchronization and update enforcement */
 # define CLIENT_VERSION					"1"
 
+/* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
 # define MIN_HEIGHT						2
 # define MAX_WIDTH						200
@@ -225,9 +226,11 @@ uint32_t	sys_rand(void);
 uint32_t	lcg_rand(uint32_t *seed);
 
 /* minisnake_net.c - Network functions */
-void		handle_leaderboard(t_data *d);
+int			check_client_version(void);
 int			server_sync_rules(t_data *d);
 int			start_session(t_data *d);
 void		notify_server(t_data *d, const char *action);
+void		handle_leaderboard(t_data *d);
+
 
 #endif

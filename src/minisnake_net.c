@@ -196,6 +196,21 @@ static char *skip_headers(char *response) {
 	return (response);
 }
 
+/* Dedicated function to verify client-server version compatibility */
+int check_client_version(void) {
+	char	resp[BUF_RESP_SUBMIT];
+	char	*body;
+
+	if (http_get("/rules", resp, sizeof(resp)) != 0)
+		return (0); // Offline/Error
+
+	body = skip_headers(resp);
+	if (strncmp(body, "UPDATE", 6) == 0)
+		return (-1); // Version mismatch
+		
+	return (1); // Valid
+}
+
 /* Initialization 1: Fetch game dimensions and rules from the server dynamically */
 int server_sync_rules(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
@@ -206,6 +221,13 @@ int server_sync_rules(t_data *d) {
 		return (0);
 
 	body = skip_headers(resp);
+
+	/* Intercept version mismatch and gracefully downgrade to offline mode */
+	if (strncmp(body, "UPDATE", 6) == 0) {
+		fprintf(stderr, "Notice: Client version outdated. Falling back to Offline Mode.\n");
+		return (0);
+	}
+
 	fields[0] = strtok_r(body, "|", &saveptr);
 	if (!fields[0]) return (0);
 
@@ -330,7 +352,6 @@ void handle_leaderboard(t_data *d) {
 
 	/* Initialize the buffer with zeros to prevent any garbage memory issues */
 	char	name[MAX_NAME_LEN + 1] = {0};
-	int		ret = 0;
 
 	/* 1. Always prompt for the player's name, regardless of their score */
 	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
