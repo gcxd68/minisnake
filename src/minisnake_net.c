@@ -116,7 +116,10 @@ static int http_get(const char *path, char *out, int out_size) {
 
 	if ((fd = server_connect()) < 0)
 		return (-1);
-	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n", path, HOST);
+		
+	/* ADDED: Dynamic X-Client-Version header using the macro from minisnake.h */
+	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nX-Client-Version: %s\r\nConnection: close\r\n\r\n", path, HOST, CLIENT_VERSION);
+	
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
 	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
@@ -276,8 +279,12 @@ static int end_session(t_data *d, const char *name) {
 
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
-	/* We only send the Token and the Name. The VPS already knows the score. */
-	snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
+	if (*name)
+		/* We only send the Token and the Name. The VPS already knows the score. */
+		snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
+	else
+		/* Instantly gracefully drop the session on the server if the user provides no name */
+		snprintf(path, sizeof(path), "/quit/%s", d->token);
 	return (http_get(path, resp, sizeof(resp)));
 }
 
@@ -321,16 +328,20 @@ static int read_name(char *name, size_t size) {
 void handle_leaderboard(t_data *d) {
 	if (!d->online) return;
 
-	char	name[MAX_NAME_LEN + 1];
+	/* Initialize the buffer with zeros to prevent any garbage memory issues */
+	char	name[MAX_NAME_LEN + 1] = {0};
 	int		ret = 0;
 
+	/* 1. Always prompt for the player's name, regardless of their score */
 	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
 	fflush(stdout);
+	
+	/* 2. Read the user input */
 	read_name(name, sizeof(name));
 	show_loading();
-	if (*name)
-		ret = end_session(d, name);
-	if (ret || show_leaderboard(d) < 0)
+
+	/* 3. End session and display the updated global leaderboard */
+	if (end_session(d, name) < 0 || show_leaderboard(d) < 0)
 		printf(CLEAR_SCREEN "Network error");
 }
 

@@ -35,8 +35,9 @@ logger.addFilter(ContextFilter())
 # --- Server & Security Constants ---
 PORT = int(os.environ.get("PORT", 8000))
 DB_PATH = 'scores.db'
-MAX_ACTIVE_SESSIONS = 5000 # Anti-OOM: Global limit of concurrent players
-MAX_REQ_PER_SEC = 20       # Anti-Spam: 20 requests per second max per IP
+MAX_ACTIVE_SESSIONS = 5000    # Anti-OOM: Global limit of concurrent players
+MAX_REQ_PER_SEC = 20          # Anti-Spam: 20 requests per second max per IP
+REQUIRED_CLIENT_VERSION = "1" # Required client version
 
 # --- Dynamic Game Rules ---
 rules = {
@@ -303,6 +304,17 @@ def flag_cheat(token):
     logger.warning(f"CHEAT (Local): {token[:8]} | TracerPid/Local anomaly reported by client.")
     return "Flagged", 200
 
+@app.route('/quit/<token>', methods=['GET'])
+def quit_session(token):
+    """ Instantly frees memory when a player voluntarily skips submission """
+    with session_lock:
+        session = active_sessions.pop(token, None)
+        
+    if session:
+        logger.info(f"SESSION ABANDONED: Token {token[:8]} dropped gracefully by client.")
+        
+    return "OK", 200
+
 @app.route('/submit/<token>/<name>/<int:steps>', methods=['GET'])
 def submit_score(token, name, steps):
     """ Finalizes a session and saves the score to the database. """
@@ -320,25 +332,36 @@ def submit_score(token, name, steps):
         logger.warning(f"SUBMIT REJECTED: Invalid name '{name}' from {token[:8]}")
         return "OK", 200
 
+    # Legacy Client Trap (Protects database from old unversioned clients)
+    if request.headers.get('X-Client-Version') != REQUIRED_CLIENT_VERSION:
+        logger.info(f"SCORE IGNORED: {token[:8]} | Player: '{name}' | Reason: Legacy Client Version")
+        return "OK", 200 # Return 200 OK so they still proceed to the Leaderboard screen!
+
+    # Apply game rules and movement penalties
     if session["cheated"]:
-        logger.error(f"BANNED SUBMISSION: Player '{name}' attempted to submit from flagged session {token[:8]}.")
         session["score"] = 0
     elif session["score"] > 0:
         apply_penalties(session, steps)
 
     final_score = session["score"]
+    reason = "Score is Zero" # Default reason
     
-    if final_score < 0 or final_score > MAX_SCORE:
+    # Final anomaly detection to provide an explicit log reason
+    if session["cheated"]:
+        reason = "Cheating Detected"
+    elif final_score < 0 or final_score > MAX_SCORE:
         logger.warning(f"SUBMIT REJECTED: Impossible score {final_score} for '{name}' (Session: {token[:8]}).")
         final_score = 0
+        reason = "Impossible Score Limit"
 
     try:
+        # Save to database or ignore with the explicit reason
         if final_score > 0:
             with sqlite3.connect(DB_PATH) as conn:
                 conn.execute("INSERT INTO scores (name, score) VALUES (?, ?)", (name, final_score))
             logger.info(f"SCORE SAVED: {token[:8]} | Player: '{name}' | Score: {final_score} | Fruits: {session['fruits_eaten']}")
         else:
-            logger.info(f"SCORE IGNORED: {token[:8]} | Player: '{name}' processed but not saved (Zero or Cheated).")
+            logger.info(f"SCORE IGNORED: {token[:8]} | Player: '{name}' | Reason: {reason}")
             
         return "OK", 200
     except Exception as e:
@@ -348,6 +371,16 @@ def submit_score(token, name, steps):
 @app.route('/scores/<int:limit>', methods=['GET'])
 def get_scores(limit):
     """ Retrieves the top scores from the database. """
+    
+    # NEW: Payload Hijacking for Legacy Clients
+    if request.headers.get('X-Client-Version') != REQUIRED_CLIENT_VERSION:
+        fake_lb = (
+            "⚠️ UPDATE ⚠️|REQUIRED|0|0\n"
+            "NEW VERSION |AVAILABLE|0|0\n"
+            "PLEASE PULL |FROM GIT|0|0\n"
+        )
+        return fake_lb, 200
+
     limit = max(1, min(limit, 100))
 
     try:

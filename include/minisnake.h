@@ -25,6 +25,8 @@
 # endif
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
+# define CLIENT_VERSION					"1"
+
 # define MIN_WIDTH						2
 # define MIN_HEIGHT						2
 # define MAX_WIDTH						200

@@ -22,10 +22,11 @@ import (
 
 // --- Server & Security Constants ---
 const (
-	Port              = "8000"
-	DBPath            = "scores.db"
-	MaxActiveSessions = 5000 // Anti-OOM: Global limit of concurrent players
-	MaxReqPerSec      = 20   // Anti-Spam: 20 requests per second max per IP
+	Port                  = "8000"
+	DBPath                = "scores.db"
+	MaxActiveSessions     = 5000 // Anti-OOM: Global limit of concurrent players
+	MaxReqPerSec          = 20   // Anti-Spam: 20 requests per second max per IP
+	RequiredClientVersion = "1"  // Required client version
 )
 
 // --- Dynamic Game Rules Structure ---
@@ -404,6 +405,24 @@ func handleCheat(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "Flagged")
 }
 
+// handleQuit: Instantly frees memory when a player voluntarily skips submission
+func handleQuit(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	ip := getRemoteIP(r)
+
+	sessionMutex.Lock()
+	_, exists := activeSessions[token]
+	if exists {
+		delete(activeSessions, token)
+	}
+	sessionMutex.Unlock()
+
+	if exists {
+		log.Printf("[%s] SESSION ABANDONED: Token %s dropped gracefully by client.", ip, token[:8])
+	}
+	fmt.Fprint(w, "OK")
+}
+
 func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	name := r.PathValue("name")
@@ -429,19 +448,33 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Legacy Client Trap (Protects database from old unversioned clients)
+	if r.Header.Get("X-Client-Version") != RequiredClientVersion {
+		log.Printf("[%s] SCORE IGNORED: %s | Player: '%s' | Reason: Legacy Client Version", ip, token[:8], name)
+		fmt.Fprint(w, "OK") // Return 200 OK so they still proceed to the Leaderboard screen!
+		return
+	}
+
+	// Apply game rules and movement penalties
 	if session.Cheated {
-		log.Printf("[%s] BANNED SUBMISSION: Player '%s' attempted to submit from flagged session %s.", ip, name, token[:8])
-		session.Score = 0
+		session.Score = 0 // Let anti-cheat crush the score
 	} else if session.Score > 0 {
 		applyPenalties(session, steps)
 	}
 
 	finalScore := session.Score
-	if finalScore < 0 || finalScore > Rules.MaxScore {
+	reason := "Score is Zero" // Default reason for a legitimate rejection
+
+	// Final anomaly detection to provide an explicit log reason
+	if session.Cheated {
+		reason = "Cheating Detected"
+	} else if finalScore < 0 || finalScore > Rules.MaxScore {
 		log.Printf("[%s] SUBMIT REJECTED: Impossible score %d for '%s' (Session: %s).", ip, finalScore, name, token[:8])
 		finalScore = 0
+		reason = "Impossible Score Limit"
 	}
 
+	// Save to database or ignore with the explicit reason
 	if finalScore > 0 {
 		_, err := db.Exec("INSERT INTO scores (name, score) VALUES (?, ?)", name, finalScore)
 		if err != nil {
@@ -451,13 +484,21 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("[%s] SCORE SAVED: %s | Player: '%s' | Score: %d | Fruits: %d", ip, token[:8], name, finalScore, session.FruitsEaten)
 	} else {
-		log.Printf("[%s] SCORE IGNORED: %s | Player: '%s' processed but not saved (Zero or Cheated).", ip, token[:8], name)
+		log.Printf("[%s] SCORE IGNORED: %s | Player: '%s' | Reason: %s", ip, token[:8], name, reason)
 	}
 
 	fmt.Fprint(w, "OK")
 }
 
 func handleScores(w http.ResponseWriter, r *http.Request) {
+	// Payload Hijacking for Legacy Clients
+	if r.Header.Get("X-Client-Version") != RequiredClientVersion {
+		fmt.Fprint(w, "⚠️ UPDATE ⚠️|REQUIRED|0|0\n")
+		fmt.Fprint(w, "NEW VERSION |AVAILABLE|0|0\n")
+		fmt.Fprint(w, "PLEASE PULL |FROM GIT|0|0\n")
+		return
+	}
+
 	limit, _ := strconv.Atoi(r.PathValue("limit"))
 	limit = max(1, min(limit, 100))
 
@@ -497,6 +538,7 @@ func main() {
 	mux.HandleFunc("GET /token", handleToken)
 	mux.HandleFunc("GET /eat/{token}/{steps}/{fx}/{fy}", handleEat)
 	mux.HandleFunc("GET /cheat/{token}", handleCheat)
+	mux.HandleFunc("GET /quit/{token}", handleQuit)
 	mux.HandleFunc("GET /submit/{token}/{name}/{steps}", handleSubmit)
 	mux.HandleFunc("GET /scores/{limit}", handleScores)
 
