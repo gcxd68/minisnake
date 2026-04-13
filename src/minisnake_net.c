@@ -78,6 +78,7 @@ void	net_wait_all(void) {}
 
 typedef struct s_req {
 	char	path[BUF_PATH];
+	char	*body;
 	int		in_use;
 	t_data	*d; /* Pointer back to game state for async updates */
 }	t_req;
@@ -128,6 +129,32 @@ static int http_get(const char *path, char *out, int out_size) {
 	return (0);
 }
 
+static int http_post(const char *path, const char *body, char *out, int out_size) {
+	char	req[BUF_READ], buf[BUF_READ];
+	int		fd, n, total = 0;
+
+	if ((fd = server_connect()) < 0)
+		return (-1);
+		
+	snprintf(req, sizeof(req), "POST %s HTTP/1.0\r\nHost: %s\r\nX-Client-Version: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s", path, HOST, CLIENT_VERSION, strlen(body), body);
+	
+	if (write(fd, req, strlen(req)) < 0)
+		return (close(fd), -1);
+	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
+		buf[n] = '\0';
+		if (total + n < out_size - 1) {
+			memcpy(out + total, buf, n);
+			total += n;
+		}
+	}
+	if (n < 0) return (close(fd), -1);
+	out[total] = '\0';
+	close(fd);
+	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || !strstr(out, " 200 "))
+		return (-1);
+	return (0);
+}
+
 static char *skip_headers(char *response) {
 	char *body = strstr(response, "\r\n\r\n");
 	if (body) return (body + 4);
@@ -140,7 +167,8 @@ static void *async_http_worker(void *arg) {
 	t_req	*req = (t_req *)arg;
 	char	resp[BUF_RESP_SUBMIT];
 	
-	if (http_get(req->path, resp, sizeof(resp)) == 0) {
+	int ok = req->body ? http_post(req->path, req->body, resp, sizeof(resp)) : http_get(req->path, resp, sizeof(resp));
+	if (ok == 0) {
 		if (strncmp(req->path, "/eat", 4) == 0 && req->d) {
 			char *body = skip_headers(resp);
 			char *sep = strchr(body, '|');
@@ -162,6 +190,8 @@ static void *async_http_worker(void *arg) {
 	}
 
 	pthread_mutex_lock(&g_pool_mutex);
+	if (req->body) free(req->body);
+	req->body = NULL;
 	req->in_use = 0;
 	pthread_mutex_unlock(&g_pool_mutex);
 	
@@ -171,7 +201,7 @@ static void *async_http_worker(void *arg) {
 	return (NULL);
 }
 
-static void fire_and_forget(const char *path, t_data *d) {
+static void fire_and_forget(const char *path, const char *body, t_data *d) {
 	pthread_t	tid;
 	t_req		*req = NULL;
 	int			i;
@@ -191,11 +221,14 @@ static void fire_and_forget(const char *path, t_data *d) {
 	strncpy(req->path, path, BUF_PATH - 1);
 	req->path[BUF_PATH - 1] = '\0';
 	req->d = d;
+	req->body = body ? strdup(body) : NULL;
 	
 	if (pthread_create(&tid, NULL, async_http_worker, req) == 0)
 		pthread_detach(tid);
 	else {
 		pthread_mutex_lock(&g_pool_mutex);
+		if (req->body) free(req->body);
+		req->body = NULL;
 		req->in_use = 0;
 		pthread_mutex_unlock(&g_pool_mutex);
 	}
@@ -283,18 +316,19 @@ void notify_server(t_data *d, const char *action, int fx, int fy) {
 	if (!IS_SESSION_ACTIVE(d)) return;
 
 	char path[BUF_PATH];
+	char body[8000];
 
-	if (strcmp(action, "eat") == 0)
-		snprintf(path, sizeof(path), "/eat/%s/%d/%d/%d", d->token, d->steps, fx, fy); 
-	else
+	if (strcmp(action, "eat") == 0) {
+		snprintf(path, sizeof(path), "/eat/%s", d->token); 
+		snprintf(body, sizeof(body), "{\"seq\":%d,\"steps\":%d,\"fx\":%d,\"fy\":%d,\"path\":\"%s\"}", d->seq, d->steps, fx, fy, d->path);
+		fire_and_forget(path, body, d);
+	} else {
 		snprintf(path, sizeof(path), "/%s/%s", action, d->token);
-	
-	fire_and_forget(path, d);
-}
+		fire_and_forget(path, NULL, d);
+	}}
 
 static int end_session(t_data *d, const char *name) {
-	if (!d->token[0]) return (-1);
-
+	if (!IS_SESSION_ACTIVE(d)) return (-1);
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
 	if (*name)

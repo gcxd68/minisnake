@@ -216,6 +216,10 @@ typedef struct s_data {
 	int			x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	t_dir		dir[2];
 	char		token[33];
+	
+	int			seq;
+	int			path_steps;
+	char		path[10001];
 }	t_data;
 
 /* minisnake_game - Gameplay functions */

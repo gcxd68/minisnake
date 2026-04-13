@@ -49,6 +49,7 @@ type Point struct {
 }
 
 type Session struct {
+	CurrentTick   int
 	Score         int
 	FruitsEaten   int
 	StartTime     time.Time // Global Speed Check
@@ -62,6 +63,18 @@ type Session struct {
 	TotalSteps    int
 	RecentDetours []int // Variance Telemetry (Sliding Window)
 	TargetFruit   Point // Opaque Server-Side RNG
+ExpectedSeq   int
+Grid          []int
+Grow          int
+Body          []Point
+}
+
+type EatPayload struct {
+Seq   int    `json:"seq"`
+Steps int    `json:"steps"`
+Fx    int    `json:"fx"`
+Fy    int    `json:"fy"`
+Path  string `json:"path"`
 }
 
 type IPData struct {
@@ -284,10 +297,17 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleEat(w http.ResponseWriter, r *http.Request) {
-	token := r.PathValue("token")
-	steps, _ := strconv.Atoi(r.PathValue("steps"))
-	fx, _ := strconv.Atoi(r.PathValue("fx"))
-	fy, _ := strconv.Atoi(r.PathValue("fy"))
+token := r.PathValue("token")
+
+var payload EatPayload
+if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+http.Error(w, "Bad Request", http.StatusBadRequest)
+return
+}
+steps := payload.Steps
+fx := payload.Fx
+fy := payload.Fy
+
 	ip := getRemoteIP(r)
 
 	sessionMutex.Lock()
