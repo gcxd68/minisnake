@@ -46,14 +46,15 @@ type GameRules struct {
 
 // --- Game Structures ---
 type Session struct {
-	Score       int
-	FruitsEaten int
-	LastPing    time.Time
-	Cheated     bool
-	Seed        uint32
-	HeadX       int
-	HeadY       int
-	LastSteps   int
+	Score        int
+	FruitsEaten  int
+	LastPing     time.Time
+	Cheated      bool
+	Seed         uint32
+	HeadX        int
+	HeadY        int
+	LastSteps    int
+	PerfectPaths int
 }
 
 // Security Tracking per IP (Rate limiting only, no bans)
@@ -322,14 +323,15 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 
 	sessionMutex.Lock()
 	activeSessions[token] = &Session{
-		Score:       0,
-		FruitsEaten: 0,
-		LastPing:    time.Now(),
-		Cheated:     false,
-		Seed:        currentSeed,
-		HeadX:       (Rules.GameWidth / 2) - offsetX,
-		HeadY:       (Rules.GameHeight / 2) - offsetY,
-		LastSteps:   0,
+		Score:        0,
+		FruitsEaten:  0,
+		LastPing:     time.Now(),
+		Cheated:      false,
+		Seed:         currentSeed,
+		HeadX:        (Rules.GameWidth / 2) - offsetX,
+		HeadY:        (Rules.GameHeight / 2) - offsetY,
+		LastSteps:    0,
+		PerfectPaths: 0,
 	}
 	sessionMutex.Unlock()
 
@@ -407,7 +409,28 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 5. The Time Corridor (Anti-Speedhack & Anti-Pause)
+	// 5. Behavioral Validation (The Manhattan Anomaly)
+	if deltaSteps == manhattan {
+		session.PerfectPaths++
+	}
+
+	// Evaluate behavioral consistency only after the snake is long enough
+	currentFruits := session.FruitsEaten + 1
+	if currentFruits >= 20 {
+		// Calculate percentage using integer math
+		perfRatio := (session.PerfectPaths * 100) / currentFruits
+
+		// 95% perfect paths on a long snake is impossible for a human
+		if perfRatio >= 95 {
+			session.Cheated = true
+			sessionMutex.Unlock()
+			log.Printf("[%s] SHADOWBAN (Behavior): %s | UgoBot caught! %d%% perfect paths over %d fruits.", ip, token[:8], perfRatio, currentFruits)
+			fmt.Fprint(w, "Yum")
+			return
+		}
+	}
+
+	// 6. The Time Corridor (Anti-Speedhack & Anti-Pause)
 	// Calculate the speed active DURING the travel (before current fruit acceleration)
 	currentDelaySec := (Rules.InitialDelay / 1000000.0) * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
 	expectedTime := currentDelaySec * float64(deltaSteps)
@@ -434,12 +457,12 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6. Update Score & Penalties
+	// 7. Update Score & Penalties
 	applyPenalties(session, steps)
 	session.Score += Rules.PointsPerFruit
 	session.FruitsEaten++
 
-	// 7. Check against dynamic MaxScore (strictly greater than)
+	// 8. Check against dynamic MaxScore (strictly greater than)
 	if session.Score > Rules.MaxScore {
 		session.Cheated = true
 		sessionMutex.Unlock()

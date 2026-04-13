@@ -19,7 +19,7 @@ A lightweight, terminal-based Snake game written in C with a dedicated online sc
 - Terminal with Unicode support (GNOME Terminal recommended)
 
 ### Server (Online Mode)
-- **Go Backend:** Go 1.20+
+- **Go Backend:** Go 1.22+ (Required for advanced HTTP routing)
 
 ## Usage
 
@@ -80,6 +80,12 @@ The online leaderboard functions via a secure Server-Side Scoring Architecture p
 - **Detailed Audit Logging:** The server maintains precise, modified final logs for every single game session, capturing the player's IP, token, final score, and exact number of fruits eaten, or explicitly logging why a score was ignored/rejected.
 - **Active Memory Management:** The server automatically tracks and sweeps stale IPs and abandoned "ghost" sessions, gracefully logging memory reclamation without spamming stdout.
 - **Pathing and PRNG Constraints:** The server verifies Manhattan distances and synchronizes the fruit generation sequence to block teleports or RNG manipulation.
+
+### Server Limits & Anti-DDoS
+The Go backend is hardcoded to manage memory and traffic securely:
+- **Maximum Concurrent Sessions:** 5000 players globally.
+- **Rate Limiting:** 20 requests per second per IP strictly enforced.
+- **Ghost Sessions:** Automatically swept after 15 minutes of inactivity.
 
 ### 1. Running the Go Backend
 
