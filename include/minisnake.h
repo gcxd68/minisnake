@@ -197,7 +197,7 @@
 	.speedup_factor = DEF_SPEEDUP_FACTOR \
 }
 
-enum { LAUNCH_LOCAL = 3, LAUNCH_SPAWN = 4 };
+enum { PARSE_OK = 3, LAUNCH_LOCAL = 4, LAUNCH_SPAWN = 5 };
 
 typedef enum e_dir {
 	STOP, LEFT, RIGHT, UP, DOWN

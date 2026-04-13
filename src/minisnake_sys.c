@@ -69,7 +69,7 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 				d->width, d->height, d->width * d->height);
 		return (2);
 	}
-	return (0);
+	return (PARSE_OK);
 }
 
 static int	install_dependencies(void) {
@@ -361,7 +361,7 @@ int	main(int argc, char **argv) {
 	t_data	d = DEFAULT_RULES;
 	int		ret;
 
-	if ((ret = parse_args(argc, argv, &d))) return (ret);
+	if ((ret = parse_args(argc, argv, &d)) != PARSE_OK) return (ret);
 	if ((ret = launch_terminal(argc, argv, &d)) != LAUNCH_LOCAL) return (ret);
 
 	do {
