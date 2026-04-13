@@ -1,6 +1,6 @@
 # --- Names and Paths ---
 NAME        = bin/minisnake
-SERVER_NAME = server/go/bin/server
+SERVER_NAME = bin/server
 OBJ_DIR     = obj/
 BIN_DIR     = bin/
 SRC_DIR     = src/
@@ -45,8 +45,8 @@ $(NAME): $(OBJS)
 
 # Compile the Go server
 server:
-	@cd server/go && go mod tidy
-	@cd server/go && CGO_ENABLED=1 go build -ldflags="-w -s" -o bin/server .
+	@cd server && go mod tidy
+	@cd server && CGO_ENABLED=1 go build -ldflags="-w -s" -o ../bin/server .
 
 # Auto-generate net.h from 'net' config file in the include directory
 $(INC_DIR)net.h:
@@ -79,10 +79,10 @@ re: fclean all
 
 # Server Cleanup
 clean-server:
-	@if [ -d server/go/bin ]; then cd server/go && go clean 2>/dev/null || true; fi
+	@if [ -f bin/server ]; then cd server && go clean 2>/dev/null || true; fi
 
 fclean-server: clean-server
-	@rm -rf server/go/bin
+	@rm -f bin/server
 
 re-server: fclean-server server
 

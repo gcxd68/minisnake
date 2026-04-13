@@ -77,7 +77,6 @@ var (
 
 // loadRules: Initializes default game rules and overrides them if rules.json exists
 func loadRules() {
-	// 1. Set hardcoded base default values
 	Rules = GameRules{
 		GameWidth:             25,
 		GameHeight:            20,
@@ -91,7 +90,6 @@ func loadRules() {
 		SpawnFruitMaxAttempts: 10000,
 	}
 
-	// 2. Override with external JSON file if available
 	file, err := os.Open("rules.json")
 	if err == nil {
 		defer file.Close()
@@ -102,10 +100,9 @@ func loadRules() {
 		}
 	}
 
-	// 3. Dynamically calculate the maximum possible score (used internally for security)
+	// Dynamically calculate the maximum possible score (used internally for security)
 	Rules.MaxScore = Rules.GameWidth * Rules.GameHeight * Rules.PointsPerFruit
 
-	// 4. Log active configuration for observability
 	log.Printf("[Server] Active Rules: %dx%d | Delay: %.0f | Speedup: %.3f | PPF: %d | Size: %d | Penalty: %d | Interval: %d",
 		Rules.GameWidth, Rules.GameHeight, Rules.InitialDelay, Rules.SpeedupFactor,
 		Rules.PointsPerFruit, Rules.InitialSize, Rules.PenaltyAmount, Rules.PenaltyInterval)
@@ -203,7 +200,6 @@ func cleanupStaleData() {
 	}
 	ipMutex.Unlock()
 
-	// Only log if something was actually cleaned up (prevents log spam)
 	if len(removedTokens) > 0 || removedIPs > 0 {
 		if len(removedTokens) > 0 {
 			log.Printf("[CLEANUP] Swept %d ghost sessions (%s) and %d stale IP records.", len(removedTokens), strings.Join(removedTokens, ", "), removedIPs)
@@ -229,21 +225,63 @@ func initDB() {
 	log.Println("[Server] Database initialized successfully.")
 }
 
+// --- Anti-Bot Detection ---
+
+// isBotFingerprint evaluates the HTTP fingerprint to detect automated scripts.
+func isBotFingerprint(r *http.Request) bool {
+	// =========================================================================
+	// WARNING: PROTOCOL UPGRADE TRAP
+	// The strict HTTP/1.0 check below ONLY works because this server runs
+	// directly on a raw GCE e2-micro instance without any proxy.
+	// If you ever place this server behind a Reverse Proxy, Cloudflare, or an
+	// L7 Load Balancer, the proxy will upgrade the protocol to HTTP/1.1 or HTTP/2.
+	// If that happens, this check will shadowban ALL legitimate players.
+	// REMOVE THIS CHECK IF YOUR INFRASTRUCTURE CHANGES.
+	// =========================================================================
+	if r.Proto != "HTTP/1.0" {
+		return true
+	}
+
+	// Ensure absence of typical headers injected by modern HTTP libraries.
+	if r.Header.Get("User-Agent") != "" ||
+		r.Header.Get("Accept") != "" ||
+		r.Header.Get("Accept-Encoding") != "" ||
+		r.Header.Get("Accept-Language") != "" {
+		return true
+	}
+
+	// Ensure the connection is explicitly closed, matching the C client's behavior.
+	if strings.ToLower(r.Header.Get("Connection")) == "keep-alive" {
+		return true
+	}
+
+	return false
+}
+
+// flagIfBotFingerprint acts as a centralized helper to dry up shadowban logic.
+func flagIfBotFingerprint(r *http.Request, session *Session, ip, token, routeContext string) bool {
+	if isBotFingerprint(r) {
+		session.Cheated = true
+		log.Printf("[%s] SHADOWBAN (Fingerprint/%s): %s caught using non-C headers.", ip, routeContext, token[:8])
+		return true
+	}
+	return false
+}
+
 // --- API Handlers ---
 
 func handleRules(w http.ResponseWriter, r *http.Request) {
 	version := r.Header.Get("X-Client-Version")
 
-	/* If the client identifies itself (v1.0+) but the version is outdated.
-	   Legacy clients (v0.5) send an empty string and will pass this check
-	   to be caught later by the leaderboard logic.
-	*/
+	// If the client identifies itself (v1.0+) but the version is outdated.
+	// Legacy clients (v0.5) send an empty string and will pass this check
+	// to be caught later by the leaderboard logic.
 	if version != "" && version != RequiredClientVersion {
 		fmt.Fprint(w, "UPDATE")
 		return
 	}
 
-	/* Send game rules to valid v1.0+ clients and legacy v0.5 clients */
+	// Send game rules to valid v1.0+ clients and legacy v0.5 clients
 	fmt.Fprintf(w, "%d|%d|%d|%f|%d|%d|%d|%d|%d|%d",
 		Rules.GameWidth, Rules.GameHeight, int(Rules.InitialDelay), Rules.SpeedupFactor, Rules.PointsPerFruit,
 		Rules.CheatTimeout, Rules.InitialSize, Rules.PenaltyInterval, Rules.PenaltyAmount, Rules.SpawnFruitMaxAttempts)
@@ -308,22 +346,34 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
+
+	// 0. General Session Check
+	// If the session doesn't exist or is already flagged, maintain the illusion.
 	if !exists || session.Cheated {
 		sessionMutex.Unlock()
-		http.Error(w, "Unauthorized", http.StatusForbidden)
+		fmt.Fprint(w, "Yum")
 		return
 	}
 
+	// 1. Fingerprint Validation (Anti-Bot)
+	if flagIfBotFingerprint(r, session, ip, token, "Eat") {
+		sessionMutex.Unlock()
+		fmt.Fprint(w, "Yum")
+		return
+	}
+
+	// 2. Step Validation (Anti-Replay)
+	// Ensure the step counter strictly increases.
 	deltaSteps := steps - session.LastSteps
 	if deltaSteps <= 0 {
 		session.Cheated = true
 		sessionMutex.Unlock()
-		log.Printf("[%s] CHEAT (Steps): %s | Steps did not increase (%d)", ip, token[:8], steps)
-		http.Error(w, "Invalid steps", http.StatusBadRequest)
+		log.Printf("[%s] SHADOWBAN (Steps): %s | Steps did not increase (%d)", ip, token[:8], steps)
+		fmt.Fprint(w, "Yum")
 		return
 	}
 
-	// 1. RNG Validation
+	// 3. RNG Validation
 	validFruit := false
 	tempSeed := session.Seed
 	for i := 0; i < Rules.SpawnFruitMaxAttempts; i++ {
@@ -342,22 +392,22 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	if !validFruit {
 		session.Cheated = true
 		sessionMutex.Unlock()
-		log.Printf("[%s] CHEAT (RNG): %s | Client fruit at (%d,%d) not in server sequence.", ip, token[:8], fx, fy)
-		http.Error(w, "Invalid fruit", http.StatusBadRequest)
+		log.Printf("[%s] SHADOWBAN (RNG): %s | Client fruit at (%d,%d) not in server sequence.", ip, token[:8], fx, fy)
+		fmt.Fprint(w, "Yum")
 		return
 	}
 
-	// 2. Physical Validation (Manhattan Distance)
+	// 4. Physical Validation (Manhattan Distance)
 	manhattan := int(math.Abs(float64(fx-session.HeadX)) + math.Abs(float64(fy-session.HeadY)))
 	if deltaSteps < manhattan {
 		session.Cheated = true
 		sessionMutex.Unlock()
-		log.Printf("[%s] CHEAT (Movement): %s | %d steps taken for dist %d", ip, token[:8], deltaSteps, manhattan)
-		http.Error(w, "Impossible move", http.StatusBadRequest)
+		log.Printf("[%s] SHADOWBAN (Movement): %s | %d steps taken for dist %d", ip, token[:8], deltaSteps, manhattan)
+		fmt.Fprint(w, "Yum")
 		return
 	}
 
-	// 3. The Time Corridor (Anti-Speedhack & Anti-Pause)
+	// 5. The Time Corridor (Anti-Speedhack & Anti-Pause)
 	// Calculate the speed active DURING the travel (before current fruit acceleration)
 	currentDelaySec := (Rules.InitialDelay / 1000000.0) * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
 	expectedTime := currentDelaySec * float64(deltaSteps)
@@ -371,33 +421,34 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	if actualTime < minTime {
 		session.Cheated = true
 		sessionMutex.Unlock()
-		log.Printf("[%s] CHEAT (Time): %s | Speedhack. Expected ~%.1fs, took %.1fs", ip, token[:8], expectedTime, actualTime)
-		http.Error(w, "Speedhack detected", http.StatusBadRequest)
+		log.Printf("[%s] SHADOWBAN (Time): %s | Speedhack. Expected ~%.1fs, took %.1fs", ip, token[:8], expectedTime, actualTime)
+		fmt.Fprint(w, "Yum")
 		return
 	}
 
 	if actualTime > maxTime {
 		session.Cheated = true
 		sessionMutex.Unlock()
-		log.Printf("[%s] CHEAT (Timeout): %s | Paused/Lag. Expected ~%.1fs, took %.1fs", ip, token[:8], expectedTime, actualTime)
-		http.Error(w, "Timeout detected", http.StatusBadRequest)
+		log.Printf("[%s] SHADOWBAN (Timeout): %s | Paused/Lag. Expected ~%.1fs, took %.1fs", ip, token[:8], expectedTime, actualTime)
+		fmt.Fprint(w, "Yum")
 		return
 	}
 
-	// 4. Update Score & Penalties
+	// 6. Update Score & Penalties
 	applyPenalties(session, steps)
 	session.Score += Rules.PointsPerFruit
 	session.FruitsEaten++
 
-	// Check against dynamic MaxScore (strictly greater than)
+	// 7. Check against dynamic MaxScore (strictly greater than)
 	if session.Score > Rules.MaxScore {
 		session.Cheated = true
 		sessionMutex.Unlock()
-		log.Printf("[%s] CHEAT (Limit): %s | Score %d exceeded capacity.", ip, token[:8], session.Score)
-		http.Error(w, "Score limit exceeded", http.StatusBadRequest)
+		log.Printf("[%s] SHADOWBAN (Limit): %s | Score %d exceeded capacity.", ip, token[:8], session.Score)
+		fmt.Fprint(w, "Yum")
 		return
 	}
 
+	// Update State
 	session.LastPing = time.Now()
 	session.HeadX, session.HeadY, session.LastSteps = fx, fy, steps
 	sessionMutex.Unlock()
@@ -446,6 +497,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 	if exists {
+		// Session is safely removed from active tracking upon submission attempt
 		delete(activeSessions, token)
 	}
 	sessionMutex.Unlock()
@@ -465,13 +517,17 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	// Legacy Client Trap (Protects database from old unversioned clients)
 	if r.Header.Get("X-Client-Version") != RequiredClientVersion {
 		log.Printf("[%s] SCORE IGNORED: %s | Player: '%s' | Reason: Legacy Client Version", ip, token[:8], name)
-		fmt.Fprint(w, "OK") // Return 200 OK so they still proceed to the Leaderboard screen!
+		fmt.Fprint(w, "OK") // Return 200 OK so they still proceed to the Leaderboard screen
 		return
 	}
 
+	// Fingerprint Validation (Anti-Bot)
+	// Catches bots that bypass /eat and only submit raw scores
+	flagIfBotFingerprint(r, session, ip, token, "Submit")
+
 	// Apply game rules and movement penalties
 	if session.Cheated {
-		session.Score = 0 // Let anti-cheat crush the score
+		session.Score = 0 // Let anti-cheat crush the score silently
 	} else if session.Score > 0 {
 		applyPenalties(session, steps)
 	}

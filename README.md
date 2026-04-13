@@ -19,8 +19,7 @@ A lightweight, terminal-based Snake game written in C with a dedicated online sc
 - Terminal with Unicode support (GNOME Terminal recommended)
 
 ### Server (Online Mode)
-- **Go Backend (Recommended):** Go 1.20+
-- **Python Backend (Alternative):** Python 3.8+
+- **Go Backend:** Go 1.20+
 
 ## Usage
 
@@ -73,7 +72,7 @@ After the game, you will be prompted to enter your name for the global leaderboa
 
 ## Server Setup
 
-The online leaderboard functions via a secure Server-Side Scoring Architecture proxy. The C client never submits its score directly; instead, it sends an asynchronous HTTP ping per fruit. Both backend options (Go and Python) securely enforce several critical validations:
+The online leaderboard functions via a secure Server-Side Scoring Architecture proxy. The C client never submits its score directly; instead, it sends an asynchronous HTTP ping per fruit. The Go backend securely enforces several critical validations:
 
 - **Time Corridor (Anti-Spam & Anti-Pause):** A dynamic time window is calculated based on game speed and path length. Taking too little time flags a speedhack, while taking too much time flags pausing (e.g., using a debugger).
 - **Maximum Score Authorization:** The server strictly validates that no submitted score exceeds the theoretical maximum capacity (`Width * Height * PointsPerFruit`). 
@@ -82,27 +81,19 @@ The online leaderboard functions via a secure Server-Side Scoring Architecture p
 - **Active Memory Management:** The server automatically tracks and sweeps stale IPs and abandoned "ghost" sessions, gracefully logging memory reclamation without spamming stdout.
 - **Pathing and PRNG Constraints:** The server verifies Manhattan distances and synchronizes the fruit generation sequence to block teleports or RNG manipulation.
 
-### 1. Backend Service Options
-You have two drop-in options for the backend proxy:
+### 1. Running the Go Backend
 
-**Option A: Go Backend (Recommended)**
-High-performance and statically linked.
+The backend is built in Go. It is high-performance and compiled as a single static binary.
+
 1. Make sure Go is installed on your machine.
-2. Setup `.env` inside `server/go/` if you want a custom port.
-3. Build the static binary by running `make server` from the project root.
-4. Run the generated output executable: `server/go/bin/server`.
-
-**Option B: Python Backend (Alternative)**
-A Gunicorn fallback option.
-1. Navigate to the `server/python/` directory.
-2. Initialize `.env` from `.env.example` adding your `PORT`.
-3. Run the deployment script (`./deploy.sh`) to start the worker.
+2. Build the server binary by running `make server` from the project root.
+3. Start the server from the root directory: `./bin/server`.
 
 ### 2. Dynamic Server Configuration
 You can now dynamically adjust the game constraints (points, speed, grid boundaries) directly from the server without having to rebuild the proxy.
 
 1. Rename `server/rules.json.example` to `rules.json` and place it in the same directory where your active backend server is executed.
-*Note: The Go backend intrinsically enforces valid JSON structures via Go structs, while the Python backend intercepts and filters all loaded keys against a secure internal whitelist to prevent injection.*
+*Note: The Go backend intrinsically enforces valid JSON structures via Go structs.*
 
 2. Override any desired rules:
 ```json

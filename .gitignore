@@ -1,15 +1,9 @@
 # Minisnake: Build Artifacts
 bin/
 obj/
-server/go/bin/
 
 # Client-Specific Generated Files
 include/net.h
-net.h
-
-# Backend: Environments & Dependencies
-server/python/venv/
-**/__pycache__/
 
 # Configuration & Secrets
 net
