@@ -38,10 +38,12 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 #ifdef ONLINE_BUILD
 		int ver_status = check_client_version();
 		if (ver_status == -1) {
-			fprintf(stderr, "WARNING: Your client version is outdated.\n"
-				"Please download the latest release from: https://github.com/gcxd68/minisnake/releases\n");
-			if (!ask_confirm("Would you like to play in Offline Mode instead? (y/n): "))
-				return (EXIT_SUCCESS); 
+			if (!getenv(ENV_VAR)) {
+				fprintf(stderr, "WARNING: Your client version is outdated.\n"
+					"Please download the latest release from: https://github.com/gcxd68/minisnake/releases\n");
+				if (!ask_confirm("Would you like to play in Offline Mode instead? (y/n): "))
+					return (EXIT_SUCCESS);
+			}
 		}
 		if (ver_status == 1 && server_sync_rules(d))
 			d->online = 1;
@@ -318,7 +320,7 @@ static void	setup_display(t_data *d) {
 
 	if (fx >= 0 && fy >= 0)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 
-	   	fy + 2, fx + 2, fruit_color());
+	   	fy + 2, fx + 2, d->fruit_col ? d->fruit_col : COLOR_RED);
 
 	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)

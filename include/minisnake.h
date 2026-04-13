@@ -209,6 +209,7 @@ typedef struct s_data {
 	int			width, height, score, game_over, online, cheat, steps;
 	
 	int			fruit_x, fruit_y;
+	const char	*fruit_col;
 	pthread_mutex_t fruit_mutex; /* Protects the coordinate pair against data races */
 
 	uint32_t	seed;
@@ -232,7 +233,7 @@ uint32_t	lcg_rand(uint32_t *seed);
 int			check_client_version(void);
 int			server_sync_rules(t_data *d);
 int			start_session(t_data *d);
-void		notify_server(t_data *d, const char *action);
+void		notify_server(t_data *d, const char *action, int fx, int fy);
 void		handle_leaderboard(t_data *d);
 void		net_wait_all(void);
 

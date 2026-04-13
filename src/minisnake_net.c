@@ -5,7 +5,7 @@
 int		check_client_version(void) { return (0); }
 int		server_sync_rules(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
-void    notify_server(t_data *d, const char *action) { (void)d; (void)action; }
+void    notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
 void    handle_leaderboard(t_data *d) { (void)d; }
 void	net_wait_all(void) {}
 
@@ -37,6 +37,44 @@ void	net_wait_all(void) {}
 # define UI_SCORE_WIDTH     7
 
 # define REQ_POOL_SIZE      10
+
+/* PREPROCESSOR CHECKS: Compile-time safety validation */
+# if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0
+#  error "Buffer sizes must be strictly positive"
+# endif
+# if BUF_TOKEN < 33
+#  error "BUF_TOKEN must be at least 33 to hold a 32-character hex token and a null terminator"
+# endif
+# if BUF_REQ < (BUF_PATH + 64)
+#  error "BUF_REQ is too small to contain an HTTP request line and a path"
+# endif
+# if BUF_RESP_SCORES < (LB_MAX_SCORES * BUF_ENTRY)
+#  error "BUF_RESP_SCORES is too small to hold all leaderboard entries"
+# endif
+# if HTTP_MIN_LEN <= 0 || HTTP_VER_LEN <= 0 || HTTP_STAT_OFFSET <= 0 || HTTP_STAT_LEN <= 0
+#  error "HTTP parsing constants must be strictly positive"
+# endif
+# if HTTP_MIN_LEN < (HTTP_STAT_OFFSET + HTTP_STAT_LEN)
+#  error "HTTP_MIN_LEN must be large enough to read the required status code offset and length"
+# endif
+# if LB_MAX_SCORES <= 0
+#  error "LB_MAX_SCORES must be strictly positive"
+# endif
+# if LB_START_ROW < 0 || LB_COL_OFFSET < 0 || UI_PROMPT_ROW_OFF < 0 || UI_PROMPT_COL < 0
+#  error "UI offsets must be positive or zero"
+# endif
+# if MAX_NAME_LEN <= 0
+#  error "MAX_NAME_LEN must be strictly positive"
+# endif
+# if UI_NAME_WIDTH < MAX_NAME_LEN
+#  error "UI_NAME_WIDTH must be >= MAX_NAME_LEN"
+# endif
+# if UI_SCORE_WIDTH <= 0
+#  error "UI_SCORE_WIDTH must be strictly positive"
+# endif
+# if REQ_POOL_SIZE <= 0
+#  error "REQ_POOL_SIZE must be strictly positive"
+# endif
 
 typedef struct s_req {
 	char	path[BUF_PATH];
@@ -117,6 +155,7 @@ static void *async_http_worker(void *arg) {
 				pthread_mutex_lock(&req->d->fruit_mutex);
 				req->d->fruit_x = nx;
 				req->d->fruit_y = ny;
+				req->d->fruit_col = fruit_color();
 				pthread_mutex_unlock(&req->d->fruit_mutex);
 			}
 		}
@@ -235,21 +274,15 @@ int start_session(t_data *d) {
 	if (x_str && y_str) {
 		d->fruit_x = atoi(x_str);
 		d->fruit_y = atoi(y_str);
+		d->fruit_col = fruit_color();
 	}
 	return (1);
 }
 
-void notify_server(t_data *d, const char *action) {
+void notify_server(t_data *d, const char *action, int fx, int fy) {
 	if (!IS_SESSION_ACTIVE(d)) return;
 
 	char path[BUF_PATH];
-	int fx, fy;
-
-	/* Safe read for the URL payload */
-	pthread_mutex_lock(&d->fruit_mutex);
-	fx = d->fruit_x;
-	fy = d->fruit_y;
-	pthread_mutex_unlock(&d->fruit_mutex);
 
 	if (strcmp(action, "eat") == 0)
 		snprintf(path, sizeof(path), "/eat/%s/%d/%d/%d", d->token, d->steps, fx, fy); 

@@ -46,7 +46,7 @@ static void anticheat(t_data *d) {
 		|| d->score > d->width * d->height * d->points_per_fruit - current_penalty
 		|| now - last_frame > d->cheat_timeout) {
 		d->cheat = 1;
-		notify_server(d, "cheat");
+		notify_server(d, "cheat", 0, 0);
 		return;
 	}
 	last_frame = now;
@@ -60,7 +60,7 @@ static void anticheat(t_data *d) {
 		while (fgets(buf, sizeof(buf), f)) {
 			if (!strncmp(buf, "TracerPid:", TRACER_LEN) && atoi(buf + 10) != 0) {
 				d->cheat = 1;
-				notify_server(d, "cheat");
+				notify_server(d, "cheat", 0, 0);
 				break;
 			}
 		}
@@ -106,6 +106,7 @@ void spawn_fruit(t_data *d) {
 	pthread_mutex_lock(&d->fruit_mutex);
 	d->fruit_x = cand_x;
 	d->fruit_y = cand_y;
+	d->fruit_col = fruit_color();
 	pthread_mutex_unlock(&d->fruit_mutex);
 }
 
@@ -141,13 +142,14 @@ static void	update_game(t_data *d) {
 	d->score += d->points_per_fruit;
 	d->delay *= d->speedup_factor;
 
+	/* Notifier avec les vraies coordonnées avant de les écraser */
+	notify_server(d, "eat", fx, fy);
+
 	/* Safe Hide */
 	pthread_mutex_lock(&d->fruit_mutex);
 	d->fruit_x = -1;
 	d->fruit_y = -1;
 	pthread_mutex_unlock(&d->fruit_mutex);
-
-	notify_server(d, "eat");
 
 	if (d->size >= d->width * d->height)
 		return;
@@ -185,7 +187,7 @@ static void	render(t_data *d) {
 			
 	if (fx >= 0 && fy >= 0)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
-			fy + 2, fx + 2, fruit_color());
+			fy + 2, fx + 2, d->fruit_col ? d->fruit_col : COLOR_RED);
 			
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
 	printf(STYLE_RESET CURSOR_POS "%d \n", d->height + 3, 8, d->score);
