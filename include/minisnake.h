@@ -25,7 +25,7 @@
 # endif
 
 /* Client software version for backend synchronization and update enforcement */
-# define CLIENT_VERSION					"1"
+# define CLIENT_VERSION					"2"
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
@@ -184,7 +184,6 @@
 # define MAX(a, b)				(a > b ? a : b)
 # define IS_SESSION_ACTIVE(d)	(d->online && d->token[0] != '\0')
 
-/* Default initializer for t_data */
 # define DEFAULT_RULES (t_data){ \
 	.show_splash = 1, \
 	.size = 1, \
@@ -207,7 +206,11 @@ typedef enum e_dir {
 typedef struct s_data {
 	int			show_splash, size, grow, points_per_fruit, spawn_fruit_max_attempts, cheat_timeout, penalty_interval, penalty_amount;
 	float		delay, speedup_factor;
-	int			width, height, fruit_x, fruit_y, score, game_over, online, cheat, steps;
+	int			width, height, score, game_over, online, cheat, steps;
+	
+	int			fruit_x, fruit_y;
+	pthread_mutex_t fruit_mutex; /* Protects the coordinate pair against data races */
+
 	uint32_t	seed;
 	int			x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	t_dir		dir[2];
@@ -231,5 +234,6 @@ int			server_sync_rules(t_data *d);
 int			start_session(t_data *d);
 void		notify_server(t_data *d, const char *action);
 void		handle_leaderboard(t_data *d);
+void		net_wait_all(void);
 
 #endif

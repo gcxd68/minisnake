@@ -9,7 +9,7 @@ A lightweight, terminal-based Snake game written in C with a dedicated online sc
 - 🎨 **Clean aesthetics** featuring Unicode character graphics and a smooth linear-interpolation splash screen
 - ⚡ **Progressive difficulty** as the game speeds up dynamically
 - ⚙️ **Dynamic server rules configuration** without recompiling the backend
-- 🛡️ **Advanced anti-cheat protection** with strict pseudo-random (PRNG) synchronization between client and server
+- 🛡️ **Advanced anti-cheat protection** via Server-Authoritative behavior (Opaque Server-Side RNG), behavioral variance telemetry, and thread-safe background sync
 
 ## Requirements
 
@@ -79,7 +79,7 @@ The online leaderboard functions via a secure Server-Side Scoring Architecture p
 - **Client Version Integrity:** Client requests are tagged with a version header. Outdated clients are gracefully blocked with an update notice, either at launch (prompting a fallback to Offline Mode) or hijacked directly at the leaderboard screen.
 - **Detailed Audit Logging:** The server maintains precise, modified final logs for every single game session, capturing the player's IP, token, final score, and exact number of fruits eaten, or explicitly logging why a score was ignored/rejected.
 - **Active Memory Management:** The server automatically tracks and sweeps stale IPs and abandoned "ghost" sessions, gracefully logging memory reclamation without spamming stdout.
-- **Pathing and PRNG Constraints:** The server verifies Manhattan distances and synchronizes the fruit generation sequence to block teleports or RNG manipulation.
+- **Pathing and Behavioral Telemetry:** The server strictly generates the target fruit (Opaque RNG) rather than relying on a shared PRNG, fundamentally blocking teleporting or PRNG reversal. It also tracks the statistical variance of the player's detours (Shadow Mode telemetry) to flag bots moving with unnatural perfection as well as using a Global Speed check limit upon score submission.
 
 ### Server Limits & Anti-DDoS
 The Go backend is hardcoded to manage memory and traffic securely:

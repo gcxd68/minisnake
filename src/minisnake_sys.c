@@ -12,7 +12,6 @@ static int	parse_dimension(const char *str, int min, int max, int *out, const ch
 	return (2);
 }
 
-/* Read a single character and flush the rest of the line */
 static int	read_char(void) {
 	int c = getchar();
 	if (c != '\n' && c != EOF)
@@ -28,39 +27,29 @@ static int	ask_confirm(const char *question) {
 }
 
 static int	parse_args(int argc, char **argv, t_data *d) {
-	/* Validate compile-time constant at runtime in case someone changes it incorrectly */
 	if (DEF_SPEEDUP_FACTOR < 0.0f || DEF_SPEEDUP_FACTOR >= 1.0f) {
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
 		return(EXIT_FAILURE);
 	}
-	/* Launch default mode if no arguments, or explicitly requested "online" */
 	if (argc == 1 || (argc == 2 && !strcmp(argv[1], "online"))) {
 		d->width = DEF_WIDTH;
 		d->height = DEF_HEIGHT;
 
 #ifdef ONLINE_BUILD
-		/* 1. Dedicated version compatibility check */
 		int ver_status = check_client_version();
-		
 		if (ver_status == -1) {
 			fprintf(stderr, "WARNING: Your client version is outdated.\n"
 				"Please download the latest release from: https://github.com/gcxd68/minisnake/releases\n");
 			if (!ask_confirm("Would you like to play in Offline Mode instead? (y/n): "))
 				return (EXIT_SUCCESS); 
 		}
-		
-		/* 2. server_sync_rules only runs if version was valid (ver_status == 1) */
 		if (ver_status == 1 && server_sync_rules(d))
 			d->online = 1;
-
 #else
-
-		/* If network is NOT compiled in, but the user explicitly typed "online", warn them */
 		if (argc == 2) {
 			fprintf(stderr, "minisnake: online mode not available in this build\n");
 			return(EXIT_FAILURE);
 		}
-		/* If argc == 1, we silently drop to offline mode with default dimensions */
 #endif
 
 	} else if (argc == 3) {
@@ -76,7 +65,6 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 	if ((d->width * d->height) % 2 != 0) {
 		fprintf(stderr, "minisnake: board area (%dx%d = %d) must be even.\n", 
 				d->width, d->height, d->width * d->height);
-		fprintf(stderr, "A perfect game is mathematically impossible on odd grids.\n");
 		return (2);
 	}
 	return (0);
@@ -86,13 +74,11 @@ static int	install_dependencies(void) {
 	const int		need_term = system("which gnome-terminal > /dev/null 2>&1");
 	const int		need_font = system("dpkg -s fonts-noto-color-emoji > /dev/null 2>&1");
 
-	/* 1. If everything is already installed, proceed directly */
 	if (!need_term && !need_font) return (LAUNCH_SPAWN);
 
 	const int	has_apt = (system("command -v apt > /dev/null 2>&1") == 0);
 	char		cmd[BUF_CMD] = "sudo apt update && sudo apt install -y";
 
-	/* 2. If packages are missing AND we are on Ubuntu/Debian */
 	if (has_apt && (need_term != 0 || need_font != 0)) {
 		printf("For the best visual experience, these packages are recommended:\n");
 		if (need_term) {
@@ -111,37 +97,28 @@ static int	install_dependencies(void) {
 		} else
 			printf("Installation skipped.\n");
 	} else if (!has_apt && need_term != 0) {
-		/* If on macOS or other distros, just warn them gracefully */
 		printf("Notice: 'gnome-terminal' is not installed on this system.\n");
 	}
 
-	/* 3. Fallback: gnome-terminal is still missing */
 	if (ask_confirm("Would you like to play in the current terminal instead? (y/n): "))
 		return (LAUNCH_LOCAL);
-	return (EXIT_SUCCESS); /* The player refused, exit the game cleanly */
+	return (EXIT_SUCCESS); 
 }
 
-/* Try to spawn a dedicated gnome-terminal window.
-   If successful (LAUNCH_SPAWN), the current process is replaced by execvp
-   and never reaches the game loop. If LAUNCH_LOCAL, play in current terminal. */
 static int	launch_terminal(int argc, char **argv, t_data *d) {
 	char	geom[BUF_GEOM], cmd[BUF_CMD];
 	char	*self, *tty;
 	int		ret;
 
-	/* ENV_VAR is set before execvp so the child process knows it's already in the dedicated terminal */
 	if (getenv(ENV_VAR))
 		return (LAUNCH_LOCAL);
 	
-	/* Delegate all environment checks and prompt to our smart installer */
 	if ((ret = install_dependencies()) != LAUNCH_SPAWN)
 		return (ret);
 		
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
 
-	/* Redirect stderr to the parent tty so error messages remain visible
-	   even after the new gnome-terminal window takes over stdout */
 	if (!(tty = ttyname(STDERR_FILENO)))
 		tty = "/dev/null";
 	int width = MAX(d->width + 2, (int)strlen(INSTRUCTIONS));
@@ -151,11 +128,9 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	char *args[] = {"gnome-terminal", "--disable-factory", "--wait", "--hide-menubar",
 		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
 	
-	/* Dark theme for a better visual experience */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
 	if (execvp(args[0], args) == -1) {
-		/* execvp only returns on failure — offer to continue in the current terminal */
 		perror("minisnake: execvp failed");
 		fprintf(stderr, "Failed to open a new terminal window.\n");
 		free(self);
@@ -163,16 +138,13 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 			return(EXIT_FAILURE);
 	}
 
-	/* Reached only if execvp failed and user chose current terminal */
 	unsetenv(ENV_VAR);
 	return (LAUNCH_LOCAL);
 }
 
-/* Saved terminal state — restored on exit to leave the shell intact */
 struct termios	g_saved_term;
 int				g_saved_stdin_flags = -1;
 
-/* Raw mode disables line buffering (ICANON) and echo so keypresses are instantly read without waiting for Enter */
 static void	enable_raw_mode(void) {
 	struct termios	raw;
 
@@ -183,13 +155,11 @@ static void	enable_raw_mode(void) {
 	printf(CURSOR_HIDE);
 }
 
-/* Restore the terminal to its original state and show the cursor */
 static void	disable_raw_mode(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
 	printf(CURSOR_SHOW);
 }
 
-/* Restore the O_NONBLOCK flag so fgets and getchar wait for input. */
 static void	restore_stdin_flags(void) {
 	if (g_saved_stdin_flags != -1)
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
@@ -210,7 +180,6 @@ static void	setup_terminal(void) {
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
 	enable_raw_mode();
 
-	/* O_NONBLOCK on stdin prevents getchar() from blocking during the game loop */
 	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
 		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
@@ -247,7 +216,6 @@ void splash_screen(t_data *d) {
 	const int	v_cx = (MAX_WIDTH / 2) + 1, v_cy = MAX(SPLASH_TITLE_MIN_ROW, (d->height / 2) + 1);
 	const int	r_cx = (w / 2) + 1;
 
-	/* 1. Animation: Smooth linear interpolation from virtual space to real center */
 	for (int i = 0; i <= SPLASH_FRAMES; i++) {
 		const int	lx = 1 + (v_cx - SPLASH_OFFSET_MINI - 1) * i / SPLASH_FRAMES;
 		const int	rx = (MAX_WIDTH - SPLASH_WORD_LEN) + (v_cx + SPLASH_OFFSET_NAKE - (MAX_WIDTH - SPLASH_WORD_LEN)) * i / SPLASH_FRAMES;
@@ -266,7 +234,6 @@ void splash_screen(t_data *d) {
 		usleep(SPLASH_USLEEP);
 	}
 
-	/* 2. Interactive: Centered blinking prompt with bottom-screen safety */
 	const char	*msg = SPLASH_MSG_PROMPT;
 	const int	m_x = MAX(1, r_cx - ((int)strlen(msg) / 2));
 	const int	m_y = MIN(h - SPLASH_PROMPT_BOTTOM_MARGIN, MAX(v_cy + 1, v_cy + SPLASH_TITLE_TO_PROMPT_DIST));
@@ -303,7 +270,6 @@ uint32_t sys_rand(void) {
 	return ((uint32_t)rand());
 }
 
-/* Linear Congruential Generator (pseudo-random) synchronized with the server */
 uint32_t lcg_rand(uint32_t *seed) {
 	*seed = (*seed * 1103515245 + 12345) & 0x7fffffff;
 	return *seed;
@@ -321,6 +287,10 @@ static void	init_game(t_data *d) {
 		save_state.online = 0;
 	}
 	*d = save_state;
+
+	/* 1. Init MUTEX AFTER copying save_state to avoid corruption */
+	pthread_mutex_init(&d->fruit_mutex, NULL);
+
 	if (d->online && !start_session(d))
 		d->online = 0;
 	memset(d->input_q, EOF, sizeof(d->input_q));
@@ -332,13 +302,24 @@ static void	init_game(t_data *d) {
 		d->x[i] = d->x[0];
 		d->y[i] = d->y[0];
 	}
-	spawn_fruit(d);
+	
+	if (!d->online) {
+		spawn_fruit(d);
+	}
 }
 
 static void	setup_display(t_data *d) {
 	printf(CLEAR_SCREEN);
-	printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 
-	   d->fruit_y + 2, d->fruit_x + 2, fruit_color());
+
+	pthread_mutex_lock(&d->fruit_mutex);
+	int fx = d->fruit_x;
+	int fy = d->fruit_y;
+	pthread_mutex_unlock(&d->fruit_mutex);
+
+	if (fx >= 0 && fy >= 0)
+		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 
+	   	fy + 2, fx + 2, fruit_color());
+
 	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)
 		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, y, 1, y, d->width + 2);
@@ -363,11 +344,15 @@ static void	finalize(t_data *d) {
 
 	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
 		? COLOR_RED : COLOR_GREEN, outcome);
-	/* Restore blocking stdin before any user-facing read operations */
+		
 	restore_terminal();
 	tcflush(STDIN_FILENO, TCIFLUSH);
 	handle_leaderboard(d);
 	printf(CURSOR_POS ERASE_LINE, d->height + 4, 1);
+
+	/* 2. Wait for async workers and gracefully destroy MUTEX */
+	net_wait_all();
+	pthread_mutex_destroy(&d->fruit_mutex);
 }
 
 int	main(int argc, char **argv) {
