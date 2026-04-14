@@ -25,7 +25,7 @@ const (
 	DBPath                = "scores.db"
 	MaxActiveSessions     = 5000
 	MaxReqPerSec          = 20
-	RequiredClientVersion = "2"
+	RequiredClientVersion = "3"
 )
 
 // --- Structures ---
