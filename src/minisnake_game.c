@@ -113,7 +113,7 @@ void spawn_fruit(t_data *d) {
 static void	update_game(t_data *d) {
 	if (!d->dir[0]) return;
 
-	const char *moves = " XL RUD";
+	const char *moves = " LRUD";
 	if (d->path_steps < 10000) {
 		d->path[d->path_steps] = moves[d->dir[0]];
 	}

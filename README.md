@@ -9,7 +9,7 @@ A lightweight, terminal-based Snake game written in C with a dedicated online sc
 - 🎨 **Clean aesthetics** featuring Unicode character graphics and a smooth linear-interpolation splash screen
 - ⚡ **Progressive difficulty** as the game speeds up dynamically
 - ⚙️ **Dynamic server rules configuration** without recompiling the backend
-- 🛡️ **Advanced anti-cheat protection** via Server-Authoritative behavior (Opaque Server-Side RNG), behavioral variance telemetry, and thread-safe background sync
+- 🛡️ **Advanced anti-cheat protection** via Server-Authoritative physics simulation (Spatial Hashing), Opaque Server-Side RNG, behavioral variance telemetry, and thread-safe background sync
 
 ## Requirements
 
@@ -78,6 +78,7 @@ The online leaderboard functions via a secure Server-Side Scoring Architecture p
 - **Maximum Score Authorization:** The server strictly validates that no submitted score exceeds the theoretical maximum capacity (`Width * Height * PointsPerFruit`). 
 - **Client Version Integrity:** Client requests are tagged with a version header. Outdated clients are gracefully blocked with an update notice, either at launch (prompting a fallback to Offline Mode) or hijacked directly at the leaderboard screen.
 - **Detailed Audit Logging:** The server maintains precise, modified final logs for every single game session, capturing the player's IP, token, final score, and exact number of fruits eaten, or explicitly logging why a score was ignored/rejected.
+- **Authoritative Physics Simulation:** The server accurately recreates the game state on every ping by replaying every player move via an O(1) Spatial Hashing grid and full body tracking. It instantly detects and shadowbans any wall-phasing or self-colliding cheats without relying solely on client honor.
 - **Active Memory Management:** The server automatically tracks and sweeps stale IPs and abandoned "ghost" sessions, gracefully logging memory reclamation without spamming stdout.
 - **Pathing and Behavioral Telemetry:** The server strictly generates the target fruit (Opaque RNG) rather than relying on a shared PRNG, fundamentally blocking teleporting or PRNG reversal. It also tracks the statistical variance of the player's detours (Shadow Mode telemetry) to flag bots moving with unnatural perfection as well as using a Global Speed check limit upon score submission.
 
