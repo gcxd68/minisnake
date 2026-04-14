@@ -320,6 +320,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	ip := getRemoteIP(r)
 
 	// 1. Decode the JSON POST Payload
+	r.Body = http.MaxBytesReader(w, r.Body, 1024*10) // Prevents Memory Exhaustion DoS
 	var payload EatPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
@@ -356,6 +357,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	// 3. HEAVY PHYSICS: O(P) Simulation using Spatial Hashing
 	// Replay the client's path and validate every single step instantly
+	validMoves := 0
 	for _, move := range payload.Path {
 		if len(session.Body) == 0 { break }
 
@@ -368,6 +370,8 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		case ' ', 'X': continue // Ignore STOP instructions safely
 		default: continue
 		}
+
+		validMoves++
 
 		// A. Wall Collision Check
 		if newHead.X < 0 || newHead.X >= Rules.GameWidth || newHead.Y < 0 || newHead.Y >= Rules.GameHeight {
@@ -401,6 +405,11 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 			session.Grid[oldTail.Y*Rules.GameWidth+oldTail.X] = false
 			session.Body = session.Body[:len(session.Body)-1]
 		}
+	}
+
+	if !session.Cheated && validMoves != deltaSteps {
+		session.Cheated = true
+		log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] move_count_mismatch expected=%d got=%d", ip, token[:8], deltaSteps, validMoves)
 	}
 
 	// 4. Target Validation
@@ -585,7 +594,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		if session.Cheated {
 			reason = "shadowbanned"
 		}
-		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=%s" name='%s', ip, token[:8], name, reason)
+		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=%s name='%s'", ip, token[:8], reason, name)
 	}
 
 	fmt.Fprint(w, "OK")
