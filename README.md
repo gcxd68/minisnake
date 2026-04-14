@@ -82,6 +82,7 @@ The online leaderboard functions via a secure Server-Side Scoring Architecture p
 - **Authoritative Physics Simulation:** The server accurately recreates the game state on every ping by replaying every player move via an O(1) Spatial Hashing grid and full body tracking. It instantly detects and shadowbans any wall-phasing or self-colliding cheats without relying solely on client honor.
 - **Active Memory Management:** The server automatically tracks and sweeps stale IPs and abandoned "ghost" sessions, gracefully logging memory reclamation without spamming stdout.
 - **Pathing and Behavioral Telemetry:** The server strictly generates the target fruit (Opaque RNG) rather than relying on a shared PRNG, fundamentally blocking teleporting or PRNG reversal. It also tracks the statistical variance of the player's detours (Shadow Mode telemetry) to flag bots moving with unnatural perfection as well as using a Global Speed check limit upon score submission.
+- **Anti-Lag Fruit Spawning:** To elegantly mask network latency, the server intelligently enforces a minimum Manhattan distance between the snake's head and the newly spawned fruit. This constraint gracefully degrades on highly crowded boards to guarantee a valid spawn without late-game deadlocks.
 
 ### Server Limits & Anti-DDoS
 The Go backend is hardcoded to manage memory and traffic securely:
