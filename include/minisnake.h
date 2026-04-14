@@ -25,7 +25,7 @@
 # endif
 
 /* Client software version for backend synchronization and update enforcement */
-# define CLIENT_VERSION					"2"
+# define CLIENT_VERSION					"3"
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
@@ -216,6 +216,10 @@ typedef struct s_data {
 	int			x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
 	t_dir		dir[2];
 	char		token[33];
+	
+	int			seq;
+	int			path_steps;
+	char		path[10001];
 }	t_data;
 
 /* minisnake_game - Gameplay functions */

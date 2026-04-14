@@ -112,6 +112,13 @@ void spawn_fruit(t_data *d) {
 
 static void	update_game(t_data *d) {
 	if (!d->dir[0]) return;
+
+	const char *moves = " LRUD";
+	if (d->path_steps < 10000) {
+		d->path[d->path_steps] = moves[d->dir[0]];
+	}
+	d->path_steps++;
+
 	d->steps++;
 	if (d->penalty_interval > 0 && d->steps % d->penalty_interval == 0)
 		d->score -= d->penalty_amount;
@@ -143,7 +150,11 @@ static void	update_game(t_data *d) {
 	d->delay *= d->speedup_factor;
 
 	/* Notifier avec les vraies coordonnées avant de les écraser */
+	d->seq++;
 	notify_server(d, "eat", fx, fy);
+
+	d->path_steps = 0;
+	memset(d->path, 0, sizeof(d->path));
 
 	/* Safe Hide */
 	pthread_mutex_lock(&d->fruit_mutex);
