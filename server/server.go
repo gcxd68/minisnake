@@ -214,7 +214,7 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 func flagIfBotFingerprint(r *http.Request, session *Session, ip, token string) bool {
 	if r.Proto != "HTTP/1.0" || r.Header.Get("User-Agent") != "" || r.Header.Get("Accept") != "" {
 		session.Cheated = true
-		log.Printf("[SHADOWBAN_FINGERPRINT] token=%s ip=%s", token, ip)
+		log.Printf("[%s] [%s...] [SHADOWBAN_FINGERPRINT]", ip, token[:8])
 		return true
 	}
 	return false
@@ -253,22 +253,28 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionMutex.RUnlock()
 
+	// Generate secure token
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
 	token := hex.EncodeToString(bytes)
 
+	// Create the global server seed for future fruits
 	seedBytes := make([]byte, 4)
 	rand.Read(seedBytes)
 	currentSeed := (uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3])) & 0x7fffffff
 
+	// FIX: Replicate the exact mathematical behavior of the C client 
+	// which initializes its starting position with a blank seed (0) due to Opaque RNG.
+	clientSeed := uint32(0)
 	offsetX, offsetY := 0, 0
+	
 	if Rules.GameWidth%2 == 0 {
-		currentSeed = lcgRand(currentSeed)
-		offsetX = int(currentSeed % 2)
+		clientSeed = lcgRand(clientSeed)
+		offsetX = int(clientSeed % 2)
 	}
 	if Rules.GameHeight%2 == 0 {
-		currentSeed = lcgRand(currentSeed)
-		offsetY = int(currentSeed % 2)
+		clientSeed = lcgRand(clientSeed)
+		offsetY = int(clientSeed % 2)
 	}
 
 	headX := (Rules.GameWidth / 2) - offsetX
@@ -286,7 +292,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		StartTime:     now,
 		LastPing:      now,
 		Cheated:       false,
-		Seed:          currentSeed,
+		Seed:          currentSeed, // The server uses the random seed for the fruits
 		HeadX:         headX,
 		HeadY:         headY,
 		LastSteps:     0,
@@ -298,13 +304,14 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		Grow:          Rules.InitialSize - 1,
 		Body:          []Point{head},
 	}
+	
 	spawnFruit(session, -1, -1) // Opaque RNG: Server dictates the first fruit
 
 	sessionMutex.Lock()
 	activeSessions[token] = session
 	sessionMutex.Unlock()
 
-	log.Printf("[SESSION_START] token=%s ip=%s", token, ip)
+	log.Printf("[%s] [%s...] [SESSION_START]", ip, token[:8])
 	fmt.Fprintf(w, "%s|%d|%d", token, session.TargetFruit.X, session.TargetFruit.Y)
 }
 
@@ -365,7 +372,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		// A. Wall Collision Check
 		if newHead.X < 0 || newHead.X >= Rules.GameWidth || newHead.Y < 0 || newHead.Y >= Rules.GameHeight {
 			session.Cheated = true
-			log.Printf("[SHADOWBAN_PHYSICS] token=%s ip=%s | Wall collision at (%d,%d)", token, ip, newHead.X, newHead.Y)
+			log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] Wall collision at (%d,%d)", ip, token[:8], newHead.X, newHead.Y)
 			break
 		}
 
@@ -378,7 +385,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 		if session.Grid[gridIndex] && !isTailMoving {
 			session.Cheated = true
-			log.Printf("[SHADOWBAN_PHYSICS] token=%s ip=%s | Self-collision at (%d,%d)", token, ip, newHead.X, newHead.Y)
+			log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] Self-collision at (%d,%d)", ip, token[:8], newHead.X, newHead.Y)
 			break
 		}
 
@@ -401,8 +408,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	if !session.Cheated {
 		if len(session.Body) == 0 || session.Body[0].X != payload.Fx || session.Body[0].Y != payload.Fy || payload.Fx != session.TargetFruit.X || payload.Fy != session.TargetFruit.Y {
 			session.Cheated = true
-			log.Printf("[SHADOWBAN_TARGET] token=%s ip=%s expected=(%d,%d) got=(%d,%d) sim=(%d,%d)", 
-				token[:8], ip, session.TargetFruit.X, session.TargetFruit.Y, payload.Fx, payload.Fy, session.Body[0].X, session.Body[0].Y)
+			log.Printf("[%s] [%s...] [SHADOWBAN_TARGET] expected=(%d,%d) got=(%d,%d)", ip, token[:8], session.TargetFruit.X, session.TargetFruit.Y, payload.Fx, payload.Fy)
 		}
 	}
 
@@ -413,7 +419,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	if actualTime < math.Max(0, (expectedTime*0.75)-1.0) || actualTime > expectedTime+(float64(Rules.CheatTimeout)/1000.0)+5.0 {
 		session.Cheated = true
-		log.Printf("[SHADOWBAN_TIME] token=%s ip=%s expected=%.1f actual=%.1f", token, ip, expectedTime, actualTime)
+		log.Printf("[%s] [%s...] [SHADOWBAN_TIME] expected=%.1f actual=%.1f", ip, token[:8], expectedTime, actualTime)
 	}
 
 	if session.Cheated {
@@ -422,7 +428,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6. Behavioral Analytics (Manhattan)
+	// 6. Behavioral Analytics & Active Turing Tests
 	manhattan := int(math.Abs(float64(payload.Fx-session.HeadX)) + math.Abs(float64(payload.Fy-session.HeadY)))
 	detour := deltaSteps - manhattan
 	if detour == 0 {
@@ -437,16 +443,19 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	currentFruits := session.FruitsEaten + 1
 
+	// Activate Turing tests after enough data points (30 fruits)
 	if currentFruits >= 30 {
+		// A. Manhattan Filter (Active Ban for strictly perfect routing)
 		perfRatio := (session.PerfectPaths * 100) / currentFruits
 		if perfRatio >= 95 {
 			session.Cheated = true
-			log.Printf("[SHADOWBAN_BEHAVIOR] token=%s ip=%s perfect_ratio=%d", token, ip, perfRatio)
+			log.Printf("[%s] [%s...] [SHADOWBAN_BEHAVIOR] perfect_ratio=%d", ip, token[:8], perfRatio)
 			sessionMutex.Unlock()
 			sendFakeFruit()
 			return
 		}
 
+		// B. Variance Filter (Active Ban for highly regular/robotic detours)
 		if len(session.RecentDetours) == 30 {
 			sum := 0.0
 			for _, v := range session.RecentDetours { sum += float64(v) }
@@ -456,10 +465,18 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 			for _, v := range session.RecentDetours { variance += math.Pow(float64(v)-mean, 2) }
 			variance /= 30.0
 
-			log.Printf("[TELEMETRY_VAR] token=%s fruits=%d mean=%.2f variance=%.2f ip=%s", token, currentFruits, mean, variance, ip)
+			// Trigger a shadowban if the detour variance is inhumanly consistent
+			if variance < 1.0 {
+				session.Cheated = true
+				log.Printf("[%s] [%s...] [SHADOWBAN_VARIANCE] mean=%.2f variance=%.2f (Too robotic)", ip, token[:8], mean, variance)
+				sessionMutex.Unlock()
+				sendFakeFruit()
+				return
+			}
 		}
 	}
 
+	// Apply valid game mutations
 	applyPenalties(session, payload.Steps)
 	session.Score += Rules.PointsPerFruit
 	session.FruitsEaten++
@@ -495,9 +512,21 @@ func handleCheat(w http.ResponseWriter, r *http.Request) {
 
 func handleQuit(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
+	ip := getRemoteIP(r)
+
 	sessionMutex.Lock()
-	delete(activeSessions, token)
+	session, exists := activeSessions[token]
+	if exists {
+		delete(activeSessions, token)
+	}
 	sessionMutex.Unlock()
+
+	// If the session existed, log the aborted game in a unified way
+	if exists {
+		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=no_name score=%d fruits=%d", 
+			ip, token[:8], session.Score, session.FruitsEaten)
+	}
+
 	fmt.Fprint(w, "OK")
 }
 
@@ -533,8 +562,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 
 	if session.TotalSteps > 0 && duration < minExpected {
 		session.Cheated = true
-		log.Printf("[SHADOWBAN_GLOBALSPEED] token=%s ip=%s duration=%.1f steps=%d min_expected=%.1f",
-			token, ip, duration, session.TotalSteps, minExpected)
+		log.Printf("[%s] [%s...] [SHADOWBAN_GLOBALSPEED] duration=%.1f steps=%d min_expected=%.1f", ip, token[:8], duration, session.TotalSteps, minExpected)
 	}
 
 	if session.Cheated {
@@ -546,18 +574,18 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	if !session.Cheated && session.Score > 0 {
 		_, err := db.Exec("INSERT INTO scores (name, score) VALUES (?, ?)", name, session.Score)
 		if err == nil {
-			log.Printf("[TELEMETRY_SUBMIT] token=%s name=%s score=%d fruits=%d ip=%s",
-				token, name, session.Score, session.FruitsEaten, ip)
-
-			log.Printf("[SCORE_SAVED] token=%s name='%s' score=%d fruits=%d ip=%s",
-				token[:8], name, session.Score, session.FruitsEaten, ip)
+			log.Printf("[%s] [%s...] [SCORE_SAVED] name='%s' score=%d fruits=%d", ip, token[:8], name, session.Score, session.FruitsEaten)
 		} else {
-			log.Printf("[DB_ERROR] token=%s ip=%s err=%v", token, ip, err)
+			log.Printf("[%s] [%s...] [DB_ERROR] err=%v", ip, token[:8], err)
 			http.Error(w, "Backend Error", http.StatusInternalServerError)
 			return
 		}
 	} else {
-		log.Printf("[SCORE_IGNORED] token=%s name='%s' ip=%s", token[:8], name, ip)
+		reason := "0_score"
+		if session.Cheated {
+			reason = "shadowbanned"
+		}
+		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=%s" name='%s', ip, token[:8], name, reason)
 	}
 
 	fmt.Fprint(w, "OK")
