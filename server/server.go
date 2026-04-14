@@ -40,6 +40,7 @@ type GameRules struct {
 	PenaltyInterval       int
 	PenaltyAmount         int
 	SpawnFruitMaxAttempts int
+	MinFruitDist          int
 	MaxScore              int `json:"-"`
 }
 
@@ -106,6 +107,7 @@ func loadRules() {
 		PenaltyInterval:       10,
 		PenaltyAmount:         1,
 		SpawnFruitMaxAttempts: 10000,
+		MinFruitDist:          2,
 	}
 
 	file, err := os.Open("rules.json")
@@ -168,10 +170,9 @@ func applyPenalties(session *Session, newSteps int) {
 // spawnFruit generates the next target fruit server-side.
 // OPTIMIZATION: Uses O(1) boolean Grid for instant collision checks.
 // ANTI-LAG: Enforces a minimum Manhattan distance from the head to mask network latency.
-// The distance requirement gracefully degrades to prevent infinite loops in late-game.
 func spawnFruit(session *Session, prevX, prevY int) {
-	// We want the fruit to spawn at least 3 tiles away to account for ping
-	minDist := 3
+	// Retrieve the minimum allowed distance from the global rules
+	minDist := Rules.MinFruitDist
 
 	for i := 0; i < Rules.SpawnFruitMaxAttempts; i++ {
 		session.Seed = lcgRand(session.Seed)
@@ -181,17 +182,16 @@ func spawnFruit(session *Session, prevX, prevY int) {
 
 		gridIndex := candY*Rules.GameWidth + candX
 
-		// Graceful Degradation: If the board is extremely crowded (late game) 
-		// and we've failed to find a far spot after 100 attempts, drop the distance rule.
+		// Graceful Degradation: drop the distance rule if the board is too crowded
+		// This prevents infinite loops in late-game scenarios
 		if i > 100 {
 			minDist = 0
 		}
 
-		// Calculate Manhattan distance from the current head
 		dist := int(math.Abs(float64(candX-session.HeadX)) + math.Abs(float64(candY-session.HeadY)))
 
 		// Ensure the fruit is NOT on the snake's body, NOT on the previous fruit, 
-		// AND far enough from the head (unless degraded).
+		// AND far enough from the head (unless the rule was degraded).
 		if !session.Grid[gridIndex] && (candX != prevX || candY != prevY) && dist >= minDist {
 			session.TargetFruit = Point{X: candX, Y: candY}
 			return

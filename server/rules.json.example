@@ -30,5 +30,8 @@
   "CheatTimeout": 5000,
   
   "_comment_rng_safety": "Max iterations to find an empty spot for a fruit on a crowded board",
-  "SpawnFruitMaxAttempts": 10000
+  "SpawnFruitMaxAttempts": 10000,
+
+  "_comment_anti_lag": "Minimum Manhattan distance between the snake's head and the new fruit (Masks network latency)",
+  "MinFruitDist": 2
 }

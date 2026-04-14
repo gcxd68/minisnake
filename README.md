@@ -115,7 +115,8 @@ You can now dynamically adjust the game constraints (points, speed, grid boundar
   "PenaltyInterval": 10,
   "PenaltyAmount": 1,
   "CheatTimeout": 5000,
-  "SpawnFruitMaxAttempts": 10000
+  "SpawnFruitMaxAttempts": 10000,
+  "MinFruitDist": 2
 }
 ```
 *Note: Any omitted keys will seamlessly fall back to the native server defaults. The server securely computes score caps based on these parsed values dynamically to prevent abuse.*
