@@ -366,27 +366,34 @@ static int show_leaderboard(t_data *d) {
 	return (0);
 }
 
-static int read_name(char *name, size_t size) {
-	if (!fgets(name, size, stdin) || name[0] == '\n')
-		name[0] = '\0';
-	else if (!strchr(name, '\n'))
-		for (int c; (c = getchar()) != '\n' && c != EOF;);
-	for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
-	return (name[0]);
+/* Prompts the user for an alphanumeric name, loops until valid or EOF */
+static void get_player_name(t_data *d, char *name, size_t size) {
+	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
+	while (printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL),
+		fflush(stdout),
+		!name[0] && fgets(name, size, stdin)) {
+		if (!strchr(name, '\n'))
+			for (int c; (c = getchar()) != '\n' && c != EOF;);
+		for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
+		for (size_t i = strlen(name); i; i--) {
+			if (!isalnum((unsigned char)name[i - 1])) {
+				name[0] = '\0';
+				break;
+			}
+		}
+	}
+	printf(SCROLL_RESET);
 }
 
 void handle_leaderboard(t_data *d) {
 	if (!d->online) return;
 
-	char	name[MAX_NAME_LEN + 1] = {0};
+	char	name[MAX_NAME_LEN + 1] = {0}; // 8 chars + 1 null terminator
 
-	printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL);
-	fflush(stdout);
-	read_name(name, sizeof(name));
+	get_player_name(d, name, sizeof(name));
 	show_loading();
-
 	if (end_session(d, name) < 0 || show_leaderboard(d) < 0)
-		printf(CLEAR_SCREEN "Network error");
+		printf(CLEAR_SCREEN "Network error\n");
 }
 
 /* Wait for all async requests to finish before tearing down the game */
