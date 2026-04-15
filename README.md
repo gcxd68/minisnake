@@ -74,7 +74,7 @@ After the game, you will be prompted to enter your name for the global leaderboa
 
 The online leaderboard functions via a secure Server-Side Scoring Architecture proxy. The C client never submits its score directly; instead, it sends an asynchronous HTTP ping per fruit. The Go backend securely enforces several critical validations:
 
-- **Time Corridor & Anti-Lag Smoothing:** A dynamic time window is calculated based on game speed and path length. It uses a sliding window (smoothing algorithm) to absorb network jitter safely, differentiating between genuine network lag spikes and speedhacks/pauses.
+- **Time Corridor & Anti-Lag Smoothing:** A dynamic time window is calculated based on game speed and path length. It uses a sliding window (smoothing algorithm) to absorb network jitter safely, differentiating between genuine network lag spikes and speedhacks/pauses, while accommodating natural idle periods like the starting splash screen.
 - **Maximum Score Authorization:** The server strictly validates that no submitted score exceeds the theoretical maximum capacity (`Width * Height * PointsPerFruit`). 
 - **Client Version Integrity:** Client requests are tagged with a version header. Outdated clients are gracefully blocked with an update notice, either at launch (prompting a fallback to Offline Mode) or hijacked directly at the leaderboard screen.
 - **Active Turing Tests:** The server analyzes behavioral patterns (Manhattan distance efficiency and detour variance) specifically to detect programmatic bots playing with inhuman consistency.

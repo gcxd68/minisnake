@@ -303,11 +303,13 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	headY := (Rules.GameHeight / 2) - offsetY
 	head := Point{X: headX, Y: headY}
 
-	// Initialize the O(1) tracking grid and Ring Buffer
+	// Initialize the O(1) tracking grid
 	grid := make([]bool, Rules.GameWidth*Rules.GameHeight)
 	grid[headY*Rules.GameWidth+headX] = true
 	
-	bodyRing := make([]Point, Rules.GameWidth*Rules.GameHeight)
+	// FIX: Expanded Ring Buffer capacity to 10,000 to match the C client natively.
+	// This prevents memory wrap-around overwrites when the snake approaches the maximum board size.
+	bodyRing := make([]Point, 10000)
 	bodyRing[0] = head
 
 	now := time.Now()
@@ -451,9 +453,13 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Capture the last vacated tail position to prevent immediate fruit spawns on it
+	// If the tail did not move during this sequence, clear the legacy state.
 	if vacatedTailValid {
 		session.VacatedTailX = currentVacatedTail.X
 		session.VacatedTailY = currentVacatedTail.Y
+	} else {
+		session.VacatedTailX = -1
+		session.VacatedTailY = -1
 	}
 
 	if !session.Cheated && validMoves != deltaSteps {
@@ -494,7 +500,15 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate against the smoothed total time
-	if sumActual < math.Max(0, (sumExpected*0.75)-1.0) || sumActual > sumExpected+(float64(Rules.CheatTimeout)/1000.0)+5.0 {
+	upperBound := sumExpected + (float64(Rules.CheatTimeout)/1000.0) + 5.0
+	
+	// Skip the strict upper bound timeout check for the first few fruits 
+	// to safely absorb the player's idle time on the starting screen
+	if session.FruitsEaten < 2 {
+		upperBound = math.MaxFloat64
+	}
+
+	if sumActual < math.Max(0, (sumExpected*0.75)-1.0) || sumActual > upperBound {
 		session.Cheated = true
 		log.Printf("[%s] [%s...] [SHADOWBAN_TIME] smoothed_expected=%.1f smoothed_actual=%.1f (window=%d)", ip, token[:8], sumExpected, sumActual, len(session.RecentActualTime))
 	}
