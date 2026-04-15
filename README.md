@@ -50,7 +50,7 @@ To compete on the leaderboard, a backend validation server must be accessible. P
    make
    ./minisnake online
    ```
-After the game, you will be prompted to enter your name for the global leaderboard!
+After the game, you will be prompted to enter your name for the global leaderboard! (You can simply press Enter to skip and remain anonymous).
 
 ## Controls & Gameplay
 
