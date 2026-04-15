@@ -647,13 +647,38 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Global Sanity Check (Absolute Time Corridor)
+// Global Sanity Check (Absolute Time Corridor)
 	duration := time.Since(session.StartTime).Seconds()
-	minExpected := float64(session.TotalSteps) * (Rules.InitialDelay / 1000000.0) * 0.50
 
-	if session.TotalSteps > 0 && duration < minExpected {
+	// ACCURATE INTEGRAL CALCULATION:
+	// To find the absolute mathematical minimum time for the entire game, 
+	// we assume the player spent the minimum steps possible (MinFruitDist)
+	// during the early (slower) levels, and took all extra wandering steps at their final (fastest) level.
+	baseDelay := Rules.InitialDelay / 1000000.0
+	minExpected := 0.0
+	
+	minStepsPerFruit := Rules.MinFruitDist
+	extraSteps := steps - (session.FruitsEaten * minStepsPerFruit)
+	if extraSteps < 0 {
+		extraSteps = 0 // Failsafe
+	}
+
+	// 1. Time spent eating fruits as fast as physically possible
+	for i := 0; i < session.FruitsEaten; i++ {
+		delayAtLevel := baseDelay * math.Pow(Rules.SpeedupFactor, float64(i))
+		minExpected += float64(minStepsPerFruit) * delayAtLevel
+	}
+
+	// 2. Time spent wandering at the maximum speed achieved
+	finalDelay := baseDelay * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
+	minExpected += float64(extraSteps) * finalDelay
+
+	// Apply a strict 15% tolerance margin for network jitter and server clock precision
+	minExpected = minExpected * 0.85
+
+	if steps > 0 && duration < minExpected {
 		session.Cheated = true
-		log.Printf("[%s] [%s...] [SHADOWBAN_GLOBALSPEED] duration=%.1f steps=%d min_expected=%.1f", ip, token[:8], duration, session.TotalSteps, minExpected)
+		log.Printf("[%s] [%s...] [SHADOWBAN_GLOBALSPEED] duration=%.1f steps=%d min_expected=%.1f", ip, token[:8], duration, steps, minExpected)
 	}
 
 	// Apply penalties to ALL players (including shadowbanned ones)
