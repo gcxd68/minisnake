@@ -180,8 +180,13 @@ func applyPenalties(session *Session, newSteps int) {
 // OPTIMIZATION: Uses O(1) boolean Grid for instant collision checks.
 // LATENCY-AWARE: Incorporates the 'latencySteps' prediction cloud to strictly prevent ghost-eating.
 func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY, latencySteps int) {
-	// Dynamically expand the minimum distance to absorb the current network latency cloud
-	minDist := Rules.MinFruitDist + latencySteps
+	// 1. Cap the latency steps to prevent impossible mathematical constraints during huge lag spikes.
+	// A max radius of 4 tiles (Manhattan) covers up to ~400ms of latency, which is more than enough.
+	if latencySteps > 4 {
+		latencySteps = 4
+	}
+
+	idealDist := Rules.MinFruitDist + latencySteps
 
 	for i := 0; i < Rules.SpawnFruitMaxAttempts; i++ {
 		session.Seed = lcgRand(session.Seed)
@@ -191,18 +196,28 @@ func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY, late
 
 		gridIndex := candY*Rules.GameWidth + candX
 
-		// Graceful Degradation: drop the distance rule if the board is too crowded
-		// This mathematically guarantees we won't infinitely loop on high scores
-		if i > 100 {
-			minDist = 0
+		// 2. Stepped Graceful Degradation (Multi-stage fallback)
+		// Instead of dropping latency protection instantly to zero, we lower the constraints gradually
+		// if the RNG struggles to find a valid spot on a crowded board.
+		currentMinDist := idealDist
+
+		if i > 300 {
+			// Panic mode: Board is extremely full, accept any empty tile
+			currentMinDist = 0
+		} else if i > 200 {
+			// Severe fallback: Accept tiles very close to the head
+			currentMinDist = 1
+		} else if i > 100 {
+			// Moderate fallback: Drop latency protection, but maintain base anti-lag distance
+			currentMinDist = Rules.MinFruitDist
 		}
 
 		dist := int(math.Abs(float64(candX-session.HeadX)) + math.Abs(float64(candY-session.HeadY)))
 		isVacatedTail := (candX == vacatedTailX && candY == vacatedTailY)
 
 		// Ensure the fruit is NOT on the snake's body, NOT on the previous fruit,
-		// NOT on the just-vacated tail tile, AND far enough from the probability cloud.
-		if !session.Grid[gridIndex] && (candX != prevX || candY != prevY) && !isVacatedTail && dist >= minDist {
+		// NOT on the just-vacated tail tile, AND satisfies the current distance tier.
+		if !session.Grid[gridIndex] && (candX != prevX || candY != prevY) && !isVacatedTail && dist >= currentMinDist {
 			session.TargetFruit = Point{X: candX, Y: candY}
 			return
 		}

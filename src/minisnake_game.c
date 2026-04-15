@@ -179,6 +179,7 @@ static void	render(t_data *d) {
 	static const char	*heads[] = SNAKE_HEADS;
 	static const char	*bends[] = SNAKE_BENDS;
 	int fx, fy;
+	int fruit_hidden = 0;
 
 	if (!d->dir[0]) return;
 
@@ -196,7 +197,16 @@ static void	render(t_data *d) {
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
 			
-	if (fx >= 0 && fy >= 0)
+	if (fx >= 0 && fy >= 0) {
+		for (int i = 0; i < d->size; i++) {
+			if (d->x[i] == fx && d->y[i] == fy) {
+				fruit_hidden = 1;
+				break;
+			}
+		}
+	}
+			
+	if (fx >= 0 && fy >= 0 && !fruit_hidden)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
 			fy + 2, fx + 2, d->fruit_col ? d->fruit_col : COLOR_RED);
 			
