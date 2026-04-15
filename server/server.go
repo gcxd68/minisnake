@@ -52,7 +52,7 @@ type Point struct {
 type Session struct {
 	Score              int
 	FruitsEaten        int
-	StartTime          time.Time 
+	StartTime          time.Time
 	LastPing           time.Time
 	Cheated            bool
 	Seed               uint32
@@ -61,23 +61,23 @@ type Session struct {
 	LastSteps          int
 	PerfectPaths       int
 	TotalSteps         int
-	RecentDetours      []int     // Variance Telemetry (Sliding Window)
-	TargetFruit        Point     // Opaque Server-Side RNG
+	RecentDetours      []int // Variance Telemetry (Sliding Window)
+	TargetFruit        Point // Opaque Server-Side RNG
 
 	// ANTI-LAG FIELDS
 	RecentActualTime   []float64 // Sliding window for actual ping delays
 	RecentExpectedTime []float64 // Sliding window for expected delays
 	VacatedTailX       int       // Old tail position to exclude from spawn
 	VacatedTailY       int       // Old tail position to exclude from spawn
-	
+
 	// HEAVY PHYSICS FIELDS (Optimized with O(1) Ring Buffer)
-	ExpectedSeq        int
-	Grid               []bool    // O(1) Spatial Hashing grid
-	Grow               int       // Pending growth counter
-	Body               []Point   // Fixed-size pre-allocated array for the snake body
-	HeadIdx            int       // Ring buffer pointer to the head
-	TailIdx            int       // Ring buffer pointer to the tail
-	Size               int       // Current active length of the snake
+	ExpectedSeq int
+	Grid        []bool  // O(1) Spatial Hashing grid
+	Grow        int     // Pending growth counter
+	Body        []Point // Fixed-size pre-allocated array for the snake body
+	HeadIdx     int     // Ring buffer pointer to the head
+	TailIdx     int     // Ring buffer pointer to the tail
+	Size        int     // Current active length of the snake
 }
 
 type EatPayload struct {
@@ -135,8 +135,8 @@ func initDB() {
 	}
 
 	query := `CREATE TABLE IF NOT EXISTS scores (
-		name TEXT, score INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-	)`
+        name TEXT, score INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`
 	if _, err = db.Exec(query); err != nil {
 		log.Fatalf("Database table creation failed: %v", err)
 	}
@@ -178,10 +178,10 @@ func applyPenalties(session *Session, newSteps int) {
 
 // spawnFruit generates the next target fruit server-side.
 // OPTIMIZATION: Uses O(1) boolean Grid for instant collision checks.
-// ANTI-LAG: Enforces a minimum Manhattan distance from the head to mask network latency.
-func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY int) {
-	// Retrieve the minimum allowed distance from the global rules
-	minDist := Rules.MinFruitDist
+// LATENCY-AWARE: Incorporates the 'latencySteps' prediction cloud to strictly prevent ghost-eating.
+func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY, latencySteps int) {
+	// Dynamically expand the minimum distance to absorb the current network latency cloud
+	minDist := Rules.MinFruitDist + latencySteps
 
 	for i := 0; i < Rules.SpawnFruitMaxAttempts; i++ {
 		session.Seed = lcgRand(session.Seed)
@@ -192,7 +192,7 @@ func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY int) 
 		gridIndex := candY*Rules.GameWidth + candX
 
 		// Graceful Degradation: drop the distance rule if the board is too crowded
-		// This prevents infinite loops in late-game scenarios
+		// This mathematically guarantees we won't infinitely loop on high scores
 		if i > 100 {
 			minDist = 0
 		}
@@ -200,8 +200,8 @@ func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY int) 
 		dist := int(math.Abs(float64(candX-session.HeadX)) + math.Abs(float64(candY-session.HeadY)))
 		isVacatedTail := (candX == vacatedTailX && candY == vacatedTailY)
 
-		// Ensure the fruit is NOT on the snake's body, NOT on the previous fruit, 
-		// NOT on the just-vacated tail tile, AND far enough from the head.
+		// Ensure the fruit is NOT on the snake's body, NOT on the previous fruit,
+		// NOT on the just-vacated tail tile, AND far enough from the probability cloud.
 		if !session.Grid[gridIndex] && (candX != prevX || candY != prevY) && !isVacatedTail && dist >= minDist {
 			session.TargetFruit = Point{X: candX, Y: candY}
 			return
@@ -289,7 +289,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 
 	clientSeed := uint32(0)
 	offsetX, offsetY := 0, 0
-	
+
 	if Rules.GameWidth%2 == 0 {
 		clientSeed = lcgRand(clientSeed)
 		offsetX = int(clientSeed % 2)
@@ -303,11 +303,11 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	headY := (Rules.GameHeight / 2) - offsetY
 	head := Point{X: headX, Y: headY}
 
-	// Initialize the O(1) tracking grid
+	// Initialize the O(1) tracking grid and Ring Buffer
 	grid := make([]bool, Rules.GameWidth*Rules.GameHeight)
 	grid[headY*Rules.GameWidth+headX] = true
-	
-	// FIX: Expanded Ring Buffer capacity to 10,000 to match the C client natively.
+
+	// Expanded Ring Buffer capacity to 10,000 to match the C client natively.
 	// This prevents memory wrap-around overwrites when the snake approaches the maximum board size.
 	bodyRing := make([]Point, 10000)
 	bodyRing[0] = head
@@ -338,8 +338,9 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		TailIdx:            0,
 		Size:               1,
 	}
-	
-	spawnFruit(session, -1, -1, -1, -1) // First fruit dictates targets
+
+	// Initial spawn has no latency cloud
+	spawnFruit(session, -1, -1, -1, -1, 0)
 
 	sessionMutex.Lock()
 	activeSessions[token] = session
@@ -396,16 +397,24 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	var currentVacatedTail Point
 
 	for _, move := range payload.Path {
-		if session.Size == 0 { break }
+		if session.Size == 0 {
+			break
+		}
 
 		newHead := session.Body[session.HeadIdx]
 		switch move {
-		case 'U': newHead.Y--
-		case 'D': newHead.Y++
-		case 'L': newHead.X--
-		case 'R': newHead.X++
-		case ' ', 'X': continue // Ignore STOP instructions safely
-		default: continue
+		case 'U':
+			newHead.Y--
+		case 'D':
+			newHead.Y++
+		case 'L':
+			newHead.X--
+		case 'R':
+			newHead.X++
+		case ' ', 'X':
+			continue // Ignore STOP instructions safely
+		default:
+			continue
 		}
 
 		validMoves++
@@ -420,7 +429,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		// B. Self Collision Check O(1)
 		gridIndex := newHead.Y*Rules.GameWidth + newHead.X
 		tail := session.Body[session.TailIdx]
-		
+
 		// Exception: It's valid if the snake's head enters the space the tail is currently leaving
 		isTailMoving := (newHead.X == tail.X && newHead.Y == tail.Y && session.Grow == 0)
 
@@ -438,10 +447,10 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 			oldTail := session.Body[session.TailIdx]
 			currentVacatedTail = oldTail
 			vacatedTailValid = true
-			
+
 			// Remove tail from spatial grid before head claims the space
 			session.Grid[oldTail.Y*Rules.GameWidth+oldTail.X] = false
-			
+
 			// Advance tail pointer in the ring buffer
 			session.TailIdx = (session.TailIdx + 1) % len(session.Body)
 		}
@@ -490,7 +499,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	// Append metrics to the sliding window
 	session.RecentActualTime = append(session.RecentActualTime, actualTime)
 	session.RecentExpectedTime = append(session.RecentExpectedTime, expectedTime)
-	
+
 	// Keep only the last 5 data points
 	if len(session.RecentActualTime) > 5 {
 		session.RecentActualTime = session.RecentActualTime[1:]
@@ -549,11 +558,15 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		// B. Variance Filter (Active Ban for highly regular/robotic detours)
 		if len(session.RecentDetours) == 30 {
 			sum := 0.0
-			for _, v := range session.RecentDetours { sum += float64(v) }
+			for _, v := range session.RecentDetours {
+				sum += float64(v)
+			}
 			mean := sum / 30.0
 
 			variance := 0.0
-			for _, v := range session.RecentDetours { variance += math.Pow(float64(v)-mean, 2) }
+			for _, v := range session.RecentDetours {
+				variance += math.Pow(float64(v)-mean, 2)
+			}
 			variance /= 30.0
 
 			// Trigger a shadowban if the detour variance is inhumanly consistent
@@ -580,12 +593,19 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 7. Latency-Aware Spawning (Probability Cloud)
+	// Calculate the actual network ping (time elapsed beyond the physical travel time)
+	ping := math.Max(0.0, actualTime-expectedTime)
+	// Extrapolate how many extra tiles the client could have traveled locally during this ping
+	latencySteps := int(math.Ceil(ping / currentDelaySec))
+
 	// Wrap up and generate next target, gracefully skipping the recently vacated tail tile
+	// AND enforcing the latency probability cloud
 	session.LastPing = time.Now()
 	session.HeadX, session.HeadY, session.LastSteps = payload.Fx, payload.Fy, payload.Steps
 	session.ExpectedSeq++
-	
-	spawnFruit(session, payload.Fx, payload.Fy, session.VacatedTailX, session.VacatedTailY)
+
+	spawnFruit(session, payload.Fx, payload.Fy, session.VacatedTailX, session.VacatedTailY, latencySteps)
 
 	sessionMutex.Unlock()
 	fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
@@ -614,7 +634,7 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 
 	// If the session existed, log the aborted game in a unified way
 	if exists {
-		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=no_name score=%d fruits=%d", 
+		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=no_name score=%d fruits=%d",
 			ip, token[:8], session.Score, session.FruitsEaten)
 	}
 
@@ -647,16 +667,16 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-// Global Sanity Check (Absolute Time Corridor)
+	// Global Sanity Check (Absolute Time Corridor)
 	duration := time.Since(session.StartTime).Seconds()
 
 	// ACCURATE INTEGRAL CALCULATION:
-	// To find the absolute mathematical minimum time for the entire game, 
+	// To find the absolute mathematical minimum time for the entire game,
 	// we assume the player spent the minimum steps possible (MinFruitDist)
 	// during the early (slower) levels, and took all extra wandering steps at their final (fastest) level.
 	baseDelay := Rules.InitialDelay / 1000000.0
 	minExpected := 0.0
-	
+
 	minStepsPerFruit := Rules.MinFruitDist
 	extraSteps := steps - (session.FruitsEaten * minStepsPerFruit)
 	if extraSteps < 0 {
