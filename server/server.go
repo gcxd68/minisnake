@@ -481,6 +481,12 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	expectedTime := currentDelaySec * float64(deltaSteps)
 	actualTime := time.Since(session.LastPing).Seconds()
 
+	// Prevent the initial idle time (Start Screen) from poisoning the sliding window.
+	// By forcing the first ping to match the expected time, we safely absorb the wait.
+	if session.FruitsEaten == 0 {
+		actualTime = expectedTime
+	}
+
 	// Append metrics to the sliding window
 	session.RecentActualTime = append(session.RecentActualTime, actualTime)
 	session.RecentExpectedTime = append(session.RecentExpectedTime, expectedTime)
@@ -501,12 +507,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	// Validate against the smoothed total time
 	upperBound := sumExpected + (float64(Rules.CheatTimeout)/1000.0) + 5.0
-	
-	// Skip the strict upper bound timeout check for the first few fruits 
-	// to safely absorb the player's idle time on the starting screen
-	if session.FruitsEaten < 2 {
-		upperBound = math.MaxFloat64
-	}
 
 	if sumActual < math.Max(0, (sumExpected*0.75)-1.0) || sumActual > upperBound {
 		session.Cheated = true
