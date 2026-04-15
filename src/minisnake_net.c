@@ -371,7 +371,7 @@ static void get_player_name(t_data *d, char *name, size_t size) {
 	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
 	while (printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL),
 		fflush(stdout),
-		fgets(name, size, stdin)) {
+		!name[0] && fgets(name, size, stdin)) {
 		if (!strchr(name, '\n'))
 			for (int c; (c = getchar()) != '\n' && c != EOF;);
 		for (size_t i = strlen(name); i && isspace((unsigned char)name[i - 1]); name[--i] = '\0');
