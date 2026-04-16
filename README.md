@@ -14,8 +14,9 @@ If you want to compete on the global leaderboard immediately:
 ### 🛠️ Build from Source (Developers)
 If you want to customize the game or run your own server:
 1. Clone the repository.
-2. Run `make`.
-3. Launch: `./bin/minisnake` (Defaults to Offline Mode unless a `net` config is provided).
+2. Build the Client: `make`.
+3. Build the Server (Optional): `make server`.
+4. Launch: `./bin/minisnake` (Defaults to Offline Mode unless a `net` config is provided).
 
 ---
 
