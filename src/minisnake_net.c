@@ -12,24 +12,19 @@ void	net_wait_all(void) {}
 #else
 
 /* --- Network Constants --- */
-# if MAX_SIZE <= 8000
-#  define BUF_JSON_PAYLOAD    8192
-# elif MAX_SIZE <= 16100
-#  define BUF_JSON_PAYLOAD    16384
-# else
-#  define BUF_JSON_PAYLOAD    32768
-# endif
+# define BUF_READ			4096									/* Socket read chunk size */
+# define BUF_GET_REQ		512										/* Sufficient for standard GET headers */
+# define JSON_OVERHEAD      256										/* Margin for JSON syntax (keys, brackets) */
+# define BUF_JSON_PAYLOAD	(MAX_SIZE + JSON_OVERHEAD)				/* Path string + JSON formatting */
+# define HTTP_HDR_OVERHEAD  512										/* Margin for HTTP POST headers */
+# define BUF_POST_REQ		(BUF_JSON_PAYLOAD + HTTP_HDR_OVERHEAD)	/* JSON + Headers */
+# define BUF_RESP_SUBMIT	512										/* Small ACK responses */
+# define BUF_RESP_SCORES	8192									/* Full leaderboard data */
 
-# define BUF_READ			4096						/* Socket read chunk size */
-# define BUF_GET_REQ		512							/* Sufficient for standard GET headers */
-# define BUF_POST_REQ		(BUF_JSON_PAYLOAD + 512)	/* JSON + Headers */
-# define BUF_RESP_SUBMIT	512							/* Small ACK responses */
-# define BUF_RESP_SCORES	8192						/* Full leaderboard data */
-
-# define BUF_PATH			256							/* Max URL path length */
-# define BUF_ENTRY			128							/* Max length of a single leaderboard line */
-# define BUF_TOKEN			33							/* 32 hex chars + null terminator */
-# define NUM_RULES			10							/* Expected fields from /rules */
+# define BUF_PATH			256										/* Max URL path length */
+# define BUF_ENTRY			128										/* Max length of a single leaderboard line */
+# define BUF_TOKEN			33										/* 32 hex chars + null terminator */
+# define NUM_RULES			10										/* Expected fields from /rules */
 
 # define HTTP_MIN_LEN		12
 # define HTTP_VER_LEN		7
