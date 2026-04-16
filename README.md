@@ -8,7 +8,8 @@ A high-performance, terminal-based Snake game written in C, featuring a robust G
 If you want to compete on the global leaderboard immediately:
 1. Go to the [Releases](https://github.com/gcxd68/minisnake/releases) page.
 2. Download the pre-compiled binary for your system.
-3. Run it: `./minisnake` (it is pre-configured for Online Mode).
+3. Authorize it: `chmod +x minisnake`.
+4. Run it: `./minisnake` (it is pre-configured for Online Mode).
 
 ### 🛠️ Build from Source (Developers)
 If you want to customize the game or run your own server:
