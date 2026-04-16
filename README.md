@@ -117,6 +117,8 @@ You can customize graphical settings and input buffers purely for the client by 
 
 - **Controls & Strings:** `MOVE_KEYS`, `EXIT_KEY`, `TERM_TITLE`, `MSG_LOSS`, `MSG_WIN`
 - **Aesthetics Elements:** `WALL_CHAR`, `SNAKE_COLOR`, `SNAKE_HEADS`, `FRUIT_CHAR`, `FRUIT_PALETTE`
+- **Memory & Grid Limits:** Modifying `MAX_WIDTH` and `MAX_HEIGHT` is supported up to a combined limit of `MAX_SIZE = 50,000` tiles to prevent C stack overflows.
+
 *(In online mode, mechanics and speed constants defined in the header will be gracefully ignored in favor of the active server's configurations).*
 
 ## Makefile Targets

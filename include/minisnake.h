@@ -1,6 +1,7 @@
 #ifndef MINISNAKE_H
 # define MINISNAKE_H
 
+/* Include(s) and define(s) */
 # include <ctype.h>
 # include <errno.h>
 # include <fcntl.h>
@@ -82,7 +83,7 @@
 # if MAX_HEIGHT < MIN_HEIGHT
 #  error "MAX_HEIGHT must be >= MIN_HEIGHT"
 # endif
-# if MAX_SIZE > 1000000
+# if MAX_SIZE > 50000
 #  error "MAX_SIZE = MAX_WIDTH * MAX_HEIGHT is too large and may cause a Stack Overflow."
 # endif
 # if DEF_INITIAL_DELAY < 0
@@ -203,20 +204,21 @@
 	.speedup_factor = DEF_SPEEDUP_FACTOR \
 }
 
+/* Enum(s) */
 enum { PARSE_OK = 3, LAUNCH_LOCAL = 4, LAUNCH_SPAWN = 5 };
 
 typedef enum e_dir {
 	STOP, LEFT, RIGHT, UP, DOWN
 }	t_dir;
 
+/* Main structure */
 typedef struct s_data {
-	/* --- CONFIGURATION & RULES --- 
-	 * (Keep this block first for DEFAULT_RULES initialization) */
+	/* Configuration & rules - keep this block first for default rules initialization */
 	int				show_splash, size, grow, points_per_fruit, spawn_fruit_max_attempts,
 						cheat_timeout, penalty_interval, penalty_amount;
 	float			delay, speedup_factor;
 
-	/* --- GAME STATE --- */
+	/* Game state */
 	int				width, height, score, fruit_x, fruit_y, steps, game_over, online, cheat;
 	uint32_t		seed;
 	t_dir			dir[2]; /* dir[0]: current, dir[1]: previous */
@@ -225,7 +227,7 @@ typedef struct s_data {
 	const char		*fruit_color;
 	pthread_mutex_t	fruit_mutex;
 
-	/* --- NETWORK & TELEMETRY --- */
+	/* Network & telemetry */
 	char			token[33], path[MAX_SIZE + 1];
 	int				seq, path_steps;
 }	t_data;

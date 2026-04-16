@@ -135,8 +135,8 @@ func initDB() {
 	}
 
 	query := `CREATE TABLE IF NOT EXISTS scores (
-        name TEXT, score INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`
+		name TEXT, score INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+	)`
 	if _, err = db.Exec(query); err != nil {
 		log.Fatalf("Database table creation failed: %v", err)
 	}
