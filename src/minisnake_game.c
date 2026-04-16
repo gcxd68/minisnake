@@ -92,21 +92,20 @@ static void process_input(t_data *d) {
 }
 
 void spawn_fruit(t_data *d) {
-	int i, attempts = 0;
-	int cand_x, cand_y;
+	int	i, fruit_x, fruit_y, attempts = 0;
 
 	do {
-		cand_x = (lcg_rand(&d->seed) >> 16) % d->width;
-		cand_y = (lcg_rand(&d->seed) >> 16) % d->height;
-		for (i = 0; i < d->size && !(d->x[i] == cand_x && d->y[i] == cand_y); i++);
+		fruit_x = (lcg_rand(&d->seed) >> 16) % d->width;
+		fruit_y = (lcg_rand(&d->seed) >> 16) % d->height;
+		for (i = 0; i < d->size && !(d->x[i] == fruit_x && d->y[i] == fruit_y); i++);
 		if (++attempts > d->spawn_fruit_max_attempts) break;
 	} while (i < d->size);
 
 	/* Safe Write for local generation */
 	pthread_mutex_lock(&d->fruit_mutex);
-	d->fruit_x = cand_x;
-	d->fruit_y = cand_y;
-	d->fruit_col = fruit_color();
+	d->fruit_x = fruit_x;
+	d->fruit_y = fruit_y;
+	d->fruit_color = fruit_color();
 	pthread_mutex_unlock(&d->fruit_mutex);
 }
 
@@ -138,11 +137,11 @@ static void	update_game(t_data *d) {
 
 	/* Safe Read */
 	pthread_mutex_lock(&d->fruit_mutex);
-	int fx = d->fruit_x;
-	int fy = d->fruit_y;
+	int fruit_x = d->fruit_x;
+	int fruit_y = d->fruit_y;
 	pthread_mutex_unlock(&d->fruit_mutex);
 
-	if (d->x[0] != fx || d->y[0] != fy)
+	if (d->x[0] != fruit_x || d->y[0] != fruit_y)
 		return ;
 
 	d->grow = 1;
@@ -151,7 +150,7 @@ static void	update_game(t_data *d) {
 
 	/* Notifier avec les vraies coordonnées avant de les écraser */
 	d->seq++;
-	notify_server(d, "eat", fx, fy);
+	notify_server(d, "eat", fruit_x, fruit_y);
 
 	d->path_steps = 0;
 	memset(d->path, 0, sizeof(d->path));
@@ -165,9 +164,8 @@ static void	update_game(t_data *d) {
 	if (d->size >= d->width * d->height)
 		return;
 		
-	if (!d->online) {
+	if (!d->online)
 		spawn_fruit(d);
-	}
 }
 
 const char *fruit_color(void) {
@@ -178,18 +176,16 @@ const char *fruit_color(void) {
 static void	render(t_data *d) {
 	static const char	*heads[] = SNAKE_HEADS;
 	static const char	*bends[] = SNAKE_BENDS;
-	int fx, fy;
-	int fruit_hidden = 0;
+	int					fruit_hidden = 0;
 
 	if (!d->dir[0]) return;
 
-	/* Safe Read */
 	pthread_mutex_lock(&d->fruit_mutex);
-	fx = d->fruit_x;
-	fy = d->fruit_y;
+	int fruit_x = d->fruit_x;
+	int fruit_y = d->fruit_y;
 	pthread_mutex_unlock(&d->fruit_mutex);
 
-	if ((d->x[d->size] != fx || d->y[d->size] != fy) &&
+	if ((d->x[d->size] != fruit_x || d->y[d->size] != fruit_y) &&
 		(d->x[d->size] != d->x[d->size - 1] || d->y[d->size] != d->y[d->size - 1]))
 		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
 		
@@ -197,18 +193,18 @@ static void	render(t_data *d) {
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
 			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
 			
-	if (fx >= 0 && fy >= 0) {
+	if (fruit_x >= 0 && fruit_y >= 0) {
 		for (int i = 0; i < d->size; i++) {
-			if (d->x[i] == fx && d->y[i] == fy) {
+			if (d->x[i] == fruit_x && d->y[i] == fruit_y) {
 				fruit_hidden = 1;
 				break;
 			}
 		}
 	}
-			
-	if (fx >= 0 && fy >= 0 && !fruit_hidden)
+
+	if (fruit_x >= 0 && fruit_y >= 0 && !fruit_hidden)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
-			fy + 2, fx + 2, d->fruit_col ? d->fruit_col : COLOR_RED);
+			fruit_y + 2, fruit_x + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
 			
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
 	printf(STYLE_RESET CURSOR_POS "%d \n", d->height + 3, 8, d->score);

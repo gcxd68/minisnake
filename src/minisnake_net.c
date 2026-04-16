@@ -11,42 +11,58 @@ void	net_wait_all(void) {}
 
 #else
 
-# define BUF_RESP_SUBMIT    512
-# define BUF_RESP_SCORES    8192
-# define BUF_READ           4096
-# define BUF_REQ            512
-# define BUF_PATH           256
-# define BUF_ENTRY          128
-# define BUF_TOKEN			33
-# define NUM_RULES          10
+/* --- Network Constants --- */
+# if MAX_SIZE <= 8000
+#  define BUF_JSON_PAYLOAD    8192
+# elif MAX_SIZE <= 16100
+#  define BUF_JSON_PAYLOAD    16384
+# else
+#  define BUF_JSON_PAYLOAD    32768
+# endif
 
-# define HTTP_MIN_LEN       12
-# define HTTP_VER_LEN       7
-# define HTTP_STAT_OFFSET   8
-# define HTTP_STAT_LEN      4
+# define BUF_READ			4096						/* Socket read chunk size */
+# define BUF_GET_REQ		512							/* Sufficient for standard GET headers */
+# define BUF_POST_REQ		(BUF_JSON_PAYLOAD + 512)	/* JSON + Headers */
+# define BUF_RESP_SUBMIT	512							/* Small ACK responses */
+# define BUF_RESP_SCORES	8192						/* Full leaderboard data */
 
-# define LB_TITLE          "--- LEADERBOARD ---"
-# define LB_TITLE_ROW       1
-# define UI_PROMPT_ROW_OFF  4
-# define UI_PROMPT_COL      1
-# define LB_MAX_SCORES      20
-# define LB_START_ROW       3
-# define LB_COL_OFFSET      2
-# define MAX_NAME_LEN       8
-# define UI_NAME_WIDTH      12
-# define UI_SCORE_WIDTH     7
+# define BUF_PATH			256							/* Max URL path length */
+# define BUF_ENTRY			128							/* Max length of a single leaderboard line */
+# define BUF_TOKEN			33							/* 32 hex chars + null terminator */
+# define NUM_RULES			10							/* Expected fields from /rules */
 
-# define REQ_POOL_SIZE      10
+# define HTTP_MIN_LEN		12
+# define HTTP_VER_LEN		7
+# define HTTP_STAT_OFFSET	8
+# define HTTP_STAT_LEN		4
+
+/* UI and Leaderboard display settings */
+# define LB_TITLE			"--- LEADERBOARD ---"
+# define LB_TITLE_ROW		1
+# define UI_PROMPT_ROW_OFF	4
+# define UI_PROMPT_COL		1
+# define LB_MAX_SCORES		20
+# define LB_START_ROW		3
+# define LB_COL_OFFSET		2
+# define MAX_NAME_LEN		8
+# define UI_NAME_WIDTH		12
+# define UI_SCORE_WIDTH		7
+
+/* Async request pool configuration */
+# define REQ_POOL_SIZE		10
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
-# if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0
+# if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_GET_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0
 #  error "Buffer sizes must be strictly positive"
 # endif
 # if BUF_TOKEN < 33
 #  error "BUF_TOKEN must be at least 33 to hold a 32-character hex token and a null terminator"
 # endif
-# if BUF_REQ < (BUF_PATH + 64)
-#  error "BUF_REQ is too small to contain an HTTP request line and a path"
+# if BUF_GET_REQ < (BUF_PATH + 64)
+#  error "BUF_GET_REQ is too small to contain an HTTP request line and a path"
+# endif
+# if BUF_POST_REQ < (BUF_JSON_PAYLOAD + 256)
+#  error "BUF_POST_REQ is too small to contain an HTTP request line, headers, and a JSON payload"
 # endif
 # if BUF_RESP_SCORES < (LB_MAX_SCORES * BUF_ENTRY)
 #  error "BUF_RESP_SCORES is too small to hold all leaderboard entries"
@@ -78,7 +94,8 @@ void	net_wait_all(void) {}
 
 typedef struct s_req {
 	char	path[BUF_PATH];
-	char	*body;
+	char    body[BUF_JSON_PAYLOAD];
+	int		has_body;
 	int		in_use;
 	t_data	*d; /* Pointer back to game state for async updates */
 }	t_req;
@@ -103,56 +120,54 @@ static int server_connect(void) {
 	return (fd);
 }
 
-static int http_get(const char *path, char *out, int out_size) {
-	char	req[BUF_REQ], buf[BUF_READ];
-	int		fd, n, total = 0;
+/* Internal core: handles the established connection and I/O */
+static int http_request(const char *req, char *out, int out_size) {
+	int	fd = server_connect();
 
-	if ((fd = server_connect()) < 0)
-		return (-1);
-		
-	snprintf(req, sizeof(req), "GET %s HTTP/1.0\r\nHost: %s\r\nX-Client-Version: %s\r\nConnection: close\r\n\r\n", path, HOST, CLIENT_VERSION);
-	
+	if (fd < 0) return (-1);
+
+	/* Send the pre-formatted request */
 	if (write(fd, req, strlen(req)) < 0)
 		return (close(fd), -1);
+
+	/* Read the response */
+	char buf[BUF_READ];
+	int n, total = 0;
 	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
-		buf[n] = '\0';
 		if (total + n < out_size - 1) {
 			memcpy(out + total, buf, n);
 			total += n;
 		}
 	}
-	if (n < 0) return (close(fd), -1);
 	out[total] = '\0';
 	close(fd);
+
+	/* Validation */
 	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || !strstr(out, " 200 "))
 		return (-1);
 	return (0);
 }
 
-static int http_post(const char *path, const char *body, char *out, int out_size) {
-	char	req[BUF_READ], buf[BUF_READ];
-	int		fd, n, total = 0;
-
-	if ((fd = server_connect()) < 0)
-		return (-1);
+static int http_get(const char *path, char *out, int out_size) {
+	char	req[BUF_GET_REQ];
+	int		len = snprintf(req, sizeof(req), 
+				"GET %s HTTP/1.0\r\nHost: %s\r\nX-Client-Version: %s\r\nConnection: close\r\n\r\n", 
+				path, HOST, CLIENT_VERSION);
 		
-	snprintf(req, sizeof(req), "POST %s HTTP/1.0\r\nHost: %s\r\nX-Client-Version: %s\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n%s", path, HOST, CLIENT_VERSION, strlen(body), body);
-	
-	if (write(fd, req, strlen(req)) < 0)
-		return (close(fd), -1);
-	while ((n = read(fd, buf, sizeof(buf) - 1)) > 0) {
-		buf[n] = '\0';
-		if (total + n < out_size - 1) {
-			memcpy(out + total, buf, n);
-			total += n;
-		}
-	}
-	if (n < 0) return (close(fd), -1);
-	out[total] = '\0';
-	close(fd);
-	if (total < HTTP_MIN_LEN || strncmp(out, "HTTP/1.", HTTP_VER_LEN) != 0 || !strstr(out, " 200 "))
-		return (-1);
-	return (0);
+	if (len < 0 || (size_t)len >= sizeof(req)) return (-1);
+	return http_request(req, out, out_size);
+}
+
+static int http_post(const char *path, const char *body, char *out, int out_size) {
+	char	req[BUF_POST_REQ];
+	int		len = snprintf(req, sizeof(req), 
+				"POST %s HTTP/1.0\r\nHost: %s\r\nX-Client-Version: %s\r\n"
+				"Content-Type: application/json\r\nContent-Length: %zu\r\n"
+				"Connection: close\r\n\r\n%s", 
+				path, HOST, CLIENT_VERSION, body ? strlen(body) : 0, body ? body : "");
+		
+	if (len < 0 || (size_t)len >= sizeof(req)) return (-1);
+	return http_request(req, out, out_size);
 }
 
 static char *skip_headers(char *response) {
@@ -167,8 +182,9 @@ static void *async_http_worker(void *arg) {
 	t_req	*req = (t_req *)arg;
 	char	resp[BUF_RESP_SUBMIT];
 	
-	int ok = req->body ? http_post(req->path, req->body, resp, sizeof(resp)) : http_get(req->path, resp, sizeof(resp));
-	if (ok == 0) {
+	int ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
+							: http_get(req->path, resp, sizeof(resp));
+	if (!ret) {
 		if (strncmp(req->path, "/eat", 4) == 0 && req->d) {
 			char *body = skip_headers(resp);
 			char *sep = strchr(body, '|');
@@ -176,22 +192,21 @@ static void *async_http_worker(void *arg) {
 			/* Custom safety check to avoid silent "0" on garbage data */
 			if (sep && (isdigit(body[0]) || body[0] == '-') && (isdigit(*(sep + 1)) || *(sep + 1) == '-')) {
 				*sep = '\0';
-				int nx = atoi(body);
-				int ny = atoi(sep + 1);
+				int fruit_x = atoi(body);
+				int fruit_y = atoi(sep + 1);
 				
 				/* Lock the mutex to update the pair atomically */
 				pthread_mutex_lock(&req->d->fruit_mutex);
-				req->d->fruit_x = nx;
-				req->d->fruit_y = ny;
-				req->d->fruit_col = fruit_color();
+				req->d->fruit_x = fruit_x;
+				req->d->fruit_y = fruit_y;
+				req->d->fruit_color = fruit_color();
 				pthread_mutex_unlock(&req->d->fruit_mutex);
 			}
 		}
 	}
 
 	pthread_mutex_lock(&g_pool_mutex);
-	if (req->body) free(req->body);
-	req->body = NULL;
+	req->has_body = 0; 
 	req->in_use = 0;
 	pthread_mutex_unlock(&g_pool_mutex);
 	
@@ -202,12 +217,11 @@ static void *async_http_worker(void *arg) {
 }
 
 static void fire_and_forget(const char *path, const char *body, t_data *d) {
-	pthread_t	tid;
-	t_req		*req = NULL;
-	int			i;
+	pthread_t   tid;
+	t_req       *req = NULL;
 	
 	pthread_mutex_lock(&g_pool_mutex);
-	for (i = 0; i < REQ_POOL_SIZE; i++) {
+	for (int i = 0; i < REQ_POOL_SIZE; i++) {
 		if (g_req_pool[i].in_use == 0) {
 			req = &g_req_pool[i];
 			req->in_use = 1;
@@ -220,15 +234,21 @@ static void fire_and_forget(const char *path, const char *body, t_data *d) {
 	
 	strncpy(req->path, path, BUF_PATH - 1);
 	req->path[BUF_PATH - 1] = '\0';
+	
+	if (body) {
+		strncpy(req->body, body, BUF_JSON_PAYLOAD - 1);
+		req->body[BUF_JSON_PAYLOAD - 1] = '\0';
+		req->has_body = 1;
+	} else {
+		req->has_body = 0;
+	}
+	
 	req->d = d;
-	req->body = body ? strdup(body) : NULL;
 	
 	if (pthread_create(&tid, NULL, async_http_worker, req) == 0)
 		pthread_detach(tid);
 	else {
 		pthread_mutex_lock(&g_pool_mutex);
-		if (req->body) free(req->body);
-		req->body = NULL;
 		req->in_use = 0;
 		pthread_mutex_unlock(&g_pool_mutex);
 	}
@@ -236,35 +256,32 @@ static void fire_and_forget(const char *path, const char *body, t_data *d) {
 
 int check_client_version(void) {
 	char	resp[BUF_RESP_SUBMIT];
-	char	*body;
 
 	if (http_get("/rules", resp, sizeof(resp)) != 0)
 		return (0);
 
-	body = skip_headers(resp);
+	char *body = skip_headers(resp);
 	if (strncmp(body, "UPDATE", 6) == 0)
 		return (-1);
-		
+
 	return (1);
 }
 
 int server_sync_rules(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
-	char	*saveptr, *body;
-	char	*fields[NUM_RULES];
 
 	if (http_get("/rules", resp, sizeof(resp)) != 0)
 		return (0);
 
-	body = skip_headers(resp);
+	char *body = skip_headers(resp);
 	if (strncmp(body, "UPDATE", 6) == 0) {
 		fprintf(stderr, "Notice: Client version outdated. Falling back to Offline Mode.\n");
 		return (0);
 	}
 
+	char *fields[NUM_RULES], *saveptr;
 	fields[0] = strtok_r(body, "|", &saveptr);
 	if (!fields[0]) return (0);
-
 	for (int i = 1; i < NUM_RULES; i++) {
 		fields[i] = strtok_r(NULL, "|", &saveptr);
 		if (!fields[i]) return (0);
@@ -288,26 +305,25 @@ int start_session(t_data *d) {
 	if (!d->online) return (0);
 
 	char    resp[BUF_RESP_SUBMIT];
-	char    *body, *saveptr, *token_str, *x_str, *y_str;
-
+	
 	d->token[0] = '\0';
 	if (http_get("/token", resp, sizeof(resp)) != 0)
 		return (0);
-	body = skip_headers(resp);
+	char *body = skip_headers(resp);
 	
-	token_str = strtok_r(body, "|", &saveptr);
+	char *saveptr, *token_str = strtok_r(body, "|", &saveptr);
 	if (!token_str) return (0);
 
 	strncpy(d->token, token_str, BUF_TOKEN - 1);
 	d->token[BUF_TOKEN - 1] = '\0';
 	
 	/* The server directly provides the first fruit coordinates */
-	x_str = strtok_r(NULL, "|", &saveptr);
-	y_str = strtok_r(NULL, "|", &saveptr);
+	char *x_str = strtok_r(NULL, "|", &saveptr);
+	char *y_str = strtok_r(NULL, "|", &saveptr);
 	if (x_str && y_str) {
 		d->fruit_x = atoi(x_str);
 		d->fruit_y = atoi(y_str);
-		d->fruit_col = fruit_color();
+		d->fruit_color = fruit_color();
 	}
 	return (1);
 }
@@ -316,7 +332,7 @@ void notify_server(t_data *d, const char *action, int fx, int fy) {
 	if (!IS_SESSION_ACTIVE(d)) return;
 
 	char path[BUF_PATH];
-	char body[8000];
+	char body[BUF_JSON_PAYLOAD];
 
 	if (strcmp(action, "eat") == 0) {
 		snprintf(path, sizeof(path), "/eat/%s", d->token); 
@@ -329,29 +345,33 @@ void notify_server(t_data *d, const char *action, int fx, int fy) {
 
 static int end_session(t_data *d, const char *name) {
 	if (!IS_SESSION_ACTIVE(d)) return (-1);
+
 	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
 	if (*name)
 		snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
 	else
 		snprintf(path, sizeof(path), "/quit/%s", d->token);
+
 	return (http_get(path, resp, sizeof(resp)));
 }
 
 static int show_leaderboard(t_data *d) {
-	const char  title[] = LB_TITLE;
-	const int   title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
-	char        *body, *line, *saveptr;
 	char        path[BUF_PATH], resp[BUF_RESP_SCORES];
-	int         rank = 1, row = LB_START_ROW;
 
 	snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
-	printf(CLEAR_SCREEN CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
-	body = skip_headers(resp);
 
-	line = strtok_r(body, "\n", &saveptr);
+	const char  title[] = LB_TITLE;
+	const int   title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
+
+	printf(CLEAR_SCREEN CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
+	char *body = skip_headers(resp);
+
+	int			rank = 1, row = LB_START_ROW;
+	char		*saveptr, *line = strtok_r(body, "\n", &saveptr);
+
 	while (line && rank <= LB_MAX_SCORES) {
 		char entry[BUF_ENTRY], *p_name, *p_score, *p_save;
 		strncpy(entry, line, sizeof(entry) - 1);

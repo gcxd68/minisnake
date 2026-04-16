@@ -1,56 +1,61 @@
 # minisnake 🐍
 
-A lightweight, terminal-based Snake game written in C with a dedicated online scoring backend server.
+A high-performance, terminal-based Snake game written in C, featuring a robust Go backend for authoritative online scoring and anti-cheat protection.
+
+## 🚀 Quick Start
+
+### 🎮 Play Now (Recommended)
+If you want to compete on the global leaderboard immediately:
+1. Go to the [Releases](https://github.com/gcxd68/minisnake/releases) page.
+2. Download the pre-compiled binary for your system.
+3. Run it: `./minisnake` (it is pre-configured for Online Mode).
+
+### 🛠️ Build from Source (Developers)
+If you want to customize the game or run your own server:
+1. Clone the repository.
+2. Run `make`.
+3. Launch: `./bin/minisnake` (Defaults to Offline Mode unless a `net` config is provided).
+
+---
 
 ## Features
 
-- 🎮 **Classic snake gameplay** directly in your terminal
-- 🌐 **Online leaderboard support** via a robust backend validation server
-- 🎨 **Clean aesthetics** featuring Unicode character graphics and a smooth linear-interpolation splash screen
-- ⚡ **Progressive difficulty** as the game speeds up dynamically
-- ⚙️ **Dynamic server rules configuration** without recompiling the backend
-- 🛡️ **Advanced anti-cheat protection** via Server-Authoritative physics simulation (Spatial Hashing), Opaque Server-Side RNG, behavioral variance telemetry, and thread-safe background sync
+- 🕹️ **Classic Gameplay:** Smooth terminal experience with sub-millisecond input response.
+- 🌐 **Authoritative Online Mode:** Global leaderboards powered by a Go backend that validates every move.
+- 🛡️ **Advanced Anti-Cheat:** - **Server-Side Physics:** Every move is replayed on the server using O(1) Spatial Hashing.
+    - **Latency-Aware Spawning:** A probability cloud algorithm ensures fruits never spawn where you are locally, compensating for network lag.
+    - **Behavioral Telemetry:** Heuristics analyze movement variance to detect and shadowban bots.
+- 🎨 **Modern TUI:** Features VT100 scrolling regions, Unicode graphics, and thread-safe UI updates.
+- ⚙️ **Dynamic Rules:** Game mechanics (speed, grid size) are synced from the server on startup.
 
-## Requirements
+---
 
-### Client
-- `make` and `gcc` (or any compatible C compiler)
-- POSIX-compliant system with `pthread` support
-- Terminal with Unicode support (GNOME Terminal recommended)
+## Usage Modes
 
-### Server (Online Mode)
-- **Go Backend:** Go 1.22+ (Required for advanced HTTP routing)
-
-## Usage
-
-### Offline Mode
-Play locally without leaderboard features. Compiling and running without arguments will open a default 25x20 board.
-
+### 1. Offline Mode
+Play locally with custom dimensions. No network required.
 ```bash
-make
-./minisnake
+# Default 25x20 board
+./bin/minisnake
 ```
 
 You can also specify custom dimensions (Constraints: Width 2-200, Height 2-50):
 ```bash
+# Custom dimensions (Width: 2-200, Height: 2-50)
 ./minisnake 40 20
 ```
 
-### Online Mode
-To compete on the leaderboard, a backend validation server must be accessible. Play sessions are locked to the server's actively configured board dimensions to ensure fairness.
+### 2. Online Mode (Manual Compilation)
+To connect your manual build to a server:
 
 1. Ensure the backend server is running (see [Server Setup](#server-setup)).
-2. Create a `net` file in the repository root (use `net.example` as a template):
+2. Create a `net` file in the root directory (use `net.example` as a template):
    ```text
    HOST=YOUR_SERVER_IP
    PORT=YOUR_SERVER_PORT
    ```
-3. Compile and play:
-   ```bash
-   make
-   ./minisnake online
-   ```
-After the game, you will be prompted to enter your name for the global leaderboard! (You can simply press Enter to skip and remain anonymous).
+3. Recompile: `make re`.
+4. The binary will now include the `ONLINE_BUILD` flag and attempt to sync with the backend.
 
 ## Controls & Gameplay
 
@@ -72,56 +77,37 @@ After the game, you will be prompted to enter your name for the global leaderboa
 
 ## Server Setup
 
-The online leaderboard functions via a secure Server-Side Scoring Architecture proxy. The C client never submits its score directly; instead, it sends an asynchronous HTTP ping per fruit. The Go backend securely enforces several critical validations:
+The online leaderboard functions via a secure Server-Side Scoring Architecture proxy. The Go backend enforces critical validations before accepting scores:
 
-- **Time Corridor & Anti-Lag Smoothing:** A dynamic time window is calculated based on game speed and path length. It uses a sliding window (smoothing algorithm) to absorb network jitter safely, differentiating between genuine network lag spikes and speedhacks/pauses, while accommodating natural idle periods like the starting splash screen.
-- **Maximum Score Authorization:** The server strictly validates that no submitted score exceeds the theoretical maximum capacity (`Width * Height * PointsPerFruit`). 
-- **Client Version Integrity:** Client requests are tagged with a version header. Outdated clients are gracefully blocked with an update notice, either at launch (prompting a fallback to Offline Mode) or hijacked directly at the leaderboard screen.
-- **Active Turing Tests:** The server analyzes behavioral patterns (Manhattan distance efficiency and detour variance) specifically to detect programmatic bots playing with inhuman consistency.
-- **DoS Protection & Payload Limits:** Strict memory barriers (`MaxBytesReader`) prevent memory exhaustion attacks from oversized JSON payloads.
-- **Improved Audit Logs:** Clearer log output combining IP and short-token prefixes for fast debug reading while preserving player privacy mechanisms.
-- **Authoritative Physics Simulation:** The server accurately recreates the game state on every ping by replaying every player move via an O(1) Spatial Hashing grid and a highly optimized O(1) Ring Buffer for full body tracking. It instantly detects and shadowbans any wall-phasing or self-colliding cheats without O(N) CPU penalties.
-- **Active Memory Management:** The server automatically tracks and sweeps stale IPs and abandoned "ghost" sessions, gracefully logging memory reclamation without spamming stdout.
-- **Pathing and Behavioral Telemetry:** The server strictly generates the target fruit (Opaque RNG) rather than relying on a shared PRNG, fundamentally blocking teleporting or PRNG reversal. It also tracks the statistical variance of the player's detours (Shadow Mode telemetry) to flag bots moving with unnatural perfection, and runs a strict integral calculation upon score submission to guarantee the total game time rigorously respects the theoretical minimum limits of a dynamically accelerating game.
-- **Latency-Aware Fruit Spawning (Probability Cloud):** To completely eliminate "ghost-eating" visual glitches caused by client-side prediction, the server dynamicallly calculates a probability cloud based on the player's exact network ping and current game speed. The minimum spawn distance automatically expands (`MinFruitDist + latencySteps`, capped at 4 steps) to absorb the physical latency gap. This guarantees mathematically that a new fruit can never spawn inside the snake's local unacknowledged path, while stepping through a multi-tier graceful degradation on crowded boards to prevent deadlocks.
-- **Client-Side Visual Smoothing:** The C client natively hides the target fruit graphically if it happens to spawn under the snake's body during the latency window, providing a completely seamless visual experience without jitter.
+- **Authoritative Physics & Anti-Cheat:** Evaluates game state strictly. Integrates O(1) Spatial Hashing to prevent wall-phasing and self-collision cheats. Behavioral telemetry algorithms flag impossible speedhacks and bots.
+- **Latency & Time Algorithms:** Uses a dynamic sliding window to absorb network jitter while ensuring total game duration stays within theoretical minimum limits.
+- **Fair Fruit Generation:** Calculates a probability cloud based on player latency to prevent fruits from spawning near the snake's unacknowledged path. The generation uses opaque server-side bounds, fundamentally blocking PRNG reversal.
+- **Security & DoS Protection:** Implements strict limits on maximum concurrent sessions (5000), payload limits (`MaxBytesReader`) to mitigate memory exhaust attacks, and rate limits (20 req/s per IP). Actively sweeps ghost sessions and blocks outdated client versions.
 
-### Server Limits & Anti-DDoS
-The Go backend is hardcoded to manage memory and traffic securely:
-- **Maximum Concurrent Sessions:** 5000 players globally.
-- **Rate Limiting:** 20 requests per second per IP strictly enforced.
-- **Ghost Sessions:** Automatically swept after 15 minutes of inactivity.
+### Running the Go Backend
 
-### 1. Running the Go Backend
+The high-performance backend is compiled as a single static binary.
 
-The backend is built in Go. It is high-performance and compiled as a single static binary.
+1. Ensure Go 1.22+ is installed.
+2. Build the server: `make server`.
+3. Start the server: `./bin/server`.
 
-1. Make sure Go is installed on your machine.
-2. Build the server binary by running `make server` from the project root.
-3. Start the server from the root directory: `./bin/server`.
+### Dynamic Server Configuration
 
-### 2. Dynamic Server Configuration
-You can now dynamically adjust the game constraints (points, speed, grid boundaries) directly from the server without having to rebuild the proxy.
+You can dynamically adjust game constraints without rebuilding the backend.
 
-1. Rename `server/rules.json.example` to `rules.json` and place it in the same directory where your active backend server is executed.
-*Note: The Go backend intrinsically enforces valid JSON structures via Go structs.*
+1. Rename `server/rules.json.example` to `rules.json` and place it alongside the executable.
+2. Override any desired rules. Omitted keys cleanly fall back to server defaults.
 
-2. Override any desired rules:
 ```json
 {
   "GameWidth": 25,
   "GameHeight": 20,
   "InitialDelay": 250000.0,
   "SpeedupFactor": 0.985,
-  "PointsPerFruit": 10,
-  "PenaltyInterval": 10,
-  "PenaltyAmount": 1,
-  "CheatTimeout": 5000,
-  "SpawnFruitMaxAttempts": 10000,
-  "MinFruitDist": 2
+  "PointsPerFruit": 10
 }
 ```
-*Note: Any omitted keys will seamlessly fall back to the native server defaults. The server securely computes score caps based on these parsed values dynamically to prevent abuse.*
 
 ---
 

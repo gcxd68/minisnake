@@ -32,6 +32,7 @@
 # define MIN_HEIGHT						2
 # define MAX_WIDTH						200
 # define MAX_HEIGHT						50
+# define MAX_SIZE    					(MAX_WIDTH * MAX_HEIGHT)
 # define DEF_WIDTH						25
 # define DEF_HEIGHT						20
 # define DEF_INITIAL_DELAY				250000
@@ -51,7 +52,7 @@
 # define SPLASH_OFFSET_NAKE				1
 # define SPLASH_OFFSET_SNAKE			1
 # define SPLASH_WORD_LEN				4
-# define SPLASH_SNAKE_START_Y			-MAX_HEIGHT
+# define SPLASH_SNAKE_START_Y			(-MAX_HEIGHT)
 # define SPLASH_MSG_PROMPT				"Press ENTER to start"
 # define SPLASH_MINI_CHAR				"mini"
 # define SPLASH_NAKE_CHAR				"nake"
@@ -80,6 +81,9 @@
 # endif
 # if MAX_HEIGHT < MIN_HEIGHT
 #  error "MAX_HEIGHT must be >= MIN_HEIGHT"
+# endif
+# if MAX_SIZE > 1000000
+#  error "MAX_SIZE = MAX_WIDTH * MAX_HEIGHT is too large and may cause a Stack Overflow."
 # endif
 # if DEF_INITIAL_DELAY < 0
 #  error "DEF_INITIAL_DELAY must be >= 0"
@@ -206,41 +210,43 @@ typedef enum e_dir {
 }	t_dir;
 
 typedef struct s_data {
-	int			show_splash, size, grow, points_per_fruit, spawn_fruit_max_attempts, cheat_timeout, penalty_interval, penalty_amount;
-	float		delay, speedup_factor;
-	int			width, height, score, game_over, online, cheat, steps;
-	
-	int			fruit_x, fruit_y;
-	const char	*fruit_col;
-	pthread_mutex_t fruit_mutex; /* Protects the coordinate pair against data races */
+	/* --- CONFIGURATION & RULES --- 
+	 * (Keep this block first for DEFAULT_RULES initialization) */
+	int				show_splash, size, grow, points_per_fruit, spawn_fruit_max_attempts,
+						cheat_timeout, penalty_interval, penalty_amount;
+	float			delay, speedup_factor;
 
-	uint32_t	seed;
-	int			x[10001], y[10001], input_q[INPUT_Q_SIZE + 1];
-	t_dir		dir[2];
-	char		token[33];
-	
-	int			seq;
-	int			path_steps;
-	char		path[10001];
+	/* --- GAME STATE --- */
+	int				width, height, score, fruit_x, fruit_y, steps, game_over, online, cheat;
+	uint32_t		seed;
+	t_dir			dir[2]; /* dir[0]: current, dir[1]: previous */
+	int				x[MAX_SIZE + 1], y[MAX_SIZE + 1]; /* Snake body */
+	int				input_q[INPUT_Q_SIZE + 1];
+	const char		*fruit_color;
+	pthread_mutex_t	fruit_mutex;
+
+	/* --- NETWORK & TELEMETRY --- */
+	char			token[33], path[MAX_SIZE + 1];
+	int				seq, path_steps;
 }	t_data;
 
 /* minisnake_game - Gameplay functions */
-void		spawn_fruit(t_data *d);
-const char	*fruit_color(void);
-void		game_loop(t_data *d);
+void				spawn_fruit(t_data *d);
+const char			*fruit_color(void);
+void				game_loop(t_data *d);
 
 /* minisnake_sys - System functions */
-void		splash_screen(t_data *d);
-void		show_loading(void);
-uint32_t	sys_rand(void);
-uint32_t	lcg_rand(uint32_t *seed);
+void				splash_screen(t_data *d);
+void				show_loading(void);
+uint32_t			sys_rand(void);
+uint32_t			lcg_rand(uint32_t *seed);
 
 /* minisnake_net.c - Network functions */
-int			check_client_version(void);
-int			server_sync_rules(t_data *d);
-int			start_session(t_data *d);
-void		notify_server(t_data *d, const char *action, int fx, int fy);
-void		handle_leaderboard(t_data *d);
-void		net_wait_all(void);
+int					check_client_version(void);
+int					server_sync_rules(t_data *d);
+int					start_session(t_data *d);
+void				notify_server(t_data *d, const char *action, int fx, int fy);
+void				handle_leaderboard(t_data *d);
+void				net_wait_all(void);
 
 #endif

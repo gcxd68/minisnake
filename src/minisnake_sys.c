@@ -320,7 +320,7 @@ static void	setup_display(t_data *d) {
 
 	if (fx >= 0 && fy >= 0)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 
-	   	fy + 2, fx + 2, d->fruit_col ? d->fruit_col : COLOR_RED);
+	   	fy + 2, fx + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
 
 	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)
