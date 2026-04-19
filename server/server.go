@@ -63,6 +63,7 @@ type Session struct {
 	TotalSteps    int
 	RecentDetours []int // Variance Telemetry (Sliding Window)
 	TargetFruit   Point // Opaque Server-Side RNG
+	Calibrated    bool  // Ensures a session contributes to learning only once
 
 	// ANTI-LAG FIELDS
 	RecentActualTime   []float64 // Sliding window for actual ping delays
@@ -613,12 +614,18 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 				if len(calibrationVariances) < CalibrationLimit {
 					isCalibrating = true
 					// PHASE 1: LEARNING (Silently collect data)
-					// We only collect plausibly human variances to prevent data poisoning by bots
-					if variance > 0.5 {
-						calibrationVariances = append(calibrationVariances, variance)
-						log.Printf("[%s] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, len(calibrationVariances), CalibrationLimit, variance)
-					} else {
-						log.Printf("[%s] [CALIBRATION] Ignored suspiciously low variance during learning: %.2f", ip, variance)
+					// Only collect one sample per session to prevent single-game data poisoning
+					if !session.Calibrated {
+						// We only collect plausibly human variances to prevent data poisoning by bots
+						if variance > 0.5 {
+							calibrationVariances = append(calibrationVariances, variance)
+							session.Calibrated = true // Lock this session from contributing again
+							log.Printf("[%s] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, len(calibrationVariances), CalibrationLimit, variance)
+						} else {
+							// If it's too low, we ignore it but we DO NOT set session.Calibrated to true,
+							// allowing the session to prove its humanity on subsequent fruits.
+							log.Printf("[%s] [CALIBRATION] Ignored suspiciously low variance during learning: %.2f", ip, variance)
+						}
 					}
 				} else {
 					// PHASE 2: AUTOMATIC ENFORCEMENT
