@@ -50,19 +50,19 @@ type Point struct {
 }
 
 type Session struct {
-	Score              int
-	FruitsEaten        int
-	StartTime          time.Time
-	LastPing           time.Time
-	Cheated            bool
-	Seed               uint32
-	HeadX              int
-	HeadY              int
-	LastSteps          int
-	PerfectPaths       int
-	TotalSteps         int
-	RecentDetours      []int // Variance Telemetry (Sliding Window)
-	TargetFruit        Point // Opaque Server-Side RNG
+	Score         int
+	FruitsEaten   int
+	StartTime     time.Time
+	LastPing      time.Time
+	Cheated       bool
+	Seed          uint32
+	HeadX         int
+	HeadY         int
+	LastSteps     int
+	PerfectPaths  int
+	TotalSteps    int
+	RecentDetours []int // Variance Telemetry (Sliding Window)
+	TargetFruit   Point // Opaque Server-Side RNG
 
 	// ANTI-LAG FIELDS
 	RecentActualTime   []float64 // Sliding window for actual ping delays
@@ -302,7 +302,9 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	rand.Read(seedBytes)
 	currentSeed := (uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3])) & 0x7fffffff
 
-	clientSeed := uint32(0)
+	// Initialize client seed with the randomly generated core seed
+	// to ensure the grid offset is truly random for each session.
+	clientSeed := currentSeed
 	offsetX, offsetY := 0, 0
 
 	if Rules.GameWidth%2 == 0 {
@@ -380,12 +382,14 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 
-	// Helper: Generates a believable fake fruit and advances the core seed
+	// Helper: Generates a believable fake fruit WITHOUT mutating the real session state.
+	// This prevents critical data races if called outside of the sessionMutex.
 	sendFakeFruit := func() {
-		session.Seed = lcgRand(session.Seed)
-		fakeX := int((session.Seed >> 16) % uint32(Rules.GameWidth))
-		session.Seed = lcgRand(session.Seed)
-		fakeY := int((session.Seed >> 16) % uint32(Rules.GameHeight))
+		fakeSeed := session.Seed
+		fakeSeed = lcgRand(fakeSeed)
+		fakeX := int((fakeSeed >> 16) % uint32(Rules.GameWidth))
+		fakeSeed = lcgRand(fakeSeed)
+		fakeY := int((fakeSeed >> 16) % uint32(Rules.GameHeight))
 		fmt.Fprintf(w, "%d|%d", fakeX, fakeY)
 	}
 
@@ -530,7 +534,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate against the smoothed total time
-	upperBound := sumExpected + (float64(Rules.CheatTimeout)/1000.0) + 5.0
+	upperBound := sumExpected + (float64(Rules.CheatTimeout) / 1000.0) + 5.0
 
 	if sumActual < math.Max(0, (sumExpected*0.75)-1.0) || sumActual > upperBound {
 		session.Cheated = true
