@@ -26,7 +26,7 @@ If you want to customize the game or run your own server:
 - 🌐 **Authoritative Online Mode:** Global leaderboards powered by a Go backend that validates every move.
 - 🛡️ **Advanced Anti-Cheat:** - **Server-Side Physics:** Every move is replayed on the server using O(1) Spatial Hashing.
     - **Latency-Aware Spawning:** A probability cloud algorithm ensures fruits never spawn where you are locally, compensating for network lag.
-    - **Behavioral Telemetry:** Heuristics analyze movement variance to detect and shadowban bots.
+    - **Behavioral Telemetry:** Heuristics auto-calibrate dynamically from early player data to analyze movement variance and shadowban bots with high accuracy.
 - 🎨 **Modern TUI:** Features VT100 scrolling regions, Unicode graphics, and thread-safe UI updates.
 - ⚙️ **Dynamic Rules:** Game mechanics (speed, grid size) are synced from the server on startup.
 

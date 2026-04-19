@@ -100,6 +100,11 @@ var (
 	sessionMutex   sync.RWMutex
 	ipDataMap      = make(map[string]*IPData)
 	ipMutex        sync.Mutex
+
+	// --- Auto-Calibration Variables ---
+	calibrationVariances []float64
+	calibrationMutex     sync.RWMutex
+	CalibrationLimit     int = 100 // Number of samples required before activating the ban
 )
 
 // --- Configuration & Initialization ---
@@ -430,10 +435,18 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 			newHead.X--
 		case 'R':
 			newHead.X++
-		case ' ', 'X':
-			continue // Ignore STOP instructions safely
 		default:
-			continue
+			// Strict validation: Any character other than U, D, L, R implies payload tampering.
+			// ' ' or 'X' do not consume steps in the client physics engine natively, so their
+			// presence in the payload constitutes an artificial manipulation that must be banned.
+			session.Cheated = true
+			log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] Invalid character '%c' in path", ip, token[:8], move)
+			// Note: 'break' here only exits the switch. The outer 'for' loop will exit via the check below.
+			break
+		}
+
+		if session.Cheated {
+			break
 		}
 
 		validMoves++
@@ -574,7 +587,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// B. Variance Filter (Active Ban for highly regular/robotic detours)
+		// B. Variance Filter (100% Auto-Calibrated)
 		if len(session.RecentDetours) == 30 {
 			sum := 0.0
 			for _, v := range session.RecentDetours {
@@ -588,10 +601,51 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 			}
 			variance /= 30.0
 
-			// Trigger a shadowban if the detour variance is inhumanly consistent
-			if variance < 1.0 {
+			var dynamicThreshold float64
+			var isCalibrating bool
+
+			// Use an anonymous function to securely scope the defer unlock.
+			// This prevents holding the lock during HTTP/network operations and prevents deadlocks.
+			func() {
+				calibrationMutex.Lock()
+				defer calibrationMutex.Unlock()
+
+				if len(calibrationVariances) < CalibrationLimit {
+					isCalibrating = true
+					// PHASE 1: LEARNING (Silently collect data)
+					// We only collect plausibly human variances to prevent data poisoning by bots
+					if variance > 0.5 {
+						calibrationVariances = append(calibrationVariances, variance)
+						log.Printf("[%s] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, len(calibrationVariances), CalibrationLimit, variance)
+					} else {
+						log.Printf("[%s] [CALIBRATION] Ignored suspiciously low variance during learning: %.2f", ip, variance)
+					}
+				} else {
+					// PHASE 2: AUTOMATIC ENFORCEMENT
+					// 1. Calculate historical mean
+					sumHist := 0.0
+					for _, v := range calibrationVariances {
+						sumHist += v
+					}
+					meanHist := sumHist / float64(CalibrationLimit)
+
+					// 2. Calculate historical standard deviation
+					varSumHist := 0.0
+					for _, v := range calibrationVariances {
+						varSumHist += math.Pow(v-meanHist, 2)
+					}
+					stdDev := math.Sqrt(varSumHist / float64(CalibrationLimit))
+
+					// 3. Define threshold: Mean - 2 * Standard Deviation
+					// (Bans variances that are absurdly low compared to the legitimate player base)
+					dynamicThreshold = math.Max(0.1, meanHist-(2.0*stdDev))
+				}
+			}()
+
+			// Evaluate ban outside the calibration mutex to prevent blocking
+			if !isCalibrating && variance < dynamicThreshold {
 				session.Cheated = true
-				log.Printf("[%s] [%s...] [SHADOWBAN_VARIANCE] mean=%.2f variance=%.2f (Too robotic)", ip, token[:8], mean, variance)
+				log.Printf("[%s] [%s...] [SHADOWBAN_AUTO] variance=%.2f < threshold=%.2f", ip, token[:8], variance, dynamicThreshold)
 				sessionMutex.Unlock()
 				sendFakeFruit()
 				return
