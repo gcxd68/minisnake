@@ -148,7 +148,7 @@ static void	update_game(t_data *d) {
 	d->score += d->points_per_fruit;
 	d->delay *= d->speedup_factor;
 
-	/* Notifier avec les vraies coordonnées avant de les écraser */
+	/* Notify the server with the true coordinates before resetting the path */
 	d->seq++;
 	notify_server(d, "eat", fruit_x, fruit_y);
 
