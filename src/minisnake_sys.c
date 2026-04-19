@@ -296,15 +296,15 @@ static void	init_game(t_data *d) {
 	if (d->online && !start_session(d))
 		d->online = 0;
 	memset(d->input_q, EOF, sizeof(d->input_q));
-	if (!d->online)
+	if (!d->online) {
 		d->seed = sys_rand();
-	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
-	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
+		d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
+		d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
+	}
 	for (int i = 1; i <= d->size + d->grow; i++) {
 		d->x[i] = d->x[0];
 		d->y[i] = d->y[0];
 	}
-	
 	if (!d->online) {
 		spawn_fruit(d);
 	}
