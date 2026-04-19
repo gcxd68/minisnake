@@ -308,18 +308,19 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	rand.Read(seedBytes)
 	currentSeed := (uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3])) & 0x7fffffff
 
-	// Initialize client seed with the randomly generated core seed
-	// to ensure the grid offset is truly random for each session.
+	// Server Authority: We use the true random seed to calculate the initial offset.
+	// We will send this calculated position directly to the client to prevent any desync.
 	clientSeed := currentSeed
 	offsetX, offsetY := 0, 0
 
 	if Rules.GameWidth%2 == 0 {
 		clientSeed = lcgRand(clientSeed)
-		offsetX = int(clientSeed % 2)
+		// Bitshift >> 16 is mathematically required here because lower bits of LCG are highly predictable
+		offsetX = int((clientSeed >> 16) % 2)
 	}
 	if Rules.GameHeight%2 == 0 {
 		clientSeed = lcgRand(clientSeed)
-		offsetY = int(clientSeed % 2)
+		offsetY = int((clientSeed >> 16) % 2)
 	}
 
 	headX := (Rules.GameWidth / 2) - offsetX
@@ -370,7 +371,8 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	sessionMutex.Unlock()
 
 	log.Printf("[%s] [%s...] [SESSION_START]", ip, token[:8])
-	fmt.Fprintf(w, "%s|%d|%d", token, session.TargetFruit.X, session.TargetFruit.Y)
+	// Send Token + Head Coordinates + Fruit Coordinates to enforce Server Authority
+	fmt.Fprintf(w, "%s|%d|%d|%d|%d", token, headX, headY, session.TargetFruit.X, session.TargetFruit.Y)
 }
 
 func handleEat(w http.ResponseWriter, r *http.Request) {
@@ -514,7 +516,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		currentHead := session.Body[session.HeadIdx]
 		if session.Size == 0 || currentHead.X != payload.Fx || currentHead.Y != payload.Fy || payload.Fx != session.TargetFruit.X || payload.Fy != session.TargetFruit.Y {
 			session.Cheated = true
-			log.Printf("[%s] [%s...] [SHADOWBAN_TARGET] expected=(%d,%d) got=(%d,%d)", ip, token[:8], session.TargetFruit.X, session.TargetFruit.Y, payload.Fx, payload.Fy)
+			log.Printf("[%s] [%s...] [SHADOWBAN_TARGET] sim_head=(%d,%d) target=(%d,%d) payload=(%d,%d)", ip, token[:8], currentHead.X, currentHead.Y, session.TargetFruit.X, session.TargetFruit.Y, payload.Fx, payload.Fy)
 		}
 	}
 

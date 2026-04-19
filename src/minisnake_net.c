@@ -299,7 +299,7 @@ int server_sync_rules(t_data *d) {
 int start_session(t_data *d) {
 	if (!d->online) return (0);
 
-	char    resp[BUF_RESP_SUBMIT];
+	char	resp[BUF_RESP_SUBMIT];
 	
 	d->token[0] = '\0';
 	if (http_get("/token", resp, sizeof(resp)) != 0)
@@ -312,12 +312,17 @@ int start_session(t_data *d) {
 	strncpy(d->token, token_str, BUF_TOKEN - 1);
 	d->token[BUF_TOKEN - 1] = '\0';
 	
-	/* The server directly provides the first fruit coordinates */
-	char *x_str = strtok_r(NULL, "|", &saveptr);
-	char *y_str = strtok_r(NULL, "|", &saveptr);
-	if (x_str && y_str) {
-		d->fruit_x = atoi(x_str);
-		d->fruit_y = atoi(y_str);
+	/* Server Authority: The server directly provides the starting head coordinates AND the first fruit coordinates */
+	char *hx_str = strtok_r(NULL, "|", &saveptr);
+	char *hy_str = strtok_r(NULL, "|", &saveptr);
+	char *fx_str = strtok_r(NULL, "|", &saveptr);
+	char *fy_str = strtok_r(NULL, "|", &saveptr);
+	
+	if (hx_str && hy_str && fx_str && fy_str) {
+		d->x[0] = atoi(hx_str);
+		d->y[0] = atoi(hy_str);
+		d->fruit_x = atoi(fx_str);
+		d->fruit_y = atoi(fy_str);
 		d->fruit_color = fruit_color();
 	}
 	return (1);

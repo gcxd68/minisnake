@@ -192,12 +192,12 @@ static void	handle_sig(int sig) {
 }
 
 static void setup_sig(void) {
-	static int          initialized = 0;
+	static int			initialized = 0;
 
 	if (initialized) return;
 
-	const int           signals[] = {SIGINT, SIGQUIT, SIGTERM};
-	struct sigaction    sa;
+	const int			signals[] = {SIGINT, SIGQUIT, SIGTERM};
+	struct sigaction	sa;
 
 	sa.sa_handler = handle_sig;
 	sigemptyset(&sa.sa_mask);
@@ -298,8 +298,8 @@ static void	init_game(t_data *d) {
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	if (!d->online)
 		d->seed = sys_rand();
-	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)(lcg_rand(&d->seed) % 2));
-	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)(lcg_rand(&d->seed) % 2));
+	d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
+	d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
 	for (int i = 1; i <= d->size + d->grow; i++) {
 		d->x[i] = d->x[0];
 		d->y[i] = d->y[0];
