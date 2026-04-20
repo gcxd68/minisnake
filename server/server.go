@@ -622,11 +622,11 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 						if variance > 0.5 {
 							calibrationVariances = append(calibrationVariances, variance)
 							session.Calibrated = true // Lock this session from contributing again
-							log.Printf("[%s] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, len(calibrationVariances), CalibrationLimit, variance)
+							log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, token[:8], len(calibrationVariances), CalibrationLimit, variance)
 						} else {
 							// If it's too low, we ignore it but we DO NOT set session.Calibrated to true,
 							// allowing the session to prove its humanity on subsequent fruits.
-							log.Printf("[%s] [CALIBRATION] Ignored suspiciously low variance during learning: %.2f", ip, variance)
+							log.Printf("[%s] [%s...] [CALIBRATION] Ignored suspiciously low variance during learning: %.2f", ip, token[:8], variance)
 						}
 					}
 				} else {
