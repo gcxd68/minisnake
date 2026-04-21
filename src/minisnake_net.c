@@ -11,7 +11,12 @@ void	net_wait_all(void) {}
 
 #else
 
-/* --- Network Constants --- */
+/* Include(s) */
+# include <netdb.h>
+# include <netinet/in.h>
+# include <sys/socket.h>
+
+/* Network Constants */
 # define BUF_READ			4096									/* Socket read chunk size */
 # define BUF_GET_REQ		512										/* Sufficient for standard GET headers */
 # define JSON_OVERHEAD      256										/* Margin for JSON syntax (keys, brackets) */

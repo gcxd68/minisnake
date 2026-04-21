@@ -11,11 +11,12 @@ CC          = cc
 
 # CFLAGS: Instructions for compiling .c into .o
 # -Wall -Wextra -Werror : strict warnings, treated as errors
+# -pedantic             : enforce strict ISO C standard compliance
 # -O3                   : aggressive compiler optimizations
 # -flto                 : link-time optimization (enables cross-file optimization)
 # -pthread              : Enables POSIX threads for non-blocking HTTP requests
 # -I$(INC_DIR)          : Look for headers in the include folder
-CFLAGS      = -Wall -Wextra -Werror -O3 -flto -pthread -I$(INC_DIR)
+CFLAGS      = -Wall -Wextra -Werror -pedantic -O3 -flto -pthread -I$(INC_DIR)
 
 # LDFLAGS: Instructions for the final linking stage
 # -flto                 : Must be present here for link-time optimization to work

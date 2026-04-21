@@ -1,19 +1,15 @@
 #ifndef MINISNAKE_H
 # define MINISNAKE_H
 
-/* Include(s) and define(s) */
+/* Include(s) */
 # include <ctype.h>
-# include <errno.h>
 # include <fcntl.h>
-# include <netdb.h>
-# include <netinet/in.h>
 # include <pthread.h>
 # include <signal.h>
+# include <stdint.h>
 # include <stdio.h>
 # include <stdlib.h>
 # include <string.h>
-# include <sys/ioctl.h>
-# include <sys/socket.h>
 # include <termios.h>
 # include <time.h>
 # include <unistd.h>
@@ -21,7 +17,7 @@
 # ifdef __has_include
 #  if __has_include("net.h")
 #   include "net.h"
-#   define ONLINE_BUILD			1
+#   define ONLINE_BUILD					1
 #  endif
 # endif
 
