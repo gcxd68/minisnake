@@ -14,10 +14,10 @@
 # include <time.h>
 # include <unistd.h>
 
-# ifdef __has_include
-#  if __has_include("net.h")
-#   include "net.h"
-#   define ONLINE_BUILD					1
+# ifdef ONLINE_BUILD
+#  include "net.h"
+#  if !defined(HOST) || !defined(PORT)
+#   error "Configuration error: The 'net' file is malformed. HOST or PORT is missing."
 #  endif
 # endif
 

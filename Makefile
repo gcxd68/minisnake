@@ -18,6 +18,11 @@ CC          = cc
 # -I$(INC_DIR)          : Look for headers in the include folder
 CFLAGS      = -Wall -Wextra -Werror -pedantic -O3 -flto -pthread -I$(INC_DIR)
 
+# Automatically enable ONLINE_BUILD macro if the 'net' configuration file exists
+ifneq ($(wildcard net),)
+    CFLAGS += -DONLINE_BUILD
+endif
+
 # LDFLAGS: Instructions for the final linking stage
 # -flto                 : Must be present here for link-time optimization to work
 # -s                    : strip debug symbols (hardens against reverse engineering)
