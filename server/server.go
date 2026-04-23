@@ -275,6 +275,215 @@ func cleanupStaleData() {
 	sessionMutex.Unlock()
 }
 
+// SimulatePath safely replays the client's path instantly without O(N) array shifting CPU penalties.
+// Returns an error if the path is invalid or if a collision occurs.
+func (session *Session) SimulatePath(path string, deltaSteps int) error {
+	validMoves := 0
+	vacatedTailValid := false
+	var currentVacatedTail Point
+
+	for _, move := range path {
+		if session.Size == 0 {
+			break
+		}
+
+		newHead := session.Body[session.HeadIdx]
+		switch move {
+		case 'U':
+			newHead.Y--
+		case 'D':
+			newHead.Y++
+		case 'L':
+			newHead.X--
+		case 'R':
+			newHead.X++
+		default:
+			// Strict validation: Any character other than U, D, L, R implies payload tampering.
+			return fmt.Errorf("[SHADOWBAN_PHYSICS] Invalid character '%c' in path", move)
+		}
+
+		validMoves++
+
+		// A. Wall Collision Check
+		if newHead.X < 0 || newHead.X >= Rules.GameWidth || newHead.Y < 0 || newHead.Y >= Rules.GameHeight {
+			return fmt.Errorf("[SHADOWBAN_PHYSICS] Wall collision at (%d,%d)", newHead.X, newHead.Y)
+		}
+
+		// B. Self Collision Check O(1)
+		gridIndex := newHead.Y*Rules.GameWidth + newHead.X
+		tail := session.Body[session.TailIdx]
+
+		// Exception: It's valid if the snake's head enters the space the tail is currently leaving
+		isTailMoving := (newHead.X == tail.X && newHead.Y == tail.Y && session.Grow == 0)
+
+		if session.Grid[gridIndex] && !isTailMoving {
+			return fmt.Errorf("[SHADOWBAN_PHYSICS] Self-collision at (%d,%d)", newHead.X, newHead.Y)
+		}
+
+		// C. Mutate State: Advance Tail or Grow (MUST BE FIRST TO PREVENT FALSE GRID OVERRIDES)
+		if session.Grow > 0 {
+			session.Grow--
+			session.Size++
+		} else {
+			oldTail := session.Body[session.TailIdx]
+			currentVacatedTail = oldTail
+			vacatedTailValid = true
+
+			// Remove tail from spatial grid before head claims the space
+			session.Grid[oldTail.Y*Rules.GameWidth+oldTail.X] = false
+
+			// Advance tail pointer in the ring buffer
+			session.TailIdx = (session.TailIdx + 1) % len(session.Body)
+		}
+
+		// D. Mutate State: Advance Head (SECOND)
+		session.HeadIdx = (session.HeadIdx + 1) % len(session.Body)
+		session.Body[session.HeadIdx] = newHead
+		session.Grid[gridIndex] = true
+	}
+
+	// Capture the last vacated tail position to prevent immediate fruit spawns on it
+	if vacatedTailValid {
+		session.VacatedTailX = currentVacatedTail.X
+		session.VacatedTailY = currentVacatedTail.Y
+	} else {
+		session.VacatedTailX = -1
+		session.VacatedTailY = -1
+	}
+
+	if validMoves != deltaSteps {
+		return fmt.Errorf("[SHADOWBAN_PHYSICS] move_count_mismatch expected=%d got=%d", deltaSteps, validMoves)
+	}
+
+	return nil
+}
+
+// ValidateTarget ensures the snake actually reached the expected server-generated target.
+func (session *Session) ValidateTarget(fx, fy int) error {
+	currentHead := session.Body[session.HeadIdx]
+	if session.Size == 0 || currentHead.X != fx || currentHead.Y != fy || fx != session.TargetFruit.X || fy != session.TargetFruit.Y {
+		return fmt.Errorf("[SHADOWBAN_TARGET] sim_head=(%d,%d) target=(%d,%d) payload=(%d,%d)", currentHead.X, currentHead.Y, session.TargetFruit.X, session.TargetFruit.Y, fx, fy)
+	}
+	return nil
+}
+
+// ValidateTimeCorridor ensures the client is not speeding up the game engine artificially.
+// Returns the calculated actual time and current delay for latency parsing, plus any error.
+func (session *Session) ValidateTimeCorridor(deltaSteps int) (actualTime, currentDelaySec float64, err error) {
+	currentDelaySec = (Rules.InitialDelay / 1000000.0) * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
+	expectedTime := currentDelaySec * float64(deltaSteps)
+	actualTime = time.Since(session.LastPing).Seconds()
+
+	// Prevent the initial idle time (Start Screen) from poisoning the sliding window
+	if session.FruitsEaten == 0 {
+		actualTime = expectedTime
+	}
+
+	// Append metrics to the sliding window
+	session.RecentActualTime = append(session.RecentActualTime, actualTime)
+	session.RecentExpectedTime = append(session.RecentExpectedTime, expectedTime)
+
+	// Keep only the last 5 data points
+	if len(session.RecentActualTime) > 5 {
+		session.RecentActualTime = session.RecentActualTime[1:]
+		session.RecentExpectedTime = session.RecentExpectedTime[1:]
+	}
+
+	// Sum the window to absorb network jitter & lag spikes safely
+	sumExpected := 0.0
+	sumActual := 0.0
+	for i := range session.RecentActualTime {
+		sumExpected += session.RecentExpectedTime[i]
+		sumActual += session.RecentActualTime[i]
+	}
+
+	// Validate against the smoothed total time
+	upperBound := sumExpected + (float64(Rules.CheatTimeout) / 1000.0) + 5.0
+
+	if sumActual < math.Max(0, (sumExpected*0.75)-1.0) || sumActual > upperBound {
+		err = fmt.Errorf("[SHADOWBAN_TIME] smoothed_expected=%.1f smoothed_actual=%.1f (window=%d)", sumExpected, sumActual, len(session.RecentActualTime))
+	}
+
+	return actualTime, currentDelaySec, err
+}
+
+// CheckBehavioralAnalytics applies Turing tests to verify human-like behaviors such as pathing imperfections.
+func (session *Session) CheckBehavioralAnalytics(fx, fy, deltaSteps int, ip, token string) error {
+	manhattan := int(math.Abs(float64(fx-session.HeadX)) + math.Abs(float64(fy-session.HeadY)))
+	detour := deltaSteps - manhattan
+	if detour == 0 {
+		session.PerfectPaths++
+	}
+	session.TotalSteps += deltaSteps
+
+	session.RecentDetours = append(session.RecentDetours, detour)
+	if len(session.RecentDetours) > 30 {
+		session.RecentDetours = session.RecentDetours[1:]
+	}
+
+	currentFruits := session.FruitsEaten + 1
+
+	if currentFruits >= 30 {
+		// A. Manhattan Filter (Active Ban for strictly perfect routing)
+		perfRatio := (session.PerfectPaths * 100) / currentFruits
+		if perfRatio >= 95 {
+			return fmt.Errorf("[SHADOWBAN_BEHAVIOR] perfect_ratio=%d", perfRatio)
+		}
+
+		// B. Variance Filter (100% Auto-Calibrated)
+		if len(session.RecentDetours) == 30 {
+			sum := 0.0
+			for _, v := range session.RecentDetours {
+				sum += float64(v)
+			}
+			mean := sum / 30.0
+
+			variance := 0.0
+			for _, v := range session.RecentDetours {
+				variance += math.Pow(float64(v)-mean, 2)
+			}
+			variance /= 30.0
+
+			var dynamicThreshold float64
+			var isCalibrating bool
+
+			func() {
+				calibrationMutex.Lock()
+				defer calibrationMutex.Unlock()
+
+				if len(calibrationVariances) < CalibrationLimit {
+					isCalibrating = true
+					if !session.Calibrated {
+						if variance > 0.5 {
+							calibrationVariances = append(calibrationVariances, variance)
+							session.Calibrated = true
+							log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, token[:8], len(calibrationVariances), CalibrationLimit, variance)
+						}
+					}
+				} else {
+					sumHist := 0.0
+					for _, v := range calibrationVariances {
+						sumHist += v
+					}
+					meanHist := sumHist / float64(CalibrationLimit)
+
+					varSumHist := 0.0
+					for _, v := range calibrationVariances {
+						varSumHist += math.Pow(v-meanHist, 2)
+					}
+					stdDev := math.Sqrt(varSumHist / float64(CalibrationLimit))
+					dynamicThreshold = math.Max(0.1, meanHist-(2.0*stdDev))
+				}
+			}()
+
+			if !isCalibrating && variance < dynamicThreshold {
+				return fmt.Errorf("[SHADOWBAN_AUTO] variance=%.2f < threshold=%.2f", variance, dynamicThreshold)
+			}
+		}
+	}
+	return nil
+}
+
 // --- API Handlers ---
 
 func handleRules(w http.ResponseWriter, r *http.Request) {
@@ -391,7 +600,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	session, exists := activeSessions[token]
 
 	// Helper: Generates a believable fake fruit WITHOUT mutating the real session state.
-	// This prevents critical data races if called outside of the sessionMutex.
 	sendFakeFruit := func() {
 		fakeSeed := session.Seed
 		fakeSeed = lcgRand(fakeSeed)
@@ -418,248 +626,44 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. HEAVY PHYSICS: O(1) Simulation using Spatial Hashing & Ring Buffers
-	// Safely replay the client's path instantly without O(N) array shifting CPU penalties
-	validMoves := 0
-	vacatedTailValid := false
-	var currentVacatedTail Point
-
-	for _, move := range payload.Path {
-		if session.Size == 0 {
-			break
-		}
-
-		newHead := session.Body[session.HeadIdx]
-		switch move {
-		case 'U':
-			newHead.Y--
-		case 'D':
-			newHead.Y++
-		case 'L':
-			newHead.X--
-		case 'R':
-			newHead.X++
-		default:
-			// Strict validation: Any character other than U, D, L, R implies payload tampering.
-			// ' ' or 'X' do not consume steps in the client physics engine natively, so their
-			// presence in the payload constitutes an artificial manipulation that must be banned.
+	if !session.Cheated {
+		if err := session.SimulatePath(payload.Path, deltaSteps); err != nil {
 			session.Cheated = true
-			log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] Invalid character '%c' in path", ip, token[:8], move)
-			// Note: 'break' here only exits the switch. The outer 'for' loop will exit via the check below.
-			break
+			log.Printf("[%s] [%s...] %v", ip, token[:8], err)
 		}
-
-		if session.Cheated {
-			break
-		}
-
-		validMoves++
-
-		// A. Wall Collision Check
-		if newHead.X < 0 || newHead.X >= Rules.GameWidth || newHead.Y < 0 || newHead.Y >= Rules.GameHeight {
-			session.Cheated = true
-			log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] Wall collision at (%d,%d)", ip, token[:8], newHead.X, newHead.Y)
-			break
-		}
-
-		// B. Self Collision Check O(1)
-		gridIndex := newHead.Y*Rules.GameWidth + newHead.X
-		tail := session.Body[session.TailIdx]
-
-		// Exception: It's valid if the snake's head enters the space the tail is currently leaving
-		isTailMoving := (newHead.X == tail.X && newHead.Y == tail.Y && session.Grow == 0)
-
-		if session.Grid[gridIndex] && !isTailMoving {
-			session.Cheated = true
-			log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] Self-collision at (%d,%d)", ip, token[:8], newHead.X, newHead.Y)
-			break
-		}
-
-		// C. Mutate State: Advance Tail or Grow (MUST BE FIRST TO PREVENT FALSE GRID OVERRIDES)
-		if session.Grow > 0 {
-			session.Grow--
-			session.Size++
-		} else {
-			oldTail := session.Body[session.TailIdx]
-			currentVacatedTail = oldTail
-			vacatedTailValid = true
-
-			// Remove tail from spatial grid before head claims the space
-			session.Grid[oldTail.Y*Rules.GameWidth+oldTail.X] = false
-
-			// Advance tail pointer in the ring buffer
-			session.TailIdx = (session.TailIdx + 1) % len(session.Body)
-		}
-
-		// D. Mutate State: Advance Head (SECOND)
-		session.HeadIdx = (session.HeadIdx + 1) % len(session.Body)
-		session.Body[session.HeadIdx] = newHead
-		session.Grid[gridIndex] = true
-	}
-
-	// Capture the last vacated tail position to prevent immediate fruit spawns on it
-	// If the tail did not move during this sequence, clear the legacy state.
-	if vacatedTailValid {
-		session.VacatedTailX = currentVacatedTail.X
-		session.VacatedTailY = currentVacatedTail.Y
-	} else {
-		session.VacatedTailX = -1
-		session.VacatedTailY = -1
-	}
-
-	if !session.Cheated && validMoves != deltaSteps {
-		session.Cheated = true
-		log.Printf("[%s] [%s...] [SHADOWBAN_PHYSICS] move_count_mismatch expected=%d got=%d", ip, token[:8], deltaSteps, validMoves)
 	}
 
 	// 4. Target Validation
 	if !session.Cheated {
-		currentHead := session.Body[session.HeadIdx]
-		if session.Size == 0 || currentHead.X != payload.Fx || currentHead.Y != payload.Fy || payload.Fx != session.TargetFruit.X || payload.Fy != session.TargetFruit.Y {
+		if err := session.ValidateTarget(payload.Fx, payload.Fy); err != nil {
 			session.Cheated = true
-			log.Printf("[%s] [%s...] [SHADOWBAN_TARGET] sim_head=(%d,%d) target=(%d,%d) payload=(%d,%d)", ip, token[:8], currentHead.X, currentHead.Y, session.TargetFruit.X, session.TargetFruit.Y, payload.Fx, payload.Fy)
+			log.Printf("[%s] [%s...] %v", ip, token[:8], err)
 		}
 	}
 
 	// 5. Local Time Corridor (Sliding Window Lag Compensation)
-	currentDelaySec := (Rules.InitialDelay / 1000000.0) * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
-	expectedTime := currentDelaySec * float64(deltaSteps)
-	actualTime := time.Since(session.LastPing).Seconds()
-
-	// Prevent the initial idle time (Start Screen) from poisoning the sliding window.
-	// By forcing the first ping to match the expected time, we safely absorb the wait.
-	if session.FruitsEaten == 0 {
-		actualTime = expectedTime
+	var actualTime, currentDelaySec float64
+	if !session.Cheated {
+		var err error
+		actualTime, currentDelaySec, err = session.ValidateTimeCorridor(deltaSteps)
+		if err != nil {
+			session.Cheated = true
+			log.Printf("[%s] [%s...] %v", ip, token[:8], err)
+		}
 	}
 
-	// Append metrics to the sliding window
-	session.RecentActualTime = append(session.RecentActualTime, actualTime)
-	session.RecentExpectedTime = append(session.RecentExpectedTime, expectedTime)
-
-	// Keep only the last 5 data points
-	if len(session.RecentActualTime) > 5 {
-		session.RecentActualTime = session.RecentActualTime[1:]
-		session.RecentExpectedTime = session.RecentExpectedTime[1:]
-	}
-
-	// Sum the window to absorb network jitter & lag spikes safely
-	sumExpected := 0.0
-	sumActual := 0.0
-	for i := range session.RecentActualTime {
-		sumExpected += session.RecentExpectedTime[i]
-		sumActual += session.RecentActualTime[i]
-	}
-
-	// Validate against the smoothed total time
-	upperBound := sumExpected + (float64(Rules.CheatTimeout) / 1000.0) + 5.0
-
-	if sumActual < math.Max(0, (sumExpected*0.75)-1.0) || sumActual > upperBound {
-		session.Cheated = true
-		log.Printf("[%s] [%s...] [SHADOWBAN_TIME] smoothed_expected=%.1f smoothed_actual=%.1f (window=%d)", ip, token[:8], sumExpected, sumActual, len(session.RecentActualTime))
+	// 6. Behavioral Analytics & Active Turing Tests
+	if !session.Cheated {
+		if err := session.CheckBehavioralAnalytics(payload.Fx, payload.Fy, deltaSteps, ip, token); err != nil {
+			session.Cheated = true
+			log.Printf("[%s] [%s...] %v", ip, token[:8], err)
+		}
 	}
 
 	if session.Cheated {
 		sessionMutex.Unlock()
 		sendFakeFruit()
 		return
-	}
-
-	// 6. Behavioral Analytics & Active Turing Tests
-	manhattan := int(math.Abs(float64(payload.Fx-session.HeadX)) + math.Abs(float64(payload.Fy-session.HeadY)))
-	detour := deltaSteps - manhattan
-	if detour == 0 {
-		session.PerfectPaths++
-	}
-	session.TotalSteps += deltaSteps
-
-	session.RecentDetours = append(session.RecentDetours, detour)
-	if len(session.RecentDetours) > 30 {
-		session.RecentDetours = session.RecentDetours[1:]
-	}
-
-	currentFruits := session.FruitsEaten + 1
-
-	// Activate Turing tests after enough data points (30 fruits)
-	if currentFruits >= 30 {
-		// A. Manhattan Filter (Active Ban for strictly perfect routing)
-		perfRatio := (session.PerfectPaths * 100) / currentFruits
-		if perfRatio >= 95 {
-			session.Cheated = true
-			log.Printf("[%s] [%s...] [SHADOWBAN_BEHAVIOR] perfect_ratio=%d", ip, token[:8], perfRatio)
-			sessionMutex.Unlock()
-			sendFakeFruit()
-			return
-		}
-
-		// B. Variance Filter (100% Auto-Calibrated)
-		if len(session.RecentDetours) == 30 {
-			sum := 0.0
-			for _, v := range session.RecentDetours {
-				sum += float64(v)
-			}
-			mean := sum / 30.0
-
-			variance := 0.0
-			for _, v := range session.RecentDetours {
-				variance += math.Pow(float64(v)-mean, 2)
-			}
-			variance /= 30.0
-
-			var dynamicThreshold float64
-			var isCalibrating bool
-
-			// Use an anonymous function to securely scope the defer unlock.
-			// This prevents holding the lock during HTTP/network operations and prevents deadlocks.
-			func() {
-				calibrationMutex.Lock()
-				defer calibrationMutex.Unlock()
-
-				if len(calibrationVariances) < CalibrationLimit {
-					isCalibrating = true
-					// PHASE 1: LEARNING (Silently collect data)
-					// Only collect one sample per session to prevent single-game data poisoning
-					if !session.Calibrated {
-						// We only collect plausibly human variances to prevent data poisoning by bots
-						if variance > 0.5 {
-							calibrationVariances = append(calibrationVariances, variance)
-							session.Calibrated = true // Lock this session from contributing again
-							log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, token[:8], len(calibrationVariances), CalibrationLimit, variance)
-						} else {
-							// If it's too low, we ignore it but we DO NOT set session.Calibrated to true,
-							// allowing the session to prove its humanity on subsequent fruits.
-							log.Printf("[%s] [%s...] [CALIBRATION] Ignored suspiciously low variance during learning: %.2f", ip, token[:8], variance)
-						}
-					}
-				} else {
-					// PHASE 2: AUTOMATIC ENFORCEMENT
-					// 1. Calculate historical mean
-					sumHist := 0.0
-					for _, v := range calibrationVariances {
-						sumHist += v
-					}
-					meanHist := sumHist / float64(CalibrationLimit)
-
-					// 2. Calculate historical standard deviation
-					varSumHist := 0.0
-					for _, v := range calibrationVariances {
-						varSumHist += math.Pow(v-meanHist, 2)
-					}
-					stdDev := math.Sqrt(varSumHist / float64(CalibrationLimit))
-
-					// 3. Define threshold: Mean - 2 * Standard Deviation
-					// (Bans variances that are absurdly low compared to the legitimate player base)
-					dynamicThreshold = math.Max(0.1, meanHist-(2.0*stdDev))
-				}
-			}()
-
-			// Evaluate ban outside the calibration mutex to prevent blocking
-			if !isCalibrating && variance < dynamicThreshold {
-				session.Cheated = true
-				log.Printf("[%s] [%s...] [SHADOWBAN_AUTO] variance=%.2f < threshold=%.2f", ip, token[:8], variance, dynamicThreshold)
-				sessionMutex.Unlock()
-				sendFakeFruit()
-				return
-			}
-		}
 	}
 
 	// Apply valid game mutations
@@ -676,13 +680,9 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 7. Latency-Aware Spawning (Probability Cloud)
-	// Calculate the actual network ping (time elapsed beyond the physical travel time)
-	ping := math.Max(0.0, actualTime-expectedTime)
-	// Extrapolate how many extra tiles the client could have traveled locally during this ping
+	ping := math.Max(0.0, actualTime-(currentDelaySec*float64(deltaSteps)))
 	latencySteps := int(math.Ceil(ping / currentDelaySec))
 
-	// Wrap up and generate next target, gracefully skipping the recently vacated tail tile
-	// AND enforcing the latency probability cloud
 	session.LastPing = time.Now()
 	session.HeadX, session.HeadY, session.LastSteps = payload.Fx, payload.Fy, payload.Steps
 	session.ExpectedSeq++
