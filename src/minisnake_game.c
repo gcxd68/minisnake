@@ -72,7 +72,7 @@ static void anticheat(t_data *d) {
 static void process_input(t_data *d) {
 	static const char	move_keys[] = MOVE_KEYS;
 	static const char	arrow_keys[] = ARROW_KEYS;
-	char				*pos;
+	const char			*pos;
 	int					c, i;
 
 	d->dir[1] = d->dir[0];
