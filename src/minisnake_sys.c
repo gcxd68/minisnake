@@ -73,14 +73,14 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 }
 
 static int	install_dependencies(void) {
-	const int		has_xfce = (system("which xfce4-terminal > /dev/null 2>&1") == 0);
-	const int		has_gnome = (system("which gnome-terminal > /dev/null 2>&1") == 0);
-	const int		need_term = !has_xfce && !has_gnome;
-	const int		need_font = system("dpkg -s fonts-noto-color-emoji > /dev/null 2>&1");
+	const int	has_xfce = (system("which xfce4-terminal > /dev/null 2>&1") == 0);
+	const int	has_gnome = (system("which gnome-terminal > /dev/null 2>&1") == 0);
+	const int	need_term = !has_xfce && !has_gnome;
+	const int	need_font = system("dpkg -s fonts-noto-color-emoji > /dev/null 2>&1");
 
 	if (!need_term && !need_font) return (LAUNCH_SPAWN);
 
-	const int		has_apt = (system("command -v apt > /dev/null 2>&1") == 0);
+	const int	has_apt = (system("command -v apt > /dev/null 2>&1") == 0);
 
 	if (need_term || need_font) {
 		printf("For the best visual experience, these packages are recommended:\n");
@@ -103,7 +103,7 @@ static int	install_dependencies(void) {
 	}
 	if (ask_confirm("Would you like to play in the current terminal instead? (y/n): "))
 		return (LAUNCH_LOCAL);
-	return (EXIT_SUCCESS); 
+	return (EXIT_SUCCESS);
 }
 
 static int	launch_terminal(int argc, char **argv, t_data *d) {
@@ -325,7 +325,7 @@ static void	setup_display(t_data *d) {
 
 	if (fx >= 0 && fy >= 0)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 
-	   	fy + 2, fx + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
+			fy + 2, fx + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
 
 	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
 	for (int y = 2; y <= d->height + 1; y++)

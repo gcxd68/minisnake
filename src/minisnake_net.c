@@ -5,8 +5,8 @@
 int		check_client_version(void) { return (0); }
 int		server_sync_rules(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
-void    notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
-void    handle_leaderboard(t_data *d) { (void)d; }
+void	(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
+void	handle_leaderboard(t_data *d) { (void)d; }
 void	net_wait_all(void) {}
 
 #else
@@ -19,9 +19,9 @@ void	net_wait_all(void) {}
 /* Network Constants */
 # define BUF_READ			4096									/* Socket read chunk size */
 # define BUF_GET_REQ		512										/* Sufficient for standard GET headers */
-# define JSON_OVERHEAD      256										/* Margin for JSON syntax (keys, brackets) */
+# define JSON_OVERHEAD		256										/* Margin for JSON syntax (keys, brackets) */
 # define BUF_JSON_PAYLOAD	(MAX_SIZE + JSON_OVERHEAD)				/* Path string + JSON formatting */
-# define HTTP_HDR_OVERHEAD  512										/* Margin for HTTP POST headers */
+# define HTTP_HDR_OVERHEAD	512										/* Margin for HTTP POST headers */
 # define BUF_POST_REQ		(BUF_JSON_PAYLOAD + HTTP_HDR_OVERHEAD)	/* JSON + Headers */
 # define BUF_RESP_SUBMIT	512										/* Small ACK responses */
 # define BUF_RESP_SCORES	8192									/* Full leaderboard data */
@@ -94,7 +94,7 @@ void	net_wait_all(void) {}
 
 typedef struct s_req {
 	char	path[BUF_PATH];
-	char    body[BUF_JSON_PAYLOAD];
+	char	body[BUF_JSON_PAYLOAD];
 	int		has_body;
 	int		in_use;
 	t_data	*d; /* Pointer back to game state for async updates */
@@ -217,8 +217,8 @@ static void *async_http_worker(void *arg) {
 }
 
 static void fire_and_forget(const char *path, const char *body, t_data *d) {
-	pthread_t   tid;
-	t_req       *req = NULL;
+	pthread_t	tid;
+	t_req		*req = NULL;
 	
 	pthread_mutex_lock(&g_pool_mutex);
 	for (int i = 0; i < REQ_POOL_SIZE; i++) {
@@ -351,7 +351,7 @@ void notify_server(t_data *d, const char *action, int fx, int fy) {
 static int end_session(t_data *d, const char *name) {
 	if (!IS_SESSION_ACTIVE(d)) return (-1);
 
-	char    path[BUF_PATH], resp[BUF_RESP_SUBMIT];
+	char	path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
 	if (*name)
 		snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
@@ -362,14 +362,14 @@ static int end_session(t_data *d, const char *name) {
 }
 
 static int show_leaderboard(t_data *d) {
-	char        path[BUF_PATH], resp[BUF_RESP_SCORES];
+	char	path[BUF_PATH], resp[BUF_RESP_SCORES];
 
 	snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
 
-	const char  title[] = LB_TITLE;
-	const int   title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
+	const char	title[] = LB_TITLE;
+	const int	title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 
 	printf(CLEAR_SCREEN CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_RESET, LB_TITLE_ROW, title_col, title);
 	char *body = skip_headers(resp);
@@ -385,7 +385,7 @@ static int show_leaderboard(t_data *d) {
 		p_score = strtok_r(NULL, "|", &p_save);
 		if (p_name && p_score)
 			printf(CURSOR_POS "%2d. %-*s %*s", row++, LB_COL_OFFSET, rank++,
-				   UI_NAME_WIDTH, p_name, UI_SCORE_WIDTH, p_score);
+				UI_NAME_WIDTH, p_name, UI_SCORE_WIDTH, p_score);
 		line = strtok_r(NULL, "\n", &saveptr);
 	}
 	return (0);

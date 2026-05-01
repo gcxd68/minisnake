@@ -52,8 +52,8 @@ static void anticheat(t_data *d) {
 	last_frame = now;
 
 	if (++counter > 10) {
-		FILE    *f = fopen(PROC_STATUS_PATH, "r");
-		char    buf[PROC_BUF_SIZE];
+		FILE	*f = fopen(PROC_STATUS_PATH, "r");
+		char	buf[PROC_BUF_SIZE];
 
 		counter = 0;
 		if (!f) return;

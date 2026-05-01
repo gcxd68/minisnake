@@ -1,41 +1,41 @@
 # --- Names and Paths ---
-NAME        = bin/minisnake
-SERVER_NAME = bin/server
-OBJ_DIR     = obj/
-BIN_DIR     = bin/
-SRC_DIR     = src/
-INC_DIR     = include/
+NAME =			bin/minisnake
+SERVER_NAME =	bin/server
+OBJ_DIR =		obj/
+BIN_DIR =		bin/
+SRC_DIR =		src/
+INC_DIR =		include/
 
 # --- Compilation Flags ---
-CC          = cc
+CC =		cc
 
 # CFLAGS: Instructions for compiling .c into .o
 # -Wall -Wextra -Werror : strict warnings, treated as errors
-# -pedantic             : enforce strict ISO C standard compliance
-# -O3                   : aggressive compiler optimizations
-# -flto                 : link-time optimization (enables cross-file optimization)
-# -pthread              : Enables POSIX threads for non-blocking HTTP requests
-# -I$(INC_DIR)          : Look for headers in the include folder
-CFLAGS      = -Wall -Wextra -Werror -pedantic -O3 -flto -pthread -I$(INC_DIR)
+# -pedantic				: enforce strict ISO C standard compliance
+# -O3					: aggressive compiler optimizations
+# -flto					: link-time optimization (enables cross-file optimization)
+# -pthread				: Enables POSIX threads for non-blocking HTTP requests
+# -I$(INC_DIR)			: Look for headers in the include folder
+CFLAGS =	-Wall -Wextra -Werror -pedantic -O3 -flto -pthread -I$(INC_DIR)
 
 # Automatically enable ONLINE_BUILD macro if the 'net' configuration file exists
 ifneq ($(wildcard net),)
-    CFLAGS += -DONLINE_BUILD
+	CFLAGS += -DONLINE_BUILD
 endif
 
 # LDFLAGS: Instructions for the final linking stage
-# -flto                 : Must be present here for link-time optimization to work
-# -s                    : strip debug symbols (hardens against reverse engineering)
-# -pthread              : Must be included in linking stage as well
-LDFLAGS     = -flto -s -pthread
+# -flto					: Must be present here for link-time optimization to work
+# -s					: strip debug symbols (hardens against reverse engineering)
+# -pthread				: Must be included in linking stage as well
+LDFLAGS =	-flto -s -pthread
 
 # --- Source Files ---
-SRCS        = $(SRC_DIR)minisnake_game.c \
-			  $(SRC_DIR)minisnake_sys.c \
-			  $(SRC_DIR)minisnake_net.c
+SRCS =		$(SRC_DIR)minisnake_game.c \
+			$(SRC_DIR)minisnake_sys.c \
+			$(SRC_DIR)minisnake_net.c
 
 # Transform src/file.c into obj/file.o
-OBJS        = $(SRCS:$(SRC_DIR)%.c=$(OBJ_DIR)%.o)
+OBJS =		$(SRCS:$(SRC_DIR)%.c=$(OBJ_DIR)%.o)
 
 # --- Rules ---
 .PHONY: all clean fclean re server clean-server fclean-server re-server clean-all fclean-all re-all
