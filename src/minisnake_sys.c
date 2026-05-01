@@ -23,7 +23,7 @@ static int	ask_confirm(const char *question) {
 	printf("%s", question);
 	fflush(stdout);
 	int c = read_char();
-	return (c == 'y' || c == 'Y');
+	return (c == 'y' || c == 'Y' || c == '\n');
 }
 
 static int	parse_args(int argc, char **argv, t_data *d) {
