@@ -3,15 +3,20 @@
 #ifndef ONLINE_BUILD
 
 static void	anticheat(t_data *d) { (void)d; }
+static void	sync_fruit_state(t_data *d) { (void)d; }
 
 #else
 
-# define DEBUG_CHECK_FREQ	10
-# define PROC_STATUS_PATH	"/proc/self/status"
-# define TRACER_LEN			10
-# define PROC_BUF_SIZE		256
+# define MAX_MISSING_FRUIT_FRAMES	20
+# define DEBUG_CHECK_FREQ			10
+# define PROC_STATUS_PATH			"/proc/self/status"
+# define TRACER_LEN					10
+# define PROC_BUF_SIZE				256
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
+# if MAX_MISSING_FRUIT_FRAMES < 0
+#  error "MAX_MISSING_FRUIT_FRAMES cannot be negative"
+# endif
 # if DEBUG_CHECK_FREQ <= 0
 #  error "DEBUG_CHECK_FREQ must be strictly positive"
 # endif
@@ -33,7 +38,7 @@ static void anticheat(t_data *d) {
 	static long	last_frame = 0;
 	const long	now = get_ms();
 
-	if (d->cheat) return;
+	if (!d->online || d->cheat) return;
 
 	if (!d->dir[0]) {
 		last_frame = now;
@@ -67,6 +72,24 @@ static void anticheat(t_data *d) {
 		fclose(f);
 	}
 }
+
+static void sync_fruit_state(t_data *d) {
+	if (!d->online) return;
+
+	int	fruit_x, fruit_y;
+
+	read_fruit(d, &fruit_x, &fruit_y, NULL);
+	if (fruit_x == -1 || fruit_y == -1) {
+		d->missing_fruit_frames++;
+
+		if (d->missing_fruit_frames > MAX_MISSING_FRUIT_FRAMES) {
+			notify_server(d, "sync", 0, 0);
+			d->missing_fruit_frames = 0;
+		}
+	} else
+		d->missing_fruit_frames = 0;
+}
+
 #endif
 
 static void process_input(t_data *d) {
@@ -91,6 +114,22 @@ static void process_input(t_data *d) {
 		d->input_q[i] = d->input_q[i + 1];
 }
 
+void	write_fruit(t_data *d, int x, int y, const char *color) {
+	pthread_mutex_lock(&d->fruit_mutex);
+	d->fruit_x = x;
+	d->fruit_y = y;
+	if (color) d->fruit_color = color;
+	pthread_mutex_unlock(&d->fruit_mutex);
+}
+
+void	read_fruit(t_data *d, int *x, int *y, const char **color) {
+	pthread_mutex_lock(&d->fruit_mutex);
+	if (x) *x = d->fruit_x;
+	if (y) *y = d->fruit_y;
+	if (color) *color = d->fruit_color;
+	pthread_mutex_unlock(&d->fruit_mutex);
+}
+
 void spawn_fruit(t_data *d) {
 	int	i, fruit_x, fruit_y, attempts = 0;
 
@@ -102,18 +141,14 @@ void spawn_fruit(t_data *d) {
 	} while (i < d->size);
 
 	/* Safe Write for local generation */
-	pthread_mutex_lock(&d->fruit_mutex);
-	d->fruit_x = fruit_x;
-	d->fruit_y = fruit_y;
-	d->fruit_color = fruit_color();
-	pthread_mutex_unlock(&d->fruit_mutex);
+	write_fruit(d, fruit_x, fruit_y, fruit_color());
 }
 
 static void	update_game(t_data *d) {
 	if (!d->dir[0]) return;
 
 	const char *moves = " LRUD";
-	if (d->path_steps < 10000) {
+	if (d->path_steps < MAX_SIZE) {
 		d->path[d->path_steps] = moves[d->dir[0]];
 	}
 	d->path_steps++;
@@ -136,10 +171,8 @@ static void	update_game(t_data *d) {
 			d->game_over = 1;
 
 	/* Safe Read */
-	pthread_mutex_lock(&d->fruit_mutex);
-	int fruit_x = d->fruit_x;
-	int fruit_y = d->fruit_y;
-	pthread_mutex_unlock(&d->fruit_mutex);
+	int fruit_x, fruit_y;
+	read_fruit(d, &fruit_x, &fruit_y, NULL);
 
 	if (d->x[0] != fruit_x || d->y[0] != fruit_y)
 		return ;
@@ -156,10 +189,7 @@ static void	update_game(t_data *d) {
 	memset(d->path, 0, sizeof(d->path));
 
 	/* Safe Hide */
-	pthread_mutex_lock(&d->fruit_mutex);
-	d->fruit_x = -1;
-	d->fruit_y = -1;
-	pthread_mutex_unlock(&d->fruit_mutex);
+	write_fruit(d, -1, -1, NULL);
 
 	if (d->size >= d->width * d->height)
 		return;
@@ -180,10 +210,8 @@ static void	render(t_data *d) {
 
 	if (!d->dir[0]) return;
 
-	pthread_mutex_lock(&d->fruit_mutex);
-	int fruit_x = d->fruit_x;
-	int fruit_y = d->fruit_y;
-	pthread_mutex_unlock(&d->fruit_mutex);
+	int fruit_x, fruit_y;
+	read_fruit(d, &fruit_x, &fruit_y, NULL);
 
 	if ((d->x[d->size] != fruit_x || d->y[d->size] != fruit_y) &&
 		(d->x[d->size] != d->x[d->size - 1] || d->y[d->size] != d->y[d->size - 1]))
@@ -215,6 +243,7 @@ void	game_loop(t_data *d) {
 		anticheat(d);
 		process_input(d);
 		update_game(d);
+		sync_fruit_state(d);
 		render(d);
 		usleep(d->delay);
 	}

@@ -25,7 +25,7 @@ const (
 	DBPath                = "scores.db"
 	MaxActiveSessions     = 5000
 	MaxReqPerSec          = 20
-	RequiredClientVersion = "6"
+	RequiredClientVersion = "7"
 )
 
 // --- Structures ---
@@ -723,6 +723,25 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "OK")
 }
 
+// handleSync provides a safe, read-only endpoint for the client's self-healing loop.
+// It allows the client to request the current fruit position without triggering anti-cheat physics.
+func handleSync(w http.ResponseWriter, r *http.Request) {
+    token := r.PathValue("token")
+
+    sessionMutex.RLock()
+    session, exists := activeSessions[token]
+    sessionMutex.RUnlock()
+
+    if !exists || session.Cheated {
+        // Return invalid coordinates so the client stays paused and doesn't spawn anything
+        fmt.Fprint(w, "-1|-1")
+        return
+    }
+    
+    // Return the true coordinates of the current target fruit
+    fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
+}
+
 func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	name := r.PathValue("name")
@@ -861,6 +880,7 @@ func main() {
 	mux.HandleFunc("POST /eat/{token}", handleEat)
 	mux.HandleFunc("GET /cheat/{token}", handleCheat)
 	mux.HandleFunc("GET /quit/{token}", handleQuit)
+	mux.HandleFunc("GET /sync/{token}", handleSync)
 	mux.HandleFunc("GET /submit/{token}/{name}/{steps}", handleSubmit)
 	mux.HandleFunc("GET /scores/{limit}", handleScores)
 

@@ -5,7 +5,7 @@
 int		check_client_version(void) { return (0); }
 int		server_sync_rules(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
-void	(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
+void	notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
 void	handle_leaderboard(t_data *d) { (void)d; }
 void	net_wait_all(void) {}
 
@@ -50,8 +50,20 @@ void	net_wait_all(void) {}
 
 /* Async request pool configuration */
 # define REQ_POOL_SIZE		10
+# define RETRY_DELAY_1		200000
+# define RETRY_DELAY_2		500000
+# define RETRY_DELAY_3		1500000
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
+# if RETRY_DELAY_1 <= 0
+#  error "First retry delay must be strictly positive"
+# endif
+# if RETRY_DELAY_2 <= RETRY_DELAY_1
+#  error "Second retry delay must be greater than the first (exponential backoff)"
+# endif
+# if RETRY_DELAY_3 <= RETRY_DELAY_2
+#  error "Third retry delay must be greater than the second (exponential backoff)"
+# endif
 # if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_GET_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0
 #  error "Buffer sizes must be strictly positive"
 # endif
@@ -179,41 +191,57 @@ static char *skip_headers(char *response) {
 }
 
 static void *async_http_worker(void *arg) {
-	t_req	*req = (t_req *)arg;
-	char	resp[BUF_RESP_SUBMIT];
-	
-	int ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
-							: http_get(req->path, resp, sizeof(resp));
-	if (!ret) {
-		if (strncmp(req->path, "/eat", 4) == 0 && req->d) {
-			char *body = skip_headers(resp);
-			char *sep = strchr(body, '|');
-			
-			/* Custom safety check to avoid silent "0" on garbage data */
-			if (sep && (isdigit(body[0]) || body[0] == '-') && (isdigit(*(sep + 1)) || *(sep + 1) == '-')) {
-				*sep = '\0';
-				int fruit_x = atoi(body);
-				int fruit_y = atoi(sep + 1);
-				
-				/* Lock the mutex to update the pair atomically */
-				pthread_mutex_lock(&req->d->fruit_mutex);
-				req->d->fruit_x = fruit_x;
-				req->d->fruit_y = fruit_y;
-				req->d->fruit_color = fruit_color();
-				pthread_mutex_unlock(&req->d->fruit_mutex);
-			}
-		}
-	}
+    t_req   *req = (t_req *)arg;
+    char    resp[BUF_RESP_SUBMIT];
+    int     ret = -1;
+    int     retries = 0;
+    
+    const int delays[] = {RETRY_DELAY_1, RETRY_DELAY_2, RETRY_DELAY_3};
+    const int max_retries = sizeof(delays) / sizeof(delays[0]);
 
-	pthread_mutex_lock(&g_pool_mutex);
-	req->has_body = 0; 
-	req->in_use = 0;
-	pthread_mutex_unlock(&g_pool_mutex);
-	
-	/* WARNING: TECH DEBT
-	   Do NOT add any code below this unlock. 
-	   net_wait_all() relies on in_use == 0 to assume this thread is physically dead. */
-	return (NULL);
+    /* 
+    ** Level 1 Fix: Exponential Backoff Retry.
+    ** Handles micro-cuts in the network connection smoothly.
+    */
+    while (retries < max_retries) {
+        ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
+                            : http_get(req->path, resp, sizeof(resp));
+        if (ret == 0)
+            break; /* Success! Break out of the retry loop */
+        
+        usleep(delays[retries]);
+        retries++;
+    }
+
+    if (ret == 0) {
+        /* Parse coordinates for both /eat and /sync responses */
+        if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
+            char *body = skip_headers(resp);
+            char *sep = strchr(body, '|');
+            
+            /* Custom safety check to avoid silent "0" on garbage data */
+            if (sep && (isdigit(body[0]) || body[0] == '-') && (isdigit(*(sep + 1)) || *(sep + 1) == '-')) {
+                *sep = '\0';
+                int fruit_x = atoi(body);
+                int fruit_y = atoi(sep + 1);
+                
+                /* Lock the mutex to safely update the fruit state atomically */
+                write_fruit(req->d, fruit_x, fruit_y, fruit_color());
+            }
+        }
+    }
+
+    pthread_mutex_lock(&g_pool_mutex);
+    req->has_body = 0; 
+    req->in_use = 0;
+    pthread_mutex_unlock(&g_pool_mutex);
+    
+    /* 
+    ** WARNING: TECH DEBT
+    ** Do NOT add any code below this unlock. 
+    ** net_wait_all() relies on in_use == 0 to assume this thread is physically dead. 
+    */
+    return (NULL);
 }
 
 static void fire_and_forget(const char *path, const char *body, t_data *d) {

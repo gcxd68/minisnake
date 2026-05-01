@@ -318,10 +318,8 @@ static void	init_game(t_data *d) {
 static void	setup_display(t_data *d) {
 	printf(CLEAR_SCREEN);
 
-	pthread_mutex_lock(&d->fruit_mutex);
-	int fx = d->fruit_x;
-	int fy = d->fruit_y;
-	pthread_mutex_unlock(&d->fruit_mutex);
+	int fx, fy;
+	read_fruit(d, &fx, &fy, NULL);
 
 	if (fx >= 0 && fy >= 0)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 

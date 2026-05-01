@@ -22,7 +22,7 @@
 # endif
 
 /* Client software version for backend synchronization and update enforcement */
-# define CLIENT_VERSION					"6"
+# define CLIENT_VERSION					"7"
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
@@ -34,7 +34,7 @@
 # define DEF_HEIGHT						20
 # define DEF_INITIAL_DELAY				250000
 # define DEF_SPEEDUP_FACTOR				0.985f
-# define DEF_INITIAL_SIZE				3
+# define DEF_INITIAL_SIZE				1
 # define INPUT_Q_SIZE					2
 # define DEF_POINTS_PER_FRUIT			10
 # define DEF_SPAWN_FRUIT_MAX_ATTEMPTS	10000
@@ -225,10 +225,12 @@ typedef struct s_data {
 
 	/* Network & telemetry */
 	char			token[33], path[MAX_SIZE + 1];
-	int				seq, path_steps;
+	int				seq, path_steps, missing_fruit_frames;
 }	t_data;
 
 /* minisnake_game - Gameplay functions */
+void				read_fruit(t_data *d, int *x, int *y, const char **color);
+void				write_fruit(t_data *d, int x, int y, const char *color);
 void				spawn_fruit(t_data *d);
 const char			*fruit_color(void);
 void				game_loop(t_data *d);
