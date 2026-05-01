@@ -164,7 +164,7 @@ static void	enable_raw_mode(void) {
 
 static void	disable_raw_mode(void) {
 	tcsetattr(STDIN_FILENO, TCSANOW, &g_saved_term);
-	printf(CURSOR_SHOW);
+	printf(SCROLL_RESET CURSOR_SHOW);
 }
 
 static void	restore_stdin_flags(void) {

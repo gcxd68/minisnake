@@ -53,6 +53,7 @@ void	net_wait_all(void) {}
 # define RETRY_DELAY_1		200000
 # define RETRY_DELAY_2		500000
 # define RETRY_DELAY_3		1500000
+# define NET_WAIT_DELAY     10000
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
 # if RETRY_DELAY_1 <= 0
@@ -102,6 +103,9 @@ void	net_wait_all(void) {}
 # endif
 # if REQ_POOL_SIZE <= 0
 #  error "REQ_POOL_SIZE must be strictly positive"
+# endif
+# if NET_WAIT_DELAY <= 0
+#  error "NET_WAIT_DELAY must be strictly positive"
 # endif
 
 typedef struct s_req {
@@ -466,7 +470,7 @@ void net_wait_all(void) {
 		pthread_mutex_unlock(&g_pool_mutex);
 		
 		if (pending)
-			usleep(10000); 
+			usleep(NET_WAIT_DELAY); 
 	} while (pending);
 }
 
