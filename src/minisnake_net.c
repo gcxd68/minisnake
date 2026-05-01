@@ -195,57 +195,56 @@ static char *skip_headers(char *response) {
 }
 
 static void *async_http_worker(void *arg) {
-    t_req   *req = (t_req *)arg;
-    char    resp[BUF_RESP_SUBMIT];
-    int     ret = -1;
-    int     retries = 0;
-    
-    const int delays[] = {RETRY_DELAY_1, RETRY_DELAY_2, RETRY_DELAY_3};
-    const int max_retries = sizeof(delays) / sizeof(delays[0]);
+	t_req   *req = (t_req *)arg;
+	char    resp[BUF_RESP_SUBMIT];
+	int     ret = -1;
+	int     retries = 0;
+	
+	const int delays[] = {RETRY_DELAY_1, RETRY_DELAY_2, RETRY_DELAY_3};
+	const int max_retries = sizeof(delays) / sizeof(delays[0]);
 
-    /* 
-    ** Level 1 Fix: Exponential Backoff Retry.
-    ** Handles micro-cuts in the network connection smoothly.
-    */
-    while (retries < max_retries) {
-        ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
-                            : http_get(req->path, resp, sizeof(resp));
-        if (ret == 0)
-            break; /* Success! Break out of the retry loop */
-        
-        usleep(delays[retries]);
-        retries++;
-    }
+	/* 
+	** Level 1 Fix: Exponential Backoff Retry.
+	** Handles micro-cuts in the network connection smoothly.
+	*/
+	while (retries < max_retries) {
+		ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
+							: http_get(req->path, resp, sizeof(resp));
+		if (!ret) break; /* Success! Break out of the retry loop */
+		
+		usleep(delays[retries]);
+		retries++;
+	}
 
-    if (ret == 0) {
-        /* Parse coordinates for both /eat and /sync responses */
-        if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
-            char *body = skip_headers(resp);
-            char *sep = strchr(body, '|');
-            
-            /* Custom safety check to avoid silent "0" on garbage data */
-            if (sep && (isdigit(body[0]) || body[0] == '-') && (isdigit(*(sep + 1)) || *(sep + 1) == '-')) {
-                *sep = '\0';
-                int fruit_x = atoi(body);
-                int fruit_y = atoi(sep + 1);
-                
-                /* Lock the mutex to safely update the fruit state atomically */
-                write_fruit(req->d, fruit_x, fruit_y, fruit_color());
-            }
-        }
-    }
+	if (!ret) {
+		/* Parse coordinates for both /eat and /sync responses */
+		if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
+			char	*body = skip_headers(resp);
+			char	*sep = strchr(body, '|');
+			
+			/* Custom safety check to avoid silent "0" on garbage data */
+			if (sep && (isdigit(body[0]) || body[0] == '-') && (isdigit(*(sep + 1)) || *(sep + 1) == '-')) {
+				*sep = '\0';
+				int fruit_x = atoi(body);
+				int fruit_y = atoi(sep + 1);
+				
+				/* Lock the mutex to safely update the fruit state atomically */
+				write_fruit(req->d, fruit_x, fruit_y, fruit_color());
+			}
+		}
+	}
 
-    pthread_mutex_lock(&g_pool_mutex);
-    req->has_body = 0; 
-    req->in_use = 0;
-    pthread_mutex_unlock(&g_pool_mutex);
-    
-    /* 
-    ** WARNING: TECH DEBT
-    ** Do NOT add any code below this unlock. 
-    ** net_wait_all() relies on in_use == 0 to assume this thread is physically dead. 
-    */
-    return (NULL);
+	pthread_mutex_lock(&g_pool_mutex);
+	req->has_body = 0; 
+	req->in_use = 0;
+	pthread_mutex_unlock(&g_pool_mutex);
+	
+	/* 
+	** WARNING: TECH DEBT
+	** Do NOT add any code below this unlock. 
+	** net_wait_all() relies on in_use == 0 to assume this thread is physically dead. 
+	*/
+	return (NULL);
 }
 
 static void fire_and_forget(const char *path, const char *body, t_data *d) {
