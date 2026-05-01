@@ -33,7 +33,6 @@ If you want to customize the game or run your own server:
 - 🎨 **Modern TUI:** Features VT100 scrolling regions, Unicode graphics, and thread-safe UI updates.
 - ⚙️ **Dynamic Rules:** Game mechanics (speed, grid size) are synced from the server on startup.
 
-
 ---
 
 ## Usage Modes
