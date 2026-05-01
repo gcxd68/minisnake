@@ -73,7 +73,7 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 }
 
 static int	install_dependencies(void) {
-	const int		need_term = system("which xfce4-terminal > /dev/null 2>&1");
+	const int		need_term = system("which gnome-terminal > /dev/null 2>&1");
 	const int		need_font = system("dpkg -s fonts-noto-color-emoji > /dev/null 2>&1");
 
 	if (!need_term && !need_font) return (LAUNCH_SPAWN);
@@ -84,8 +84,8 @@ static int	install_dependencies(void) {
 	if (has_apt && (need_term != 0 || need_font != 0)) {
 		printf("For the best visual experience, these packages are recommended:\n");
 		if (need_term) {
-			printf("- xfce4-terminal\n");
-			strcat(cmd, " xfce4-terminal");
+			printf("- gnome-terminal\n");
+			strcat(cmd, " gnome-terminal");
 		}
 		if (need_font) {
 			printf("- fonts-noto-color-emoji\n");
@@ -99,7 +99,7 @@ static int	install_dependencies(void) {
 		} else
 			printf("Installation skipped.\n");
 	} else if (!has_apt && need_term != 0) {
-		printf("Notice: 'xfce4-terminal' is not installed on this system.\n");
+		printf("Notice: 'gnome-terminal' is not installed on this system.\n");
 	}
 
 	if (ask_confirm("Would you like to play in the current terminal instead? (y/n): "))
@@ -127,8 +127,8 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	snprintf(geom, sizeof(geom), "%dx%d", width, d->height + 4);
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path,
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
-	char *args[] = {"xfce4-terminal", "--disable-server", "--hide-menubar", "--hide-toolbar", "--hide-scrollbar",
-		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "-x", "bash", "-c", cmd, NULL};
+	char *args[] = {"gnome-terminal", "--hide-menubar",
+		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
 	
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
