@@ -287,12 +287,8 @@ static void	init_game(t_data *d) {
 
 	if (!save_state.size)
 		save_state = *d;
-	if (!d->online && save_state.online) {
-		save_state = DEFAULT_RULES;
-		save_state.width = DEF_WIDTH;
-		save_state.height = DEF_HEIGHT;
+	if (!d->online && save_state.online)
 		save_state.online = 0;
-	}
 	*d = save_state;
 
 	/* 1. Init MUTEX AFTER copying save_state to avoid corruption */
