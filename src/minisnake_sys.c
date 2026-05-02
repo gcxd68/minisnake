@@ -129,10 +129,10 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	
 	int has_xfce = (system("which xfce4-terminal > /dev/null 2>&1") == 0);
 	char *args_xfce[] = {"xfce4-terminal", "--disable-server", "--hide-menubar", 
-		"--hide-toolbar", "--hide-scrollbar", "--geometry", geom, "--zoom", "1.2", 
+		"--hide-toolbar", "--hide-scrollbar", "--geometry", geom, "--zoom", TERM_ZOOM, 
 		"--title", TERM_TITLE, "-x", "bash", "-c", cmd, NULL};
 	char *args_gnome[] = {"gnome-terminal", "--hide-menubar",
-		"--geometry", geom, "--zoom", "1.2", "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+		"--geometry", geom, "--zoom", TERM_ZOOM, "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
 	char **args = has_xfce ? args_xfce : args_gnome;
 	
 	setenv("GTK_THEME", "Adwaita:dark", 1);
@@ -193,7 +193,7 @@ static void	setup_terminal(void) {
 }
 
 static void	handle_sig(int sig) {
-	clean_exit(128 + sig);
+	clean_exit(SIG_FATAL_BASE + sig);
 }
 
 static void setup_sig(void) {

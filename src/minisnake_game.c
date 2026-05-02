@@ -56,7 +56,7 @@ static void anticheat(t_data *d) {
 	}
 	last_frame = now;
 
-	if (++counter > 10) {
+	if (++counter > DEBUG_CHECK_FREQ) {
 		FILE	*f = fopen(PROC_STATUS_PATH, "r");
 		char	buf[PROC_BUF_SIZE];
 
@@ -101,13 +101,13 @@ static void process_input(t_data *d) {
 	d->dir[1] = d->dir[0];
 	for (i = 0; d->input_q[i] != EOF; i++);
 	while ((c = getchar()) != EOF) {
-		c = (c == '\033' && getchar() == '[') ? getchar() + 256 : toupper(c);
+		c = (c == '\033' && getchar() == '[') ? getchar() + EXT_KEY_OFFSET : toupper(c);
 		if (i < INPUT_Q_SIZE) d->input_q[i++] = c;
 	}
 	if ((c = d->input_q[0]) == *EXIT_KEY)
 		d->game_over = 1;
 	const char *base = (c > 255) ? arrow_keys : move_keys;
-	pos = strchr(base, (c > 255) ? c - 256 : c);
+	pos = strchr(base, (c > 255) ? c - EXT_KEY_OFFSET : c);
 	if (pos && (pos - base + 2) >> 1 != (d->dir[0] + 1) >> 1)
 		d->dir[0] = pos - base + 1;
 	for (i = 0; i < INPUT_Q_SIZE; i++)
@@ -219,7 +219,7 @@ static void	render(t_data *d) {
 		
 	if (d->size > 1)
 		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
-			(d->dir[0] + d->dir[1] == 5) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
+			(d->dir[0] + d->dir[1] == BEND_TURN_SUM) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
 			
 	if (fruit_x >= 0 && fruit_y >= 0) {
 		for (int i = 0; i < d->size; i++) {

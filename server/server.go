@@ -25,7 +25,7 @@ const (
 	DBPath                = "scores.db"
 	MaxActiveSessions     = 5000
 	MaxReqPerSec          = 20
-	RequiredClientVersion = "7"
+	RequiredClientVersion = "8"
 )
 
 // --- Structures ---
@@ -72,6 +72,7 @@ type Session struct {
 	VacatedTailY       int       // Old tail position to exclude from spawn
 
 	// HEAVY PHYSICS FIELDS (Optimized with O(1) Ring Buffer)
+	LastSeq     int // Tracks sequence number for idempotency to prevent fruit duplicate spawn
 	ExpectedSeq int
 	Grid        []bool  // O(1) Spatial Hashing grid
 	Grow        int     // Pending growth counter
@@ -564,6 +565,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		VacatedTailX:       -1,
 		VacatedTailY:       -1,
 		ExpectedSeq:        1,
+		LastSeq:            0,
 		Grid:               grid,
 		Grow:               Rules.InitialSize - 1,
 		Body:               bodyRing,
@@ -616,6 +618,15 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		} else {
 			fmt.Fprint(w, "0|0")
 		}
+		return
+	}
+
+	// --- IDEMPOTENCY CHECK (Bug Fix) ---
+	// If the client retried because of lag, we must not regenerate the fruit.
+	if payload.Seq <= session.LastSeq {
+		// Duplicate request - return current fruit without reprocessing
+		fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
+		sessionMutex.Unlock()
 		return
 	}
 
@@ -687,6 +698,9 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	session.HeadX, session.HeadY, session.LastSteps = payload.Fx, payload.Fy, payload.Steps
 	session.ExpectedSeq++
 
+	// Update the Sequence Tracker for Idempotency
+	session.LastSeq = payload.Seq
+
 	spawnFruit(session, payload.Fx, payload.Fy, session.VacatedTailX, session.VacatedTailY, latencySteps)
 
 	sessionMutex.Unlock()
@@ -726,20 +740,20 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 // handleSync provides a safe, read-only endpoint for the client's self-healing loop.
 // It allows the client to request the current fruit position without triggering anti-cheat physics.
 func handleSync(w http.ResponseWriter, r *http.Request) {
-    token := r.PathValue("token")
+	token := r.PathValue("token")
 
-    sessionMutex.RLock()
-    session, exists := activeSessions[token]
-    sessionMutex.RUnlock()
+	sessionMutex.RLock()
+	session, exists := activeSessions[token]
+	sessionMutex.RUnlock()
 
-    if !exists || session.Cheated {
-        // Return invalid coordinates so the client stays paused and doesn't spawn anything
-        fmt.Fprint(w, "-1|-1")
-        return
-    }
-    
-    // Return the true coordinates of the current target fruit
-    fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
+	if !exists || session.Cheated {
+		// Return invalid coordinates so the client stays paused and doesn't spawn anything
+		fmt.Fprint(w, "-1|-1")
+		return
+	}
+
+	// Return the true coordinates of the current target fruit
+	fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
 }
 
 func handleSubmit(w http.ResponseWriter, r *http.Request) {

@@ -49,21 +49,21 @@ void	net_wait_all(void) {}
 # define UI_SCORE_WIDTH		7
 
 /* Async request pool configuration */
-# define REQ_POOL_SIZE		10
-# define RETRY_DELAY_1		200000
-# define RETRY_DELAY_2		500000
-# define RETRY_DELAY_3		1500000
-# define NET_WAIT_DELAY     10000
+# define REQ_POOL_SIZE			10
+# define BACKOFF_INITIAL_DELAY	100000
+# define BACKOFF_MAX_DELAY		30000000
+# define BACKOFF_MAX_RETRIES	15
+# define NET_WAIT_DELAY			10000
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
-# if RETRY_DELAY_1 <= 0
-#  error "First retry delay must be strictly positive"
+# if BACKOFF_INITIAL_DELAY <= 0
+#  error "BACKOFF_INITIAL_DELAY must be strictly positive"
 # endif
-# if RETRY_DELAY_2 <= RETRY_DELAY_1
-#  error "Second retry delay must be greater than the first (exponential backoff)"
+# if BACKOFF_MAX_DELAY <= BACKOFF_INITIAL_DELAY
+#  error "BACKOFF_MAX_DELAY must be greater than BACKOFF_INITIAL_DELAY"
 # endif
-# if RETRY_DELAY_3 <= RETRY_DELAY_2
-#  error "Third retry delay must be greater than the second (exponential backoff)"
+# if BACKOFF_MAX_RETRIES <= 0
+#  error "BACKOFF_MAX_RETRIES must be strictly positive"
 # endif
 # if BUF_RESP_SUBMIT <= 0 || BUF_RESP_SCORES <= 0 || BUF_READ <= 0 || BUF_GET_REQ <= 0 || BUF_PATH <= 0 || BUF_ENTRY <= 0
 #  error "Buffer sizes must be strictly positive"
@@ -199,21 +199,23 @@ static void *async_http_worker(void *arg) {
 	char    resp[BUF_RESP_SUBMIT];
 	int     ret = -1;
 	int     retries = 0;
-	
-	const int delays[] = {RETRY_DELAY_1, RETRY_DELAY_2, RETRY_DELAY_3};
-	const int max_retries = sizeof(delays) / sizeof(delays[0]);
+	int     delay = BACKOFF_INITIAL_DELAY;
 
 	/* 
 	** Level 1 Fix: Exponential Backoff Retry.
 	** Handles micro-cuts in the network connection smoothly.
 	*/
-	while (retries < max_retries) {
+	while (1) {
 		ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
 							: http_get(req->path, resp, sizeof(resp));
 		if (!ret) break; /* Success! Break out of the retry loop */
 		
-		usleep(delays[retries]);
+		usleep(delay);
 		retries++;
+		/* Double the delay each time, capping at a maximum threshold */
+		delay = MIN(delay * 2, BACKOFF_MAX_DELAY);
+		/* Give up eventually to avoid infinite zombie threads */
+		if (retries > BACKOFF_MAX_RETRIES) break;
 	}
 
 	if (!ret) {

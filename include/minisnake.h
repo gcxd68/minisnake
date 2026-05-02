@@ -22,7 +22,7 @@
 # endif
 
 /* Client software version for backend synchronization and update enforcement */
-# define CLIENT_VERSION					"7"
+# define CLIENT_VERSION					"8"
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
@@ -65,6 +65,12 @@
 # define TERM_TITLE						"minisnake"
 # define ENV_VAR						"MINISNAKE_LAUNCHED"
 # define DEFAULT_EXE					"./minisnake"
+# define TERM_ZOOM						"1.2"
+# define SIG_FATAL_BASE					128
+
+/* PHYSICS & INPUT ENUMERATIONS */
+# define EXT_KEY_OFFSET					256
+# define BEND_TURN_SUM					5
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
 # if MIN_WIDTH < 2
