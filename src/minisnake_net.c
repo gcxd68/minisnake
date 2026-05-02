@@ -210,12 +210,13 @@ static void *async_http_worker(void *arg) {
 							: http_get(req->path, resp, sizeof(resp));
 		if (!ret) break; /* Success! Break out of the retry loop */
 		
+		/* Give up eventually to avoid infinite zombie threads */
+		if (retries >= BACKOFF_MAX_RETRIES) break;
+
 		usleep(delay);
 		retries++;
 		/* Double the delay each time, capping at a maximum threshold */
 		delay = MIN(delay * 2, BACKOFF_MAX_DELAY);
-		/* Give up eventually to avoid infinite zombie threads */
-		if (retries > BACKOFF_MAX_RETRIES) break;
 	}
 
 	if (!ret) {
