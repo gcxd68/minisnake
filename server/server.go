@@ -25,7 +25,7 @@ const (
 	DBPath                = "scores.db"
 	MaxActiveSessions     = 5000
 	MaxReqPerSec          = 20
-	RequiredClientVersion = "8"
+	RequiredClientVersion = "v0.86"
 )
 
 // --- Structures ---
@@ -50,6 +50,8 @@ type Point struct {
 }
 
 type Session struct {
+	sync.Mutex // Per-session lock for granular concurrency
+
 	Score         int
 	FruitsEaten   int
 	StartTime     time.Time
@@ -99,14 +101,14 @@ var (
 	Rules          GameRules
 	db             *sql.DB
 	activeSessions = make(map[string]*Session)
-	sessionMutex   sync.RWMutex
+	sessionMutex   sync.RWMutex // Protects the activeSessions map ONLY
 	ipDataMap      = make(map[string]*IPData)
 	ipMutex        sync.Mutex
 
 	// --- Auto-Calibration Variables ---
-	calibrationVariances []float64
-	calibrationMutex     sync.RWMutex
-	CalibrationLimit     int = 100 // Number of samples required before activating the ban
+	baselinePathingInefficiency []float64
+	calibrationMutex            sync.RWMutex
+	CalibrationLimit            int = 100 // Number of samples required before activating the ban
 )
 
 // --- Configuration & Initialization ---
@@ -184,11 +186,7 @@ func applyPenalties(session *Session, newSteps int) {
 }
 
 // spawnFruit generates the next target fruit server-side.
-// OPTIMIZATION: Uses O(1) boolean Grid for instant collision checks.
-// LATENCY-AWARE: Incorporates the 'latencySteps' prediction cloud to strictly prevent ghost-eating.
 func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY, latencySteps int) {
-	// 1. Cap the latency steps to prevent impossible mathematical constraints during huge lag spikes.
-	// A max radius of 4 tiles (Manhattan) covers up to ~400ms of latency, which is more than enough.
 	if latencySteps > 4 {
 		latencySteps = 4
 	}
@@ -203,27 +201,19 @@ func spawnFruit(session *Session, prevX, prevY, vacatedTailX, vacatedTailY, late
 
 		gridIndex := candY*Rules.GameWidth + candX
 
-		// 2. Stepped Graceful Degradation (Multi-stage fallback)
-		// Instead of dropping latency protection instantly to zero, we lower the constraints gradually
-		// if the RNG struggles to find a valid spot on a crowded board.
 		currentMinDist := idealDist
 
 		if i > 300 {
-			// Panic mode: Board is extremely full, accept any empty tile
 			currentMinDist = 0
 		} else if i > 200 {
-			// Severe fallback: Accept tiles very close to the head
 			currentMinDist = 1
 		} else if i > 100 {
-			// Moderate fallback: Drop latency protection, but maintain base anti-lag distance
 			currentMinDist = Rules.MinFruitDist
 		}
 
 		dist := int(math.Abs(float64(candX-session.HeadX)) + math.Abs(float64(candY-session.HeadY)))
 		isVacatedTail := (candX == vacatedTailX && candY == vacatedTailY)
 
-		// Ensure the fruit is NOT on the snake's body, NOT on the previous fruit,
-		// NOT on the just-vacated tail tile, AND satisfies the current distance tier.
 		if !session.Grid[gridIndex] && (candX != prevX || candY != prevY) && !isVacatedTail && dist >= currentMinDist {
 			session.TargetFruit = Point{X: candX, Y: candY}
 			return
@@ -269,6 +259,8 @@ func flagIfBotFingerprint(r *http.Request, session *Session, ip, token string) b
 func cleanupStaleData() {
 	sessionMutex.Lock()
 	for token, session := range activeSessions {
+		// No need to lock the individual session here as we are deleting it,
+		// and the map lock prevents new requests from acquiring it.
 		if time.Since(session.LastPing).Seconds() > 900 {
 			delete(activeSessions, token)
 		}
@@ -276,8 +268,7 @@ func cleanupStaleData() {
 	sessionMutex.Unlock()
 }
 
-// SimulatePath safely replays the client's path instantly without O(N) array shifting CPU penalties.
-// Returns an error if the path is invalid or if a collision occurs.
+// SimulatePath safely replays the client's path instantly.
 func (session *Session) SimulatePath(path string, deltaSteps int) error {
 	validMoves := 0
 	vacatedTailValid := false
@@ -299,29 +290,23 @@ func (session *Session) SimulatePath(path string, deltaSteps int) error {
 		case 'R':
 			newHead.X++
 		default:
-			// Strict validation: Any character other than U, D, L, R implies payload tampering.
 			return fmt.Errorf("[SHADOWBAN_PHYSICS] Invalid character '%c' in path", move)
 		}
 
 		validMoves++
 
-		// A. Wall Collision Check
 		if newHead.X < 0 || newHead.X >= Rules.GameWidth || newHead.Y < 0 || newHead.Y >= Rules.GameHeight {
 			return fmt.Errorf("[SHADOWBAN_PHYSICS] Wall collision at (%d,%d)", newHead.X, newHead.Y)
 		}
 
-		// B. Self Collision Check O(1)
 		gridIndex := newHead.Y*Rules.GameWidth + newHead.X
 		tail := session.Body[session.TailIdx]
-
-		// Exception: It's valid if the snake's head enters the space the tail is currently leaving
 		isTailMoving := (newHead.X == tail.X && newHead.Y == tail.Y && session.Grow == 0)
 
 		if session.Grid[gridIndex] && !isTailMoving {
 			return fmt.Errorf("[SHADOWBAN_PHYSICS] Self-collision at (%d,%d)", newHead.X, newHead.Y)
 		}
 
-		// C. Mutate State: Advance Tail or Grow (MUST BE FIRST TO PREVENT FALSE GRID OVERRIDES)
 		if session.Grow > 0 {
 			session.Grow--
 			session.Size++
@@ -329,21 +314,15 @@ func (session *Session) SimulatePath(path string, deltaSteps int) error {
 			oldTail := session.Body[session.TailIdx]
 			currentVacatedTail = oldTail
 			vacatedTailValid = true
-
-			// Remove tail from spatial grid before head claims the space
 			session.Grid[oldTail.Y*Rules.GameWidth+oldTail.X] = false
-
-			// Advance tail pointer in the ring buffer
 			session.TailIdx = (session.TailIdx + 1) % len(session.Body)
 		}
 
-		// D. Mutate State: Advance Head (SECOND)
 		session.HeadIdx = (session.HeadIdx + 1) % len(session.Body)
 		session.Body[session.HeadIdx] = newHead
 		session.Grid[gridIndex] = true
 	}
 
-	// Capture the last vacated tail position to prevent immediate fruit spawns on it
 	if vacatedTailValid {
 		session.VacatedTailX = currentVacatedTail.X
 		session.VacatedTailY = currentVacatedTail.Y
@@ -369,28 +348,23 @@ func (session *Session) ValidateTarget(fx, fy int) error {
 }
 
 // ValidateTimeCorridor ensures the client is not speeding up the game engine artificially.
-// Returns the calculated actual time and current delay for latency parsing, plus any error.
 func (session *Session) ValidateTimeCorridor(deltaSteps int) (actualTime, currentDelaySec float64, err error) {
 	currentDelaySec = (Rules.InitialDelay / 1000000.0) * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
 	expectedTime := currentDelaySec * float64(deltaSteps)
 	actualTime = time.Since(session.LastPing).Seconds()
 
-	// Prevent the initial idle time (Start Screen) from poisoning the sliding window
 	if session.FruitsEaten == 0 {
 		actualTime = expectedTime
 	}
 
-	// Append metrics to the sliding window
 	session.RecentActualTime = append(session.RecentActualTime, actualTime)
 	session.RecentExpectedTime = append(session.RecentExpectedTime, expectedTime)
 
-	// Keep only the last 5 data points
 	if len(session.RecentActualTime) > 5 {
 		session.RecentActualTime = session.RecentActualTime[1:]
 		session.RecentExpectedTime = session.RecentExpectedTime[1:]
 	}
 
-	// Sum the window to absorb network jitter & lag spikes safely
 	sumExpected := 0.0
 	sumActual := 0.0
 	for i := range session.RecentActualTime {
@@ -398,7 +372,6 @@ func (session *Session) ValidateTimeCorridor(deltaSteps int) (actualTime, curren
 		sumActual += session.RecentActualTime[i]
 	}
 
-	// Validate against the smoothed total time
 	upperBound := sumExpected + (float64(Rules.CheatTimeout) / 1000.0) + 5.0
 
 	if sumActual < math.Max(0, (sumExpected*0.75)-1.0) || sumActual > upperBound {
@@ -408,7 +381,7 @@ func (session *Session) ValidateTimeCorridor(deltaSteps int) (actualTime, curren
 	return actualTime, currentDelaySec, err
 }
 
-// CheckBehavioralAnalytics applies Turing tests to verify human-like behaviors such as pathing imperfections.
+// CheckBehavioralAnalytics applies Turing tests to verify human-like behaviors.
 func (session *Session) CheckBehavioralAnalytics(fx, fy, deltaSteps int, ip, token string) error {
 	manhattan := int(math.Abs(float64(fx-session.HeadX)) + math.Abs(float64(fy-session.HeadY)))
 	detour := deltaSteps - manhattan
@@ -452,24 +425,24 @@ func (session *Session) CheckBehavioralAnalytics(fx, fy, deltaSteps int, ip, tok
 				calibrationMutex.Lock()
 				defer calibrationMutex.Unlock()
 
-				if len(calibrationVariances) < CalibrationLimit {
+				if len(baselinePathingInefficiency) < CalibrationLimit {
 					isCalibrating = true
 					if !session.Calibrated {
 						if variance > 0.5 {
-							calibrationVariances = append(calibrationVariances, variance)
+							baselinePathingInefficiency = append(baselinePathingInefficiency, variance)
 							session.Calibrated = true
-							log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (variance: %.2f)", ip, token[:8], len(calibrationVariances), CalibrationLimit, variance)
+							log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (inefficiency variance: %.2f)", ip, token[:8], len(baselinePathingInefficiency), CalibrationLimit, variance)
 						}
 					}
 				} else {
 					sumHist := 0.0
-					for _, v := range calibrationVariances {
+					for _, v := range baselinePathingInefficiency {
 						sumHist += v
 					}
 					meanHist := sumHist / float64(CalibrationLimit)
 
 					varSumHist := 0.0
-					for _, v := range calibrationVariances {
+					for _, v := range baselinePathingInefficiency {
 						varSumHist += math.Pow(v-meanHist, 2)
 					}
 					stdDev := math.Sqrt(varSumHist / float64(CalibrationLimit))
@@ -508,24 +481,19 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionMutex.RUnlock()
 
-	// Generate secure token
 	bytes := make([]byte, 16)
 	rand.Read(bytes)
 	token := hex.EncodeToString(bytes)
 
-	// Create the global server seed for future fruits
 	seedBytes := make([]byte, 4)
 	rand.Read(seedBytes)
 	currentSeed := (uint32(seedBytes[0])<<24 | uint32(seedBytes[1])<<16 | uint32(seedBytes[2])<<8 | uint32(seedBytes[3])) & 0x7fffffff
 
-	// Server Authority: We use the true random seed to calculate the initial offset.
-	// We will send this calculated position directly to the client to prevent any desync.
 	clientSeed := currentSeed
 	offsetX, offsetY := 0, 0
 
 	if Rules.GameWidth%2 == 0 {
 		clientSeed = lcgRand(clientSeed)
-		// Bitshift >> 16 is mathematically required here because lower bits of LCG are highly predictable
 		offsetX = int((clientSeed >> 16) % 2)
 	}
 	if Rules.GameHeight%2 == 0 {
@@ -537,12 +505,9 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	headY := (Rules.GameHeight / 2) - offsetY
 	head := Point{X: headX, Y: headY}
 
-	// Initialize the O(1) tracking grid and Ring Buffer
 	grid := make([]bool, Rules.GameWidth*Rules.GameHeight)
 	grid[headY*Rules.GameWidth+headX] = true
 
-	// Expanded Ring Buffer capacity to 10,000 to match the C client natively.
-	// This prevents memory wrap-around overwrites when the snake approaches the maximum board size.
 	bodyRing := make([]Point, 10000)
 	bodyRing[0] = head
 
@@ -574,7 +539,6 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		Size:               1,
 	}
 
-	// Initial spawn has no latency cloud
 	spawnFruit(session, -1, -1, -1, -1, 0)
 
 	sessionMutex.Lock()
@@ -582,7 +546,6 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	sessionMutex.Unlock()
 
 	log.Printf("[%s] [%s...] [SESSION_START]", ip, token[:8])
-	// Send Token + Head Coordinates + Fruit Coordinates to enforce Server Authority
 	fmt.Fprintf(w, "%s|%d|%d|%d|%d", token, headX, headY, session.TargetFruit.X, session.TargetFruit.Y)
 }
 
@@ -590,7 +553,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	ip := getRemoteIP(r)
 
-	// 1. Decode the JSON POST Payload (with Memory Exhaustion DoS protection)
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*10)
 	var payload EatPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
@@ -598,10 +560,11 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionMutex.Lock()
+	// 1. Get the session quickly using RLock
+	sessionMutex.RLock()
 	session, exists := activeSessions[token]
+	sessionMutex.RUnlock()
 
-	// Helper: Generates a believable fake fruit WITHOUT mutating the real session state.
 	sendFakeFruit := func() {
 		fakeSeed := session.Seed
 		fakeSeed = lcgRand(fakeSeed)
@@ -611,32 +574,31 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%d|%d", fakeX, fakeY)
 	}
 
-	if !exists || session.Cheated || flagIfBotFingerprint(r, session, ip, token) {
-		sessionMutex.Unlock()
-		if exists && session.Cheated {
-			sendFakeFruit()
-		} else {
-			fmt.Fprint(w, "0|0")
-		}
+	if !exists {
+		fmt.Fprint(w, "0|0")
 		return
 	}
 
-	// --- IDEMPOTENCY CHECK (Bug Fix) ---
-	// If the client retried because of lag, we must not regenerate the fruit.
+	// 2. Lock ONLY this specific player's session
+	session.Lock()
+	defer session.Unlock()
+
+	if session.Cheated || flagIfBotFingerprint(r, session, ip, token) {
+		sendFakeFruit()
+		return
+	}
+
+	// --- IDEMPOTENCY CHECK ---
 	if payload.Seq <= session.LastSeq {
-		// Duplicate request - return current fruit without reprocessing
 		fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
-		sessionMutex.Unlock()
 		return
 	}
 
-	// 2. Core Validations (Read Only)
 	deltaSteps := payload.Steps - session.LastSteps
 	if deltaSteps <= 0 {
 		session.Cheated = true
 	}
 
-	// 3. HEAVY PHYSICS: O(1) Simulation using Spatial Hashing & Ring Buffers
 	if !session.Cheated {
 		if err := session.SimulatePath(payload.Path, deltaSteps); err != nil {
 			session.Cheated = true
@@ -644,7 +606,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 4. Target Validation
 	if !session.Cheated {
 		if err := session.ValidateTarget(payload.Fx, payload.Fy); err != nil {
 			session.Cheated = true
@@ -652,7 +613,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 5. Local Time Corridor (Sliding Window Lag Compensation)
 	var actualTime, currentDelaySec float64
 	if !session.Cheated {
 		var err error
@@ -663,7 +623,6 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 6. Behavioral Analytics & Active Turing Tests
 	if !session.Cheated {
 		if err := session.CheckBehavioralAnalytics(payload.Fx, payload.Fy, deltaSteps, ip, token); err != nil {
 			session.Cheated = true
@@ -672,48 +631,46 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if session.Cheated {
-		sessionMutex.Unlock()
 		sendFakeFruit()
 		return
 	}
 
-	// Apply valid game mutations
 	applyPenalties(session, payload.Steps)
 	session.Score += Rules.PointsPerFruit
 	session.FruitsEaten++
-	session.Grow++ // Flag the snake to grow on its next set of physical steps
+	session.Grow++
 
 	if session.Score > Rules.MaxScore {
 		session.Cheated = true
-		sessionMutex.Unlock()
 		sendFakeFruit()
 		return
 	}
 
-	// 7. Latency-Aware Spawning (Probability Cloud)
 	ping := math.Max(0.0, actualTime-(currentDelaySec*float64(deltaSteps)))
 	latencySteps := int(math.Ceil(ping / currentDelaySec))
 
 	session.LastPing = time.Now()
 	session.HeadX, session.HeadY, session.LastSteps = payload.Fx, payload.Fy, payload.Steps
 	session.ExpectedSeq++
-
-	// Update the Sequence Tracker for Idempotency
 	session.LastSeq = payload.Seq
 
 	spawnFruit(session, payload.Fx, payload.Fy, session.VacatedTailX, session.VacatedTailY, latencySteps)
 
-	sessionMutex.Unlock()
 	fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
 }
 
 func handleCheat(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
-	sessionMutex.Lock()
-	if session, exists := activeSessions[token]; exists {
+
+	sessionMutex.RLock()
+	session, exists := activeSessions[token]
+	sessionMutex.RUnlock()
+
+	if exists {
+		session.Lock()
 		session.Cheated = true
+		session.Unlock()
 	}
-	sessionMutex.Unlock()
 	fmt.Fprint(w, "Flagged")
 }
 
@@ -721,6 +678,7 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 	ip := getRemoteIP(r)
 
+	// Deleting from the map requires the global write lock
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 	if exists {
@@ -728,8 +686,8 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionMutex.Unlock()
 
-	// If the session existed, log the aborted game in a unified way
 	if exists {
+		// Log safely since the session object itself is now detached from the map
 		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=no_name score=%d fruits=%d",
 			ip, token[:8], session.Score, session.FruitsEaten)
 	}
@@ -737,8 +695,6 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "OK")
 }
 
-// handleSync provides a safe, read-only endpoint for the client's self-healing loop.
-// It allows the client to request the current fruit position without triggering anti-cheat physics.
 func handleSync(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
 
@@ -746,13 +702,19 @@ func handleSync(w http.ResponseWriter, r *http.Request) {
 	session, exists := activeSessions[token]
 	sessionMutex.RUnlock()
 
-	if !exists || session.Cheated {
-		// Return invalid coordinates so the client stays paused and doesn't spawn anything
+	if !exists {
 		fmt.Fprint(w, "-1|-1")
 		return
 	}
 
-	// Return the true coordinates of the current target fruit
+	session.Lock()
+	defer session.Unlock()
+
+	if session.Cheated {
+		fmt.Fprint(w, "-1|-1")
+		return
+	}
+
 	fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
 }
 
@@ -762,6 +724,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	steps, _ := strconv.Atoi(r.PathValue("steps"))
 	ip := getRemoteIP(r)
 
+	// Deleting from the map requires the global write lock
 	sessionMutex.Lock()
 	session, exists := activeSessions[token]
 	if exists {
@@ -773,6 +736,8 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "OK")
 		return
 	}
+
+	// We own this detached session now, no need to lock it internally
 	if len(name) == 0 || len(name) > 8 || !isAlphanumeric(name) {
 		fmt.Fprint(w, "OK")
 		return
@@ -782,33 +747,23 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Global Sanity Check (Absolute Time Corridor)
 	duration := time.Since(session.StartTime).Seconds()
-
-	// ACCURATE INTEGRAL CALCULATION:
-	// To find the absolute mathematical minimum time for the entire game,
-	// we assume the player spent the minimum steps possible (MinFruitDist)
-	// during the early (slower) levels, and took all extra wandering steps at their final (fastest) level.
 	baseDelay := Rules.InitialDelay / 1000000.0
 	minExpected := 0.0
 
 	minStepsPerFruit := Rules.MinFruitDist
 	extraSteps := steps - (session.FruitsEaten * minStepsPerFruit)
 	if extraSteps < 0 {
-		extraSteps = 0 // Failsafe
+		extraSteps = 0
 	}
 
-	// 1. Time spent eating fruits as fast as physically possible
 	for i := 0; i < session.FruitsEaten; i++ {
 		delayAtLevel := baseDelay * math.Pow(Rules.SpeedupFactor, float64(i))
 		minExpected += float64(minStepsPerFruit) * delayAtLevel
 	}
 
-	// 2. Time spent wandering at the maximum speed achieved
 	finalDelay := baseDelay * math.Pow(Rules.SpeedupFactor, float64(session.FruitsEaten))
 	minExpected += float64(extraSteps) * finalDelay
-
-	// Apply a strict 15% tolerance margin for network jitter and server clock precision
 	minExpected = minExpected * 0.85
 
 	if steps > 0 && duration < minExpected {
@@ -816,8 +771,6 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[%s] [%s...] [SHADOWBAN_GLOBALSPEED] duration=%.1f steps=%d min_expected=%.1f", ip, token[:8], duration, steps, minExpected)
 	}
 
-	// Apply penalties to ALL players (including shadowbanned ones)
-	// to ensure the final telemetry score perfectly mirrors a realistic game.
 	if session.Score > 0 {
 		applyPenalties(session, steps)
 	}
@@ -833,10 +786,8 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		if session.Cheated {
-			// Log the exact simulated score and fruit count for shadowbanned bots to gather accurate telemetry
 			log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=shadowbanned name='%s' score=%d fruits=%d", ip, token[:8], name, session.Score, session.FruitsEaten)
 		} else {
-			// Standard minimalist log for legitimate players who simply scored 0
 			log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=0_score name='%s'", ip, token[:8], name)
 		}
 	}

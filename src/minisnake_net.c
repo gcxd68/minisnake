@@ -15,6 +15,7 @@ void	net_wait_all(void) {}
 # include <netdb.h>
 # include <netinet/in.h>
 # include <sys/socket.h>
+# include <sys/time.h> /* Required for socket timeouts (struct timeval) */
 
 /* Network Constants */
 # define BUF_READ			4096									/* Socket read chunk size */
@@ -115,16 +116,25 @@ typedef struct s_req {
 
 static t_req g_req_pool[REQ_POOL_SIZE];
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int g_shutting_down = 0; /* Global flag to signal cancellation to worker threads */
 
 static int server_connect(void) {
 	struct sockaddr_in	addr;
 	struct hostent		*he;
 	int					fd;
+	struct timeval		tv;
 
 	if (!(he = gethostbyname(HOST)))
 		return (-1);
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		return (-1);
+
+	/* Set socket timeouts to prevent infinite blocking on dead networks */
+	tv.tv_sec = 2; /* 2 seconds timeout */
+	tv.tv_usec = 0;
+	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(atoi(PORT)); 
 	addr.sin_addr = *(struct in_addr *)he->h_addr;
@@ -198,7 +208,7 @@ static void *async_http_worker(void *arg) {
 	int     retries = 0;
 	int		delay = req->d ? MAX(BACKOFF_MIN_DELAY, (int)(req->d->delay * 0.66f)) : BACKOFF_MIN_DELAY;
 
-	/* Exponential Backoff Retry */
+	/* Exponential Backoff Retry with graceful cancellation */
 	while (1) {
 		ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
 							: http_get(req->path, resp, sizeof(resp));
@@ -207,7 +217,21 @@ static void *async_http_worker(void *arg) {
 		/* Give up eventually to avoid infinite zombie threads */
 		if (retries >= BACKOFF_MAX_RETRIES) break;
 
-		usleep(delay);
+		/* Sleep in small increments to quickly detect shutdown signals */
+		int slept = 0;
+		while (slept < delay) {
+			pthread_mutex_lock(&g_pool_mutex);
+			int is_shutting_down = g_shutting_down;
+			pthread_mutex_unlock(&g_pool_mutex);
+
+			if (is_shutting_down) {
+				goto cleanup;
+			}
+			
+			usleep(10000); /* 10ms polling interval */
+			slept += 10000;
+		}
+		
 		retries++;
 		
 		/* Double the delay each time, capping at a maximum threshold */
@@ -232,16 +256,12 @@ static void *async_http_worker(void *arg) {
 		}
 	}
 
+cleanup:
 	pthread_mutex_lock(&g_pool_mutex);
 	req->has_body = 0; 
 	req->in_use = 0;
 	pthread_mutex_unlock(&g_pool_mutex);
 	
-	/* 
-	** WARNING: TECH DEBT
-	** Do NOT add any code below this unlock. 
-	** net_wait_all() relies on in_use == 0 to assume this thread is physically dead. 
-	*/
 	return (NULL);
 }
 
@@ -455,6 +475,14 @@ void handle_leaderboard(t_data *d) {
 /* Wait for all async requests to finish before tearing down the game */
 void net_wait_all(void) {
 	int pending;
+	int elapsed_ms = 0;
+	const int timeout_ms = 3000; /* Force shutdown after 3 seconds max */
+
+	/* Signal all async workers to terminate their wait loops */
+	pthread_mutex_lock(&g_pool_mutex);
+	g_shutting_down = 1;
+	pthread_mutex_unlock(&g_pool_mutex);
+
 	do {
 		pending = 0;
 		pthread_mutex_lock(&g_pool_mutex);
@@ -466,8 +494,13 @@ void net_wait_all(void) {
 		}
 		pthread_mutex_unlock(&g_pool_mutex);
 		
-		if (pending)
-			usleep(NET_WAIT_DELAY); 
+		if (pending) {
+			usleep(NET_WAIT_DELAY);
+			elapsed_ms += (NET_WAIT_DELAY / 1000);
+			if (elapsed_ms >= timeout_ms) {
+				break;
+			}
+		}
 	} while (pending);
 }
 

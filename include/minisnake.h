@@ -22,14 +22,14 @@
 # endif
 
 /* Client software version for backend synchronization and update enforcement */
-# define CLIENT_VERSION					"8"
+# define CLIENT_VERSION					"v0.86"
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
 # define MIN_HEIGHT						2
 # define MAX_WIDTH						200
 # define MAX_HEIGHT						50
-# define MAX_SIZE    					(MAX_WIDTH * MAX_HEIGHT)
+# define MAX_SIZE						(MAX_WIDTH * MAX_HEIGHT)
 # define DEF_WIDTH						25
 # define DEF_HEIGHT						20
 # define DEF_INITIAL_DELAY				250000
