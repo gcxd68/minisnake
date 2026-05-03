@@ -50,17 +50,14 @@ void	net_wait_all(void) {}
 
 /* Async request pool configuration */
 # define REQ_POOL_SIZE			10
-# define BACKOFF_INITIAL_DELAY	100000
+# define BACKOFF_MIN_DELAY		100000
 # define BACKOFF_MAX_DELAY		30000000
 # define BACKOFF_MAX_RETRIES	15
 # define NET_WAIT_DELAY			10000
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
-# if BACKOFF_INITIAL_DELAY <= 0
-#  error "BACKOFF_INITIAL_DELAY must be strictly positive"
-# endif
-# if BACKOFF_MAX_DELAY <= BACKOFF_INITIAL_DELAY
-#  error "BACKOFF_MAX_DELAY must be greater than BACKOFF_INITIAL_DELAY"
+# if BACKOFF_MAX_DELAY <= 0
+#  error "BACKOFF_MAX_DELAY must be strictly positive"
 # endif
 # if BACKOFF_MAX_RETRIES <= 0
 #  error "BACKOFF_MAX_RETRIES must be strictly positive"
@@ -199,22 +196,20 @@ static void *async_http_worker(void *arg) {
 	char    resp[BUF_RESP_SUBMIT];
 	int     ret = -1;
 	int     retries = 0;
-	int     delay = BACKOFF_INITIAL_DELAY;
+	int		delay = req->d ? MAX(BACKOFF_MIN_DELAY, (int)(req->d->delay * 0.66f)) : BACKOFF_MIN_DELAY;
 
-	/* 
-	** Level 1 Fix: Exponential Backoff Retry.
-	** Handles micro-cuts in the network connection smoothly.
-	*/
+	/* Exponential Backoff Retry */
 	while (1) {
 		ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
 							: http_get(req->path, resp, sizeof(resp));
-		if (!ret) break; /* Success! Break out of the retry loop */
+		if (!ret) break;
 		
 		/* Give up eventually to avoid infinite zombie threads */
 		if (retries >= BACKOFF_MAX_RETRIES) break;
 
 		usleep(delay);
 		retries++;
+		
 		/* Double the delay each time, capping at a maximum threshold */
 		delay = MIN(delay * 2, BACKOFF_MAX_DELAY);
 	}
