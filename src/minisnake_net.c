@@ -202,10 +202,10 @@ static char *skip_headers(char *response) {
 }
 
 static void *async_http_worker(void *arg) {
-	t_req   *req = (t_req *)arg;
-	char    resp[BUF_RESP_SUBMIT];
-	int     ret = -1;
-	int     retries = 0;
+	t_req	*req = (t_req *)arg;
+	char	resp[BUF_RESP_SUBMIT];
+	int		ret = -1;
+	int		retries = 0;
 	int		delay = req->d ? MAX(BACKOFF_MIN_DELAY, (int)(req->d->delay * 0.66f)) : BACKOFF_MIN_DELAY;
 
 	/* Exponential Backoff Retry with graceful cancellation */
