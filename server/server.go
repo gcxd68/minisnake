@@ -25,7 +25,7 @@ const (
 	DBPath                = "scores.db"
 	MaxActiveSessions     = 5000
 	MaxReqPerSec          = 20
-	RequiredClientVersion = "v0.86"
+	RequiredClientVersion = "v0.87"
 )
 
 // --- Structures ---
@@ -588,8 +588,11 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- IDEMPOTENCY CHECK ---
+	// --- IDEMPOTENCY CHECK (Absolute protection against retries) ---
 	if payload.Seq <= session.LastSeq {
+		// The client has already eaten this fruit (request replayed by backoff).
+		// We don't punish them; we just return the current target
+		// so they can resynchronize.
 		fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
 		return
 	}
@@ -652,6 +655,8 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	session.LastPing = time.Now()
 	session.HeadX, session.HeadY, session.LastSteps = payload.Fx, payload.Fy, payload.Steps
 	session.ExpectedSeq++
+
+	// Validate current sequence to block future duplicates
 	session.LastSeq = payload.Seq
 
 	spawnFruit(session, payload.Fx, payload.Fy, session.VacatedTailX, session.VacatedTailY, latencySteps)

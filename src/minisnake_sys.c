@@ -127,24 +127,36 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path,
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
 	
-	int has_xfce = (system("which xfce4-terminal > /dev/null 2>&1") == 0);
-	char *args_xfce[] = {"xfce4-terminal", "--disable-server", "--hide-menubar", 
-		"--hide-toolbar", "--hide-scrollbar", "--geometry", geom, "--zoom", TERM_ZOOM, 
-		"--title", TERM_TITLE, "-x", "bash", "-c", cmd, NULL};
-	char *args_gnome[] = {"gnome-terminal", "--hide-menubar",
-		"--geometry", geom, "--zoom", TERM_ZOOM, "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
-	char **args = has_xfce ? args_xfce : args_gnome;
-	
+	/* Politely request the dark theme (Adwaita Dark) */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
-	if (execvp(args[0], args) == -1) {
-		perror("minisnake: execvp failed");
-		fprintf(stderr, "Failed to open a new terminal window.\n");
-		free(self);
-		if (!ask_confirm("Would you like to use the current terminal instead? (y/n): "))
-			return(EXIT_FAILURE);
-	}
 
+	/* --- 1. Try XFCE Terminal --- */
+	if (system("which xfce4-terminal > /dev/null 2>&1") == 0) {
+		char *args_xfce[] = {"xfce4-terminal", "--disable-server", "--hide-menubar", 
+			"--hide-toolbar", "--hide-scrollbar", "--geometry", geom, "--zoom", TERM_ZOOM,
+			"--title", TERM_TITLE, "-x", "bash", "-c", cmd, NULL};
+		execvp(args_xfce[0], args_xfce);
+	}
+	
+	/* --- 2. Try GNOME Terminal --- */
+	/* No 'else'! If XFCE is missing OR fails, we gracefully fallback to GNOME */
+	if (system("which gnome-terminal > /dev/null 2>&1") == 0) {
+        char *args_gnome[] = {"gnome-terminal", "--hide-menubar",
+            "--geometry", geom, "--zoom", TERM_ZOOM,
+            "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+        execvp(args_gnome[0], args_gnome);
+    }
+
+	/* --- TOTAL FAILURE --- */
+	perror("minisnake: execvp failed");
+	fprintf(stderr, "Failed to open a new terminal window.\n");
+	
+	free(self); /* Clean up allocated memory */
+	
+	if (!ask_confirm("Would you like to use the current terminal instead? (y/n): "))
+		return(EXIT_FAILURE);
+		
 	unsetenv(ENV_VAR);
 	return (LAUNCH_LOCAL);
 }
@@ -173,8 +185,15 @@ static void	restore_stdin_flags(void) {
 }
 
 static void restore_terminal(void) {
-	disable_raw_mode();
+	/* 1. Restore blocking input flags */
 	restore_stdin_flags();
+
+	/* 2. Disable raw mode and show cursor */
+	disable_raw_mode();
+
+	/* 3. Visual: Hard reset to restore user's original terminal theme */
+	printf(STYLE_RESET);
+	fflush(stdout);
 }
 
 static void	clean_exit(int status) {
@@ -183,10 +202,17 @@ static void	clean_exit(int status) {
 }
 
 static void	setup_terminal(void) {
+	/* 1. Visual: Apply game colors only if we are in a spawned terminal */
+	if (getenv(ENV_VAR)) printf(STYLE_MAIN);
+	printf(CLEAR_SCREEN);
+	fflush(stdout);
+
+	/* 2. TTY: Raw mode and cursor hiding (always needed) */
 	if (tcgetattr(STDIN_FILENO, &g_saved_term) == -1)
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
 	enable_raw_mode();
 
+	/* 3. Input: Non-blocking flags */
 	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
 		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
@@ -231,9 +257,9 @@ void splash_screen(t_data *d) {
 
 		printf(CLEAR_SCREEN);
 		if (r_lx > 0 && r_lx <= w - SPLASH_WORD_LEN + 1) 
-			printf(CURSOR_POS STYLE_BOLD SPLASH_MINI_CHAR STYLE_RESET, v_cy, r_lx);
+			printf(CURSOR_POS STYLE_BOLD SPLASH_MINI_CHAR STYLE_NO_BOLD, v_cy, r_lx);
 		if (r_rx > 0 && r_rx <= w - SPLASH_WORD_LEN + 1) 
-			printf(CURSOR_POS STYLE_BOLD SPLASH_NAKE_CHAR STYLE_RESET, v_cy, r_rx);
+			printf(CURSOR_POS STYLE_BOLD SPLASH_NAKE_CHAR STYLE_NO_BOLD, v_cy, r_rx);
 		if (ty > 0 && ty <= h) 
 			printf(CURSOR_POS SPLASH_SNAKE_CHAR, ty, r_cx - SPLASH_OFFSET_SNAKE);
 		
@@ -318,7 +344,7 @@ static void	setup_display(t_data *d) {
 	read_fruit(d, &fx, &fy, NULL);
 
 	if (fx >= 0 && fy >= 0)
-		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET, 
+		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD COLOR_WHITE, 
 			fy + 2, fx + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
 
 	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
@@ -326,7 +352,7 @@ static void	setup_display(t_data *d) {
 		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, y, 1, y, d->width + 2);
 	for (int x = 1; x <= d->width + 2; x++)
 		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, 1, x, d->height + 2, x);
-	printf(STYLE_RESET CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS, d->height + 3, 1, d->height + 4, 1);
+	printf(COLOR_WHITE CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS, d->height + 3, 1, d->height + 4, 1);
 }
 
 static void	initialize(t_data *d) {
@@ -338,14 +364,15 @@ static void	initialize(t_data *d) {
 	setup_display(d);
 }
 
+/* Game teardown before exit */
 static void	finalize(t_data *d) {
 	const char	*outcome = d->game_over ? MSG_LOSS : MSG_WIN;
 	const int	col = MAX(d->width - (int)strlen(outcome) + 3,
 					(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
-	printf(CURSOR_POS "%s%s" STYLE_RESET, d->height + 3, col, d->game_over
+	printf(CURSOR_POS "%s%s" COLOR_WHITE, d->height + 3, col, d->game_over
 		? COLOR_RED : COLOR_GREEN, outcome);
-		
+
 	restore_terminal();
 	tcflush(STDIN_FILENO, TCIFLUSH);
 	handle_leaderboard(d);

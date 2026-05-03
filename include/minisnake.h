@@ -22,7 +22,7 @@
 # endif
 
 /* Client software version for backend synchronization and update enforcement */
-# define CLIENT_VERSION					"v0.86"
+# define CLIENT_VERSION					"v0.87"
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
@@ -161,6 +161,9 @@
 # define MSG_WIN				"YOU WON !"
 
 /* GRAPHICS: ANSI escape codes, colors, and unicode characters */
+# define COLOR_BG_ADWAITA_DARK	"\033[48;2;30;30;30m"
+# define COLOR_FG_WHITE			"\033[38;2;255;255;255m"
+# define STYLE_MAIN				COLOR_BG_ADWAITA_DARK COLOR_FG_WHITE
 # define CLEAR_SCREEN			"\033[2J\033[3J\033[H"
 # define ERASE_LINE				"\033[2K"
 # define CURSOR_HIDE			"\033[?25l"
@@ -175,6 +178,7 @@
 # define COLOR_CYAN				"\033[36m"
 # define COLOR_WHITE			"\033[37m"
 # define STYLE_BOLD				"\033[1m"
+# define STYLE_NO_BOLD			"\033[22m"
 # define STYLE_RESET			"\033[0m"
 
 # define WALL_CHAR				"░"

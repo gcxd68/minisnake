@@ -140,7 +140,7 @@ void spawn_fruit(t_data *d) {
 		if (++attempts > d->spawn_fruit_max_attempts) break;
 	} while (i < d->size);
 
-	/* Safe Write for local generation */
+	/* Safe write for local generation */
 	write_fruit(d, fruit_x, fruit_y, fruit_color());
 }
 
@@ -170,7 +170,7 @@ static void	update_game(t_data *d) {
 		if (d->x[i] == d->x[0] && d->y[i] == d->y[0])
 			d->game_over = 1;
 
-	/* Safe Read */
+	/* Safe read */
 	int fruit_x, fruit_y;
 	read_fruit(d, &fruit_x, &fruit_y, NULL);
 
@@ -188,7 +188,7 @@ static void	update_game(t_data *d) {
 	d->path_steps = 0;
 	memset(d->path, 0, sizeof(d->path));
 
-	/* Safe Hide */
+	/* Safe hide */
 	write_fruit(d, -1, -1, NULL);
 
 	if (d->size >= d->width * d->height)
@@ -231,11 +231,11 @@ static void	render(t_data *d) {
 	}
 
 	if (fruit_x >= 0 && fruit_y >= 0 && !fruit_hidden)
-		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_RESET,
+		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD COLOR_WHITE,
 			fruit_y + 2, fruit_x + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
 			
 	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
-	printf(STYLE_RESET CURSOR_POS "%d \n", d->height + 3, 8, d->score);
+	printf(COLOR_WHITE CURSOR_POS "%d \n", d->height + 3, 8, d->score);
 }
 
 void	game_loop(t_data *d) {
