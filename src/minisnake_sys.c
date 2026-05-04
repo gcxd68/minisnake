@@ -135,7 +135,9 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	if (system("which xfce4-terminal > /dev/null 2>&1") == 0) {
 		char *args_xfce[] = {"xfce4-terminal", "--disable-server", "--hide-menubar", 
 			"--hide-toolbar", "--hide-scrollbar", "--geometry", geom, "--zoom", TERM_ZOOM,
-			"--title", TERM_TITLE, "-x", "bash", "-c", cmd, NULL};
+			"--title", TERM_TITLE,
+			"--color-bg=#1e1e1e", "--color-text=#ffffff",
+			"-x", "bash", "-c", cmd, NULL};
 		execvp(args_xfce[0], args_xfce);
 	}
 	
@@ -203,7 +205,7 @@ static void	clean_exit(int status) {
 
 static void	setup_terminal(void) {
 	/* 1. Visual: Apply game colors only if we are in a spawned terminal */
-	if (getenv(ENV_VAR)) printf(STYLE_MAIN);
+	if (getenv(ENV_VAR)) printf(COLOR_BG_ADWAITA_DARK COLOR_WHITE);
 	printf(CLEAR_SCREEN);
 	fflush(stdout);
 

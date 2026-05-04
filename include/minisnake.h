@@ -162,8 +162,6 @@
 
 /* GRAPHICS: ANSI escape codes, colors, and unicode characters */
 # define COLOR_BG_ADWAITA_DARK	"\033[48;2;30;30;30m"
-# define COLOR_FG_WHITE			"\033[38;2;255;255;255m"
-# define STYLE_MAIN				COLOR_BG_ADWAITA_DARK COLOR_FG_WHITE
 # define CLEAR_SCREEN			"\033[2J\033[3J\033[H"
 # define ERASE_LINE				"\033[2K"
 # define CURSOR_HIDE			"\033[?25l"
@@ -171,12 +169,12 @@
 # define CURSOR_POS				"\033[%d;%dH"
 # define SCROLL_REGION			"\033[%d;%dr"
 # define SCROLL_RESET			"\033[r"
-# define COLOR_RED				"\033[31m"
-# define COLOR_GREEN			"\033[32m"
-# define COLOR_YELLOW			"\033[33m"
-# define COLOR_MAGENTA			"\033[35m"
-# define COLOR_CYAN				"\033[36m"
-# define COLOR_WHITE			"\033[37m"
+# define COLOR_RED              "\033[38;2;224;27;36m"
+# define COLOR_GREEN            "\033[38;2;46;194;126m"
+# define COLOR_YELLOW           "\033[38;2;246;211;45m"
+# define COLOR_MAGENTA          "\033[38;2;192;97;203m"
+# define COLOR_CYAN             "\033[38;2;51;209;122m"
+# define COLOR_WHITE			"\033[38;2;255;255;255m"
 # define STYLE_BOLD				"\033[1m"
 # define STYLE_NO_BOLD			"\033[22m"
 # define STYLE_RESET			"\033[0m"

@@ -443,7 +443,8 @@ static int show_leaderboard(t_data *d) {
 
 /* Prompts the user for an alphanumeric name, loops until valid or EOF */
 static void get_player_name(t_data *d, char *name, size_t size) {
-	printf(SCROLL_REGION STYLE_MAIN, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
+	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
+	if (getenv(ENV_VAR)) printf(COLOR_BG_ADWAITA_DARK COLOR_WHITE);
 	while (printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL),
 		fflush(stdout),
 		!name[0] && fgets(name, size, stdin)) {

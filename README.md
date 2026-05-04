@@ -126,6 +126,13 @@ You can customize graphical settings and input buffers purely for the client by 
 
 *(In online mode, mechanics and speed constants defined in the header will be gracefully ignored in favor of the active server's configurations).*
 
+### Terminal compatibility
+
+- **Truecolor required for best visuals:** The client now uses 24-bit (truecolor) ANSI color sequences for its palette (including orange, cyan, and gradients). Ensure your terminal supports truecolor (most modern terminals such as xfce4-terminal, gnome-terminal, Alacritty, Kitty, and recent versions of Konsole do).
+- **Spawned terminals receive enhanced styling:** When the game spawns a terminal (via the built-in launcher), it sets the environment variable `MINISNAKE_LAUNCHED` so the client applies the enhanced background/text color sequences automatically. Running the binary directly in a terminal that does not advertise truecolor or does not set this variable may fall back to simpler colors.
+- **xfce4-terminal flags:** The launcher passes background/text color options to `xfce4-terminal` where available to better match the in-game theme. If your system's terminal does not accept these flags, visuals will still work but may appear different.
+
+
 ## Makefile Targets
 
 | Target | Description |
