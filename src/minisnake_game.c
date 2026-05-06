@@ -101,11 +101,11 @@ static void process_input(t_data *d) {
 	const char			*pos;
 	int					c, i;
 
-	/* 1. Save chronological buffer for turning assertions */
+	/* 1. Save previous direction */
 	d->dir[1] = d->dir[0];
 	for (i = 0; d->input_q[i] != EOF; i++);
 
-	/* 2. Drain stdin input streams to active command queue buffer */
+	/* 2. Read all available inputs into the queue */
 	while ((c = getchar()) != EOF) {
 		c = (c == '\033' && getchar() == '[') ? getchar() + EXT_KEY_OFFSET : toupper(c);
 		if (i < INPUT_Q_SIZE) d->input_q[i++] = c;
@@ -113,7 +113,7 @@ static void process_input(t_data *d) {
 	if ((c = d->input_q[0]) == *EXIT_KEY)
 		d->game_over = 1;
 	
-		/* 3. Extract and normalize targeted directional vector */
+	/* 3. Process the next input in the queue */
 	const char *base = (c > 255) ? arrow_keys : move_keys;
 	pos = strchr(base, (c > 255) ? c - EXT_KEY_OFFSET : c);
 	if (pos && (pos - base + 2) >> 1 != (d->dir[0] + 1) >> 1)
@@ -155,9 +155,8 @@ static void	update_game(t_data *d) {
 
 	/* 1. Track movement history for server validation and apply penalties */
 	const char *moves = " LRUD";
-	if (d->path_steps < MAX_SIZE) {
+	if (d->path_steps < MAX_SIZE)
 		d->path[d->path_steps] = moves[d->dir[0]];
-	}
 	d->path_steps++;
 
 	d->steps++;
@@ -184,8 +183,7 @@ static void	update_game(t_data *d) {
 	int fruit_x, fruit_y;
 	get_fruit_state(d, &fruit_x, &fruit_y, NULL);
 
-	if (d->body_x[0] != fruit_x || d->body_y[0] != fruit_y)
-		return ;
+	if (d->body_x[0] != fruit_x || d->body_y[0] != fruit_y) return;
 
 	d->grow = 1;
 	d->score += d->points_per_fruit;
@@ -201,12 +199,8 @@ static void	update_game(t_data *d) {
 	/* 6. Hide eaten fruit instantly to mask latency and prevent phantom fruit glitches */
 	set_fruit_state(d, -1, -1, NULL);
 
-	/* 7. Acknowledge and request next spawn securely via mutex */
-	if (d->size >= d->width * d->height)
-		return;
-		
-	if (!d->online)
-		spawn_fruit(d);
+	if (d->size >= d->width * d->height) return;
+	if (!d->online) spawn_fruit(d);
 }
 
 const char *fruit_color(t_data *d) {
@@ -219,23 +213,23 @@ static void	render(t_data *d) {
 	static const char	*bends[] = SNAKE_BENDS;
 	int					fruit_hidden = 0;
 
-	/* 1. Fetch live external fruit map references */
 	if (!d->dir[0]) return;
 
+	/* 1. Get current fruit position */
 	int fruit_x, fruit_y;
 	get_fruit_state(d, &fruit_x, &fruit_y, NULL);
 
-	/* 2. Erase the visual tail segment if not currently generating growth overlap */
+	/* 2. Erase tail */
 	if ((d->body_x[d->size] != fruit_x || d->body_y[d->size] != fruit_y) &&
 		(d->body_x[d->size] != d->body_x[d->size - 1] || d->body_y[d->size] != d->body_y[d->size - 1]))
 		printf(CURSOR_POS " ", d->body_y[d->size] + 2, d->body_x[d->size] + 2);
 		
-	/* 3. Paint procedural body joints taking sharp graphical curves into account */
+	/* 3. Draw snake body and bends */
 	if (d->size > 1)
 		printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->body_y[1] + 2, d->body_x[1] + 2,
 			(d->dir[0] + d->dir[1] == BEND_TURN_SUM) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);		
 
-	/* 4. O(N) array occlusion check to securely hide underlying eaten fruit graphics */
+	/* 4. Check if fruit is covered by the snake */
 	if (fruit_x >= 0 && fruit_y >= 0) {
 		for (int i = 0; i < d->size; i++) {
 			if (d->body_x[i] == fruit_x && d->body_y[i] == fruit_y) {
@@ -245,12 +239,12 @@ static void	render(t_data *d) {
 		}
 	}
 
-	/* 5. Render visible active target tokens */
+	/* 5. Draw fruit */
 	if (fruit_x >= 0 && fruit_y >= 0 && !fruit_hidden)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD "%s",
 			fruit_y + 2, fruit_x + 2, d->fruit_color ? d->fruit_color : d->theme[C_RED], d->theme[C_WHITE]);
 			
-	/* 6. Overpaint the active head node and refresh GUI score headers */
+	/* 6. Draw snake head and update score */
 	printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->body_y[0] + 2, d->body_x[0] + 2, heads[d->dir[0] - 1]);
 	printf("%s" CURSOR_POS "%d \n", d->theme[C_WHITE], d->height + 3, 8, d->score);
 }

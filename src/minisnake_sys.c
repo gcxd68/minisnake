@@ -1,6 +1,6 @@
 #include "minisnake.h"
 
-/* Modern TrueColor GNOME Adwaita Palette */
+/* Modern TrueColor Palette */
 const char *PALETTE_MODERN[C_MAX] = {
 	"\033[38;2;224;27;36m",   /* C_RED */
 	"\033[38;2;46;194;126m",  /* C_GREEN */
@@ -49,7 +49,6 @@ static int	ask_confirm(const char *question) {
 }
 
 static int	parse_args(int argc, char **argv, t_data *d) {
-	/* 1. Run low-level heuristic verifications confirming valid build parameters */
 	if (DEF_SPEEDUP_FACTOR < 0.0f || DEF_SPEEDUP_FACTOR >= 1.0f) {
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
 		return(EXIT_FAILURE);
@@ -77,7 +76,6 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 		}
 #endif
 
-	/* 2. Digest and allocate explicit localized manual coordinate resolutions */
 	} else if (argc == 3) {
 		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
 			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))
@@ -135,30 +133,21 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	char	*self, *tty;
 	int		ret;
 
-	/* 1. Validate if we have already spawned isolated graphic limits to prevent recursion */
-	if (getenv(ENV_VAR))
-		return (LAUNCH_LOCAL);
-	
-	if ((ret = install_dependencies()) != LAUNCH_SPAWN)
-		return (ret);
+	if (getenv(ENV_VAR)) return (LAUNCH_LOCAL);
+	if ((ret = install_dependencies()) != LAUNCH_SPAWN) return (ret);
 		
-	/* 2. Fetch executable path securely escaping dynamic launch aliases */
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
-
 	if (!(tty = ttyname(STDERR_FILENO)))
 		tty = "/dev/null";
 	int width = MAX(d->width + 2, (int)strlen(INSTRUCTIONS));
 	snprintf(geom, sizeof(geom), "%dx%d", width, d->height + 4);
 	snprintf(cmd, sizeof(cmd), "%s %s %s 2>%s", exe_path,
 		(argc > 1) ? argv[1] : "", (argc > 2) ? argv[2] : "", tty);
-	
-	/* Politely request the dark theme (Adwaita Dark) */
 	setenv("GTK_THEME", "Adwaita:dark", 1);
 	setenv(ENV_VAR, "1", 1);
 
-	/* --- 1. Try XFCE Terminal --- */
-	/* 3. Escalate targeted desktop integrations starting with priority optimized builds */
+	/* 1. Try XFCE Terminal */
 	if (system("which xfce4-terminal > /dev/null 2>&1") == 0) {
 		char *args_xfce[] = {"xfce4-terminal", "--disable-server", "--hide-menubar", 
 			"--hide-toolbar", "--hide-scrollbar", "--geometry", geom, "--zoom", TERM_ZOOM,
@@ -168,24 +157,19 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 		execvp(args_xfce[0], args_xfce);
 	}
 	
-	/* --- 2. Try GNOME Terminal --- */
-	/* No 'else'! If XFCE is missing OR fails, we gracefully fallback to GNOME */
+	/* 2. Try GNOME Terminal */
 	if (system("which gnome-terminal > /dev/null 2>&1") == 0) {
-        char *args_gnome[] = {"gnome-terminal", "--hide-menubar",
-            "--geometry", geom, "--zoom", TERM_ZOOM,
-            "--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
-        execvp(args_gnome[0], args_gnome);
-    }
+		char *args_gnome[] = {"gnome-terminal", "--hide-menubar",
+			"--geometry", geom, "--zoom", TERM_ZOOM,
+			"--title", TERM_TITLE, "--", "bash", "-c", cmd, NULL};
+		execvp(args_gnome[0], args_gnome);
+	}
 
-	/* --- TOTAL FAILURE --- */
 	perror("minisnake: execvp failed");
 	fprintf(stderr, "Failed to open a new terminal window.\n");
-	
-	free(self); /* Clean up allocated memory */
-	
+	free(self);
 	if (!ask_confirm("Would you like to use the current terminal instead? (y/n): "))
 		return(EXIT_FAILURE);
-		
 	unsetenv(ENV_VAR);
 	return (LAUNCH_LOCAL);
 }
@@ -213,15 +197,14 @@ static void	restore_stdin_flags(void) {
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
 }
 
-/* Reverses system modifications made defensively during startup sequences */
 static void restore_terminal(void) {
-	/* 1. Revert internal file descriptor block limits  */
+	/* 1. Restore blocking I/O */
 	restore_stdin_flags();
 
-	/* 2. Release native TTY canonical echoing limitations and visually return input buffer */
+	/* 2. Restore canonical mode and echo */
 	disable_raw_mode();
 
-	/* 3. Force hard visual unbind of terminal ANSI background configurations resetting original schema */
+	/* 3. Reset terminal colors */
 	printf(STYLE_RESET);
 	fflush(stdout);
 }
@@ -231,21 +214,20 @@ static void	clean_exit(int status) {
 	exit(status);
 }
 
-/* Prepares the terminal visual constraints for optimized gameplay */
-static void	setup_terminal(t_data *d) {
-	/* 1. Select dynamic theme and apply active background color strategy */
+static void setup_terminal(t_data *d) {
+	/* 1. Select theme (Modern vs Legacy) */
 	d->theme = getenv(ENV_VAR) ? PALETTE_MODERN : PALETTE_LEGACY;
 
-	/* 2. Clear terminal buffer matrix and prepaint custom background boundaries if modern */
+	/* 2. Apply background color and clear screen */
 	printf("%s" CLEAR_SCREEN, d->theme[C_BG]);
 	fflush(stdout);
 
-	/* 3. Initiate internal TTY raw mode overrides suppressing explicit system echos */
+	/* 3. Enable raw mode (no echo, line buffering) */
 	if (tcgetattr(STDIN_FILENO, &g_saved_term) == -1)
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
 	enable_raw_mode();
 
-	/* 4. Force non-blocking hardware flag controls enabling async user input loops */
+	/* 4. Make stdin non-blocking for game loop */
 	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
 		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
@@ -350,7 +332,6 @@ static void	init_game(t_data *d) {
 		save_state.online = 0;
 	*d = save_state;
 
-	/* 1. Init MUTEX AFTER copying save_state to avoid corruption */
 	pthread_mutex_init(&d->fruit_mutex, NULL);
 
 	if (d->online && !start_session(d))
@@ -419,16 +400,13 @@ static void	finalize(t_data *d) {
 	pthread_mutex_destroy(&d->fruit_mutex);
 }
 
-int	main(int argc, char **argv) {
+int main(int argc, char **argv) {
 	t_data	d = DEFAULT_RULES;
 	int		ret;
 
-	/* 1. Digest user-provided inputs handling initial error protocols */
 	if ((ret = parse_args(argc, argv, &d)) != PARSE_OK) return (ret);
-	/* 2. Boot optimized target UI handling fallback isolation parameters */
 	if ((ret = launch_terminal(argc, argv, &d)) != LAUNCH_LOCAL) return (ret);
 
-	/* 3. Anchor primary sequential lifecycle event states bridging logic engines */
 	do {
 		initialize(&d);
 		game_loop(&d);

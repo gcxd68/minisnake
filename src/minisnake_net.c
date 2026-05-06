@@ -15,22 +15,22 @@ void	net_wait_all(void) {}
 # include <netdb.h>
 # include <netinet/in.h>
 # include <sys/socket.h>
-# include <sys/time.h> /* Required for socket timeouts (struct timeval) */
+# include <sys/time.h>
 
 /* Network Constants */
-# define BUF_READ			4096									/* Socket read chunk size */
-# define BUF_GET_REQ		512										/* Sufficient for standard GET headers */
-# define JSON_OVERHEAD		256										/* Margin for JSON syntax (keys, brackets) */
-# define BUF_JSON_PAYLOAD	(MAX_SIZE + JSON_OVERHEAD)				/* Path string + JSON formatting */
-# define HTTP_HDR_OVERHEAD	512										/* Margin for HTTP POST headers */
-# define BUF_POST_REQ		(BUF_JSON_PAYLOAD + HTTP_HDR_OVERHEAD)	/* JSON + Headers */
-# define BUF_RESP_SUBMIT	512										/* Small ACK responses */
-# define BUF_RESP_SCORES	8192									/* Full leaderboard data */
+# define BUF_READ			4096
+# define BUF_GET_REQ		512
+# define JSON_OVERHEAD		256
+# define BUF_JSON_PAYLOAD	(MAX_SIZE + JSON_OVERHEAD)
+# define HTTP_HDR_OVERHEAD	512
+# define BUF_POST_REQ		(BUF_JSON_PAYLOAD + HTTP_HDR_OVERHEAD)
+# define BUF_RESP_SUBMIT	512
+# define BUF_RESP_SCORES	8192
 
-# define BUF_PATH			256										/* Max URL path length */
-# define BUF_ENTRY			128										/* Max length of a single leaderboard line */
-# define BUF_TOKEN			33										/* 32 hex chars + null terminator */
-# define NUM_RULES			10										/* Expected fields from /rules */
+# define BUF_PATH			256
+# define BUF_ENTRY			128
+# define BUF_TOKEN			33
+# define NUM_RULES			10
 
 # define HTTP_MIN_LEN		12
 # define HTTP_VER_LEN		7
@@ -116,7 +116,7 @@ typedef struct s_req {
 
 static t_req g_req_pool[REQ_POOL_SIZE];
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int g_shutting_down = 0; /* Global flag to signal cancellation to worker threads */
+static int g_shutting_down = 0;
 
 static int server_connect(void) {
 	struct sockaddr_in	addr;
@@ -149,7 +149,6 @@ static int server_connect(void) {
 	return (fd);
 }
 
-/* Internal core: handles the established connection and I/O */
 static int http_request(const char *req, char *out, int out_size) {
 	int	fd = server_connect();
 
@@ -210,50 +209,33 @@ static char *skip_headers(char *response) {
 static void *async_http_worker(void *arg) {
 	t_req	*req = (t_req *)arg;
 	char	resp[BUF_RESP_SUBMIT];
-	int		ret = -1;
-	int		retries = 0;
+	int		ret = -1, retries = 0, is_shutting_down = 0;
 	int		delay = req->d ? MAX(BACKOFF_MIN_DELAY, (int)(req->d->delay * 0.66f)) : BACKOFF_MIN_DELAY;
 
-	/* 1. Background Network transmission loop utilizing exponential fallback strategy */
-	while (1) {
+	/* 1. Send request with exponential backoff */
+	while (!is_shutting_down) {
 		ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
-							: http_get(req->path, resp, sizeof(resp));
-		if (!ret) break;
+								: http_get(req->path, resp, sizeof(resp));
 		
-		/* Give up eventually to avoid infinite zombie threads */
-		if (retries >= BACKOFF_MAX_RETRIES) break;
+		if (!ret || retries >= BACKOFF_MAX_RETRIES) break;
 
 		/* Sleep in small increments to quickly detect shutdown signals */
 		int slept = 0;
-		int is_shutting_down = 0;
-		while (slept < delay) {
+		while (slept < delay && !is_shutting_down) {
 			pthread_mutex_lock(&g_pool_mutex);
 			is_shutting_down = g_shutting_down;
 			pthread_mutex_unlock(&g_pool_mutex);
-
-			if (is_shutting_down) {
-				break;
-			}
-
-			usleep(10000); /* 10ms polling interval */
+			if (is_shutting_down) break;
+			usleep(10000);
 			slept += 10000;
 		}
-
-		if (is_shutting_down) {
-			/* Break out of the loop early if a shutdown signal is intercepted */
-			break;
-		}
-
 		retries++;
-		
-		/* Double the delay each time, capping at a maximum threshold */
 		delay = MIN(delay * 2, BACKOFF_MAX_DELAY);
 	}
 
+	/* 2. Parse new fruit coordinates from response */
 	if (!ret) {
-		/* Parse coordinates for both /eat and /sync responses */
-		/* 2. Explicitly intercept asynchronous fruit generation boundaries from backend */
-				if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
+		if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
 			char	*body = skip_headers(resp);
 			char	*sep = strchr(body, '|');
 			
@@ -270,11 +252,10 @@ static void *async_http_worker(void *arg) {
 		}
 	}
 
-	/* 3. Purge operational thread dependencies and formally clear lock bounds */
+	/* 3. Mark request slot as available */
 	pthread_mutex_lock(&g_pool_mutex);
 	req->in_use = 0;
 	pthread_mutex_unlock(&g_pool_mutex);
-	
 	return (NULL);
 }
 
@@ -282,7 +263,7 @@ static void fire_and_forget(const char *path, const char *body, t_data *d) {
 	pthread_t	tid;
 	t_req		*req = NULL;
 	
-	/* 1. Lock asynchronous pipeline boundary seeking active array targets */
+	/* 1. Find an empty request slot */
 	pthread_mutex_lock(&g_pool_mutex);
 	for (int i = 0; i < REQ_POOL_SIZE; i++) {
 		if (g_req_pool[i].in_use == 0) {
@@ -308,7 +289,7 @@ static void fire_and_forget(const char *path, const char *body, t_data *d) {
 	
 	req->d = d;
 	
-	/* 2. Fork dispatch operation assigning target payload to independent detatched listener */
+	/* 2. Launch detached worker thread */
 	if (pthread_create(&tid, NULL, async_http_worker, req) == 0)
 		pthread_detach(tid);
 	else {
@@ -351,7 +332,6 @@ int fetch_server_rules(t_data *d) {
 		if (!fields[i]) return (0);
 	}
 
-	/* 2. Map and cast securely evaluated arrays bypassing memory limitations */
 	d->width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0])));
 	d->height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1])));
 	d->delay = atof(fields[2]);
@@ -372,7 +352,6 @@ int start_session(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
 	
 	d->token[0] = '\0';
-	/* 1. Procure unassociated 32-bit auth validation token bridging initial network boundaries */
 	if (http_get("/token", resp, sizeof(resp)) != 0)
 		return (0);
 	char *body = skip_headers(resp);
@@ -383,7 +362,6 @@ int start_session(t_data *d) {
 	strncpy(d->token, token_str, BUF_TOKEN - 1);
 	d->token[BUF_TOKEN - 1] = '\0';
 	
-	/* Server Authority: The server directly provides the starting head coordinates AND the first fruit coordinates */
 	char *hx_str = strtok_r(NULL, "|", &saveptr);
 	char *hy_str = strtok_r(NULL, "|", &saveptr);
 	char *fx_str = strtok_r(NULL, "|", &saveptr);
@@ -419,16 +397,14 @@ static int end_session(t_data *d, const char *name) {
 
 	char	path[BUF_PATH], resp[BUF_RESP_SUBMIT];
 
-	if (*name)
-		snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
-	else
-		snprintf(path, sizeof(path), "/quit/%s", d->token);
+	if (*name) snprintf(path, sizeof(path), "/submit/%s/%s/%d", d->token, name, d->steps);
+	else snprintf(path, sizeof(path), "/quit/%s", d->token);
 
 	return (http_get(path, resp, sizeof(resp)));
 }
 
 static int show_leaderboard(t_data *d) {
-	char	path[BUF_PATH], resp[BUF_RESP_SCORES];
+	char		path[BUF_PATH], resp[BUF_RESP_SCORES];
 
 	snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
@@ -458,13 +434,9 @@ static int show_leaderboard(t_data *d) {
 	return (0);
 }
 
-/* Prompts the user for an alphanumeric name, loops until valid or EOF */
 static void get_player_name(t_data *d, char *name, size_t size) {
 	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
-	
-	/* Clean dynamic theme application. In legacy mode, C_BG_MAIN is empty string. */
 	printf("%s%s", d->theme[C_BG], d->theme[C_WHITE]);
-
 	while (printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL),
 		fflush(stdout),
 		!name[0] && fgets(name, size, stdin)) {
@@ -486,7 +458,7 @@ static void get_player_name(t_data *d, char *name, size_t size) {
 void handle_leaderboard(t_data *d) {
 	if (!d->online) return;
 
-	char	name[MAX_NAME_LEN + 1] = {0}; /* 8 chars + 1 null terminator */
+	char	name[MAX_NAME_LEN + 1] = {0};
 
 	get_player_name(d, name, sizeof(name));
 	show_loading();

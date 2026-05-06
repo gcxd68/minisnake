@@ -427,12 +427,10 @@ func (session *Session) CheckBehavioralAnalytics(fx, fy, deltaSteps int, ip, tok
 
 				if len(baselinePathingInefficiency) < CalibrationLimit {
 					isCalibrating = true
-					if !session.Calibrated {
-						if variance > 0.5 {
-							baselinePathingInefficiency = append(baselinePathingInefficiency, variance)
-							session.Calibrated = true
-							log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (inefficiency variance: %.2f)", ip, token[:8], len(baselinePathingInefficiency), CalibrationLimit, variance)
-						}
+					if !session.Calibrated && variance > 0.5 {
+						baselinePathingInefficiency = append(baselinePathingInefficiency, variance)
+						session.Calibrated = true
+						log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (inefficiency variance: %.2f)", ip, token[:8], len(baselinePathingInefficiency), CalibrationLimit, variance)
 					}
 				} else {
 					sumHist := 0.0
@@ -450,7 +448,13 @@ func (session *Session) CheckBehavioralAnalytics(fx, fy, deltaSteps int, ip, tok
 				}
 			}()
 
-			if !isCalibrating && variance < dynamicThreshold {
+			// Hardcoded fallback threshold to prevent botting during the learning phase
+			if isCalibrating {
+				dynamicThreshold = 0.1 // Generous threshold, but strictly blocks 100% perfect bots
+			}
+
+			// Apply the shadowban using either the dynamic or fallback threshold
+			if variance < dynamicThreshold {
 				return fmt.Errorf("[SHADOWBAN_AUTO] variance=%.2f < threshold=%.2f", variance, dynamicThreshold)
 			}
 		}
