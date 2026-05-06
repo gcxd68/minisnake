@@ -106,13 +106,12 @@ void	net_wait_all(void) {}
 #  error "NET_WAIT_DELAY must be strictly positive"
 # endif
 
-/* 1. Abstract structural layout for background HTTP threading */
 typedef struct s_req {
 	char	path[BUF_PATH];
 	char	body[BUF_JSON_PAYLOAD];
 	int		has_body;
 	int		in_use;
-	t_data	*d; /* Pointer back to game state for async updates */
+	t_data	*d;
 }	t_req;
 
 static t_req g_req_pool[REQ_POOL_SIZE];
@@ -335,7 +334,6 @@ int check_client_version(void) {
 int fetch_server_rules(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
 
-	/* 1. Establish HTTP GET stream to resolve external game configurations */
 	if (http_get("/rules", resp, sizeof(resp)) != 0)
 		return (0);
 
@@ -385,7 +383,7 @@ int start_session(t_data *d) {
 	strncpy(d->token, token_str, BUF_TOKEN - 1);
 	d->token[BUF_TOKEN - 1] = '\0';
 	
-	/* 2. Assign Server Authority coordinates to override default local limits */
+	/* Server Authority: The server directly provides the starting head coordinates AND the first fruit coordinates */
 	char *hx_str = strtok_r(NULL, "|", &saveptr);
 	char *hy_str = strtok_r(NULL, "|", &saveptr);
 	char *fx_str = strtok_r(NULL, "|", &saveptr);
@@ -402,7 +400,6 @@ int start_session(t_data *d) {
 }
 
 void notify_server(t_data *d, const char *action, int fx, int fy) {
-	/* 1. Pre-format asynchronous HTTP submission targets given active tokens */
 	if (!IS_SESSION_ACTIVE(d)) return;
 
 	char path[BUF_PATH];
@@ -411,7 +408,6 @@ void notify_server(t_data *d, const char *action, int fx, int fy) {
 	if (strcmp(action, "eat") == 0) {
 		snprintf(path, sizeof(path), "/eat/%s", d->token); 
 		snprintf(body, sizeof(body), "{\"seq\":%d,\"steps\":%d,\"fx\":%d,\"fy\":%d,\"path\":\"%s\"}", d->seq, d->steps, fx, fy, d->path);
-		/* 2. Queue operational data targeting active detached worker instances */
 		fire_and_forget(path, body, d);
 	} else {
 		snprintf(path, sizeof(path), "/%s/%s", action, d->token);
@@ -434,7 +430,6 @@ static int end_session(t_data *d, const char *name) {
 static int show_leaderboard(t_data *d) {
 	char	path[BUF_PATH], resp[BUF_RESP_SCORES];
 
-	/* 1. Formulate sequential GET targeting sorted backend ranking */
 	snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
@@ -442,7 +437,6 @@ static int show_leaderboard(t_data *d) {
 	const char	title[] = LB_TITLE;
 	const int	title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 
-	/* 2. Disseminate graphical matrix to console parsing piped string outputs */
 	printf(CLEAR_SCREEN CURSOR_POS "%s" STYLE_BOLD "%s" STYLE_NO_BOLD "%s", 
 		LB_TITLE_ROW, title_col, d->theme[C_MAGENTA], title, d->theme[C_WHITE]);
 	char *body = skip_headers(resp);
@@ -464,7 +458,7 @@ static int show_leaderboard(t_data *d) {
 	return (0);
 }
 
-/* 1. Prompt interactive terminal logic reading canonical alphanumeric player submissions */
+/* Prompts the user for an alphanumeric name, loops until valid or EOF */
 static void get_player_name(t_data *d, char *name, size_t size) {
 	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
 	

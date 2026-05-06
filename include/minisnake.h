@@ -201,11 +201,11 @@
 /* Enum(s) */
 enum { PARSE_OK = 3, LAUNCH_LOCAL = 4, LAUNCH_SPAWN = 5 };
 
+enum { C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE, C_BG, C_MAX };
+
 typedef enum e_dir {
 	STOP, LEFT, RIGHT, UP, DOWN
 }	t_dir;
-
-enum { C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE, C_BG, C_MAX };
 
 /* Global variable(s) */
 extern const char *PALETTE_MODERN[C_MAX];
