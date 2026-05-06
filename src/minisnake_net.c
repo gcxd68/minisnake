@@ -216,13 +216,13 @@ static void *async_http_worker(void *arg) {
 	/* 1. Send request with exponential backoff */
 	while (!is_shutting_down) {
 		ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
-								: http_get(req->path, resp, sizeof(resp));
+							: http_get(req->path, resp, sizeof(resp));
 		
 		if (!ret || retries >= BACKOFF_MAX_RETRIES) break;
 
 		/* Sleep in small increments to quickly detect shutdown signals */
 		int slept = 0;
-		while (slept < delay && !is_shutting_down) {
+		while (slept < delay) {
 			pthread_mutex_lock(&g_pool_mutex);
 			is_shutting_down = g_shutting_down;
 			pthread_mutex_unlock(&g_pool_mutex);
