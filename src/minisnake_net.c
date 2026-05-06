@@ -55,6 +55,7 @@ void	net_wait_all(void) {}
 # define BACKOFF_MAX_DELAY		30000000
 # define BACKOFF_MAX_RETRIES	15
 # define NET_WAIT_DELAY			10000
+# define NET_POLL_INTERVAL		10000
 
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
 # if BACKOFF_MAX_DELAY <= 0
@@ -226,8 +227,8 @@ static void *async_http_worker(void *arg) {
 			is_shutting_down = g_shutting_down;
 			pthread_mutex_unlock(&g_pool_mutex);
 			if (is_shutting_down) break;
-			usleep(10000);
-			slept += 10000;
+			usleep(NET_POLL_INTERVAL);
+			slept += NET_POLL_INTERVAL;
 		}
 		retries++;
 		delay = MIN(delay * 2, BACKOFF_MAX_DELAY);
