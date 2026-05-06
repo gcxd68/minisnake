@@ -168,25 +168,16 @@
 # define CURSOR_POS				"\033[%d;%dH"
 # define SCROLL_REGION			"\033[%d;%dr"
 # define SCROLL_RESET			"\033[r"
-// # define COLOR_RED              "\033[38;2;224;27;36m"
-// # define COLOR_GREEN            "\033[38;2;46;194;126m"
-// # define COLOR_YELLOW           "\033[38;2;246;211;45m"
-// # define COLOR_MAGENTA          "\033[38;2;192;97;203m"
-// # define COLOR_CYAN             "\033[38;2;51;209;122m"
-// # define COLOR_WHITE			"\033[38;2;255;255;255m"
 # define STYLE_BOLD				"\033[1m"
 # define STYLE_NO_BOLD			"\033[22m"
 # define STYLE_RESET			"\033[0m"
 
 # define WALL_CHAR				"░"
-// # define WALL_COLOR				COLOR_WHITE
 # define SNAKE_IDLE				"🭎"
 # define SNAKE_HEADS			{ "🭨", "🭪", "🭩", "🭫" }
 # define SNAKE_BODY				"▚"
 # define SNAKE_BENDS			{ "▗", "▘" }
-// # define SNAKE_COLOR			COLOR_GREEN
 # define FRUIT_CHAR				"@"
-// # define FRUIT_PALETTE			{ COLOR_RED, COLOR_GREEN, COLOR_YELLOW, COLOR_MAGENTA, COLOR_CYAN, COLOR_WHITE }
 
 /* MACROS & TYPES: Generic macros and structure definitions */
 # define ARR_SIZE(x)			(sizeof(x) / sizeof(x[0]))
@@ -214,10 +205,9 @@ typedef enum e_dir {
 	STOP, LEFT, RIGHT, UP, DOWN
 }	t_dir;
 
-typedef enum e_color {
-	C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE, C_BG, C_MAX
-}	t_color;
+enum { C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE, C_BG, C_MAX };
 
+/* Global variable(s) */
 extern const char *PALETTE_MODERN[C_MAX];
 extern const char *PALETTE_LEGACY[C_MAX];
 
@@ -232,7 +222,7 @@ typedef struct s_data {
 	int				width, height, score, fruit_x, fruit_y, steps, game_over, online, cheat;
 	uint32_t		seed;
 	t_dir			dir[2]; /* dir[0]: current, dir[1]: previous */
-	int				x[MAX_SIZE + 1], y[MAX_SIZE + 1]; /* Snake body */
+	int				body_x[MAX_SIZE + 1], body_y[MAX_SIZE + 1]; /* Snake body */
 	int				input_q[INPUT_Q_SIZE + 1];
 	const char		**theme; /* Active color palette */
 	const char		*fruit_color;
@@ -244,8 +234,8 @@ typedef struct s_data {
 }	t_data;
 
 /* minisnake_game - Gameplay functions */
-void				read_fruit(t_data *d, int *x, int *y, const char **color);
-void				write_fruit(t_data *d, int x, int y, const char *color);
+void				get_fruit_state(t_data *d, int *x, int *y, const char **color);
+void				set_fruit_state(t_data *d, int x, int y, const char *color);
 void				spawn_fruit(t_data *d);
 const char			*fruit_color(t_data *d);
 void				game_loop(t_data *d);
@@ -258,7 +248,7 @@ uint32_t			lcg_rand(uint32_t *seed);
 
 /* minisnake_net.c - Network functions */
 int					check_client_version(void);
-int					server_sync_rules(t_data *d);
+int					fetch_server_rules(t_data *d);
 int					start_session(t_data *d);
 void				notify_server(t_data *d, const char *action, int fx, int fy);
 void				handle_leaderboard(t_data *d);

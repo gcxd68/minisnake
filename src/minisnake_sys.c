@@ -49,6 +49,7 @@ static int	ask_confirm(const char *question) {
 }
 
 static int	parse_args(int argc, char **argv, t_data *d) {
+	/* 1. Run low-level heuristic verifications confirming valid build parameters */
 	if (DEF_SPEEDUP_FACTOR < 0.0f || DEF_SPEEDUP_FACTOR >= 1.0f) {
 		fprintf(stderr, "Error: SPEEDUP_FACTOR must be >= 0.0 and < 1.0\n");
 		return(EXIT_FAILURE);
@@ -67,7 +68,7 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 					return (EXIT_SUCCESS);
 			}
 		}
-		if (ver_status == 1 && server_sync_rules(d))
+		if (ver_status == 1 && fetch_server_rules(d))
 			d->online = 1;
 #else
 		if (argc == 2) {
@@ -76,6 +77,7 @@ static int	parse_args(int argc, char **argv, t_data *d) {
 		}
 #endif
 
+	/* 2. Digest and allocate explicit localized manual coordinate resolutions */
 	} else if (argc == 3) {
 		if (parse_dimension(argv[1], MIN_WIDTH, MAX_WIDTH, &d->width, "width")
 			|| parse_dimension(argv[2], MIN_HEIGHT, MAX_HEIGHT, &d->height, "height"))
@@ -133,12 +135,14 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	char	*self, *tty;
 	int		ret;
 
+	/* 1. Validate if we have already spawned isolated graphic limits to prevent recursion */
 	if (getenv(ENV_VAR))
 		return (LAUNCH_LOCAL);
 	
 	if ((ret = install_dependencies()) != LAUNCH_SPAWN)
 		return (ret);
 		
+	/* 2. Fetch executable path securely escaping dynamic launch aliases */
 	self = realpath("/proc/self/exe", NULL);
 	const char *exe_path = self ? self : DEFAULT_EXE;
 
@@ -154,6 +158,7 @@ static int	launch_terminal(int argc, char **argv, t_data *d) {
 	setenv(ENV_VAR, "1", 1);
 
 	/* --- 1. Try XFCE Terminal --- */
+	/* 3. Escalate targeted desktop integrations starting with priority optimized builds */
 	if (system("which xfce4-terminal > /dev/null 2>&1") == 0) {
 		char *args_xfce[] = {"xfce4-terminal", "--disable-server", "--hide-menubar", 
 			"--hide-toolbar", "--hide-scrollbar", "--geometry", geom, "--zoom", TERM_ZOOM,
@@ -208,14 +213,15 @@ static void	restore_stdin_flags(void) {
 		fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags);
 }
 
+/* Reverses system modifications made defensively during startup sequences */
 static void restore_terminal(void) {
-	/* 1. Restore blocking input flags */
+	/* 1. Revert internal file descriptor block limits  */
 	restore_stdin_flags();
 
-	/* 2. Disable raw mode and show cursor */
+	/* 2. Release native TTY canonical echoing limitations and visually return input buffer */
 	disable_raw_mode();
 
-	/* 3. Visual: Hard reset to restore user's original terminal theme */
+	/* 3. Force hard visual unbind of terminal ANSI background configurations resetting original schema */
 	printf(STYLE_RESET);
 	fflush(stdout);
 }
@@ -225,20 +231,21 @@ static void	clean_exit(int status) {
 	exit(status);
 }
 
+/* Prepares the terminal visual constraints for optimized gameplay */
 static void	setup_terminal(t_data *d) {
-	/* 1. Select Theme and apply Background color */
+	/* 1. Select dynamic theme and apply active background color strategy */
 	d->theme = getenv(ENV_VAR) ? PALETTE_MODERN : PALETTE_LEGACY;
 
-	/* 2. Visual: Apply background. If legacy, this paints nothing */
+	/* 2. Clear terminal buffer matrix and prepaint custom background boundaries if modern */
 	printf("%s" CLEAR_SCREEN, d->theme[C_BG]);
 	fflush(stdout);
 
-	/* 2. TTY: Raw mode and cursor hiding (always needed) */
+	/* 3. Initiate internal TTY raw mode overrides suppressing explicit system echos */
 	if (tcgetattr(STDIN_FILENO, &g_saved_term) == -1)
 		perror("minisnake: tcgetattr failed"), exit(EXIT_FAILURE);
 	enable_raw_mode();
 
-	/* 3. Input: Non-blocking flags */
+	/* 4. Force non-blocking hardware flag controls enabling async user input loops */
 	if ((g_saved_stdin_flags = fcntl(STDIN_FILENO, F_GETFL, 0)) == -1
 		|| fcntl(STDIN_FILENO, F_SETFL, g_saved_stdin_flags | O_NONBLOCK) == -1)
 		perror("minisnake: fcntl failed"), clean_exit(EXIT_FAILURE);
@@ -351,12 +358,12 @@ static void	init_game(t_data *d) {
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	if (!d->online) {
 		d->seed = sys_rand();
-		d->x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
-		d->y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
+		d->body_x[0] = (d->width >> 1) - (d->width % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
+		d->body_y[0] = (d->height >> 1) - (d->height % 2 ? 0 : (int)((lcg_rand(&d->seed) >> 16) % 2));
 	}
 	for (int i = 1; i <= d->size + d->grow; i++) {
-		d->x[i] = d->x[0];
-		d->y[i] = d->y[0];
+		d->body_x[i] = d->body_x[0];
+		d->body_y[i] = d->body_y[0];
 	}
 	if (!d->online) {
 		spawn_fruit(d);
@@ -367,12 +374,12 @@ static void	setup_display(t_data *d) {
 	printf(CLEAR_SCREEN);
 
 	int fx, fy;
-	read_fruit(d, &fx, &fy, NULL);
+	get_fruit_state(d, &fx, &fy, NULL);
 	if (fx >= 0 && fy >= 0)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD "%s", 
 			fy + 2, fx + 2, d->fruit_color ? d->fruit_color : d->theme[C_RED], d->theme[C_WHITE]);
 	printf(CURSOR_POS "%s" SNAKE_IDLE "%s",
-		d->y[0] + 2, d->x[0] + 2, d->theme[C_GREEN], d->theme[C_WHITE]);
+		d->body_y[0] + 2, d->body_x[0] + 2, d->theme[C_GREEN], d->theme[C_WHITE]);
 	for (int y = 2; y <= d->height + 1; y++)
 		printf(CURSOR_POS "%s" WALL_CHAR CURSOR_POS WALL_CHAR,
 			y, 1, d->theme[C_WHITE], y, d->width + 2);
@@ -416,9 +423,12 @@ int	main(int argc, char **argv) {
 	t_data	d = DEFAULT_RULES;
 	int		ret;
 
+	/* 1. Digest user-provided inputs handling initial error protocols */
 	if ((ret = parse_args(argc, argv, &d)) != PARSE_OK) return (ret);
+	/* 2. Boot optimized target UI handling fallback isolation parameters */
 	if ((ret = launch_terminal(argc, argv, &d)) != LAUNCH_LOCAL) return (ret);
 
+	/* 3. Anchor primary sequential lifecycle event states bridging logic engines */
 	do {
 		initialize(&d);
 		game_loop(&d);

@@ -38,6 +38,7 @@ static void anticheat(t_data *d) {
 	static long	last_frame = 0;
 	const long	now = get_ms();
 
+	/* 1. Skip if offline or already flagged */
 	if (!d->online || d->cheat) return;
 
 	if (!d->dir[0]) {
@@ -46,6 +47,7 @@ static void anticheat(t_data *d) {
 		return;
 	}
 
+	/* 2. Calculate potential penalties and validate strict sequence bounds */
 	int current_penalty = (d->penalty_interval > 0) ? (d->steps / d->penalty_interval) * d->penalty_amount : 0;
 	if (d->score < 0
 		|| d->score > d->width * d->height * d->points_per_fruit - current_penalty
@@ -56,6 +58,7 @@ static void anticheat(t_data *d) {
 	}
 	last_frame = now;
 
+	/* 3. Periodically poll process status mapping for attached memory debuggers */
 	if (++counter > DEBUG_CHECK_FREQ) {
 		FILE	*f = fopen(PROC_STATUS_PATH, "r");
 		char	buf[PROC_BUF_SIZE];
@@ -78,7 +81,7 @@ static void sync_fruit_state(t_data *d) {
 
 	int	fruit_x, fruit_y;
 
-	read_fruit(d, &fruit_x, &fruit_y, NULL);
+	get_fruit_state(d, &fruit_x, &fruit_y, NULL);
 	if (fruit_x == -1 || fruit_y == -1) {
 		d->missing_fruit_frames++;
 
@@ -98,14 +101,19 @@ static void process_input(t_data *d) {
 	const char			*pos;
 	int					c, i;
 
+	/* 1. Save chronological buffer for turning assertions */
 	d->dir[1] = d->dir[0];
 	for (i = 0; d->input_q[i] != EOF; i++);
+
+	/* 2. Drain stdin input streams to active command queue buffer */
 	while ((c = getchar()) != EOF) {
 		c = (c == '\033' && getchar() == '[') ? getchar() + EXT_KEY_OFFSET : toupper(c);
 		if (i < INPUT_Q_SIZE) d->input_q[i++] = c;
 	}
 	if ((c = d->input_q[0]) == *EXIT_KEY)
 		d->game_over = 1;
+	
+		/* 3. Extract and normalize targeted directional vector */
 	const char *base = (c > 255) ? arrow_keys : move_keys;
 	pos = strchr(base, (c > 255) ? c - EXT_KEY_OFFSET : c);
 	if (pos && (pos - base + 2) >> 1 != (d->dir[0] + 1) >> 1)
@@ -114,7 +122,7 @@ static void process_input(t_data *d) {
 		d->input_q[i] = d->input_q[i + 1];
 }
 
-void	write_fruit(t_data *d, int x, int y, const char *color) {
+void	set_fruit_state(t_data *d, int x, int y, const char *color) {
 	pthread_mutex_lock(&d->fruit_mutex);
 	d->fruit_x = x;
 	d->fruit_y = y;
@@ -122,7 +130,7 @@ void	write_fruit(t_data *d, int x, int y, const char *color) {
 	pthread_mutex_unlock(&d->fruit_mutex);
 }
 
-void	read_fruit(t_data *d, int *x, int *y, const char **color) {
+void	get_fruit_state(t_data *d, int *x, int *y, const char **color) {
 	pthread_mutex_lock(&d->fruit_mutex);
 	if (x) *x = d->fruit_x;
 	if (y) *y = d->fruit_y;
@@ -136,17 +144,16 @@ void spawn_fruit(t_data *d) {
 	do {
 		fruit_x = (lcg_rand(&d->seed) >> 16) % d->width;
 		fruit_y = (lcg_rand(&d->seed) >> 16) % d->height;
-		for (i = 0; i < d->size && !(d->x[i] == fruit_x && d->y[i] == fruit_y); i++);
+		for (i = 0; i < d->size && !(d->body_x[i] == fruit_x && d->body_y[i] == fruit_y); i++);
 		if (++attempts > d->spawn_fruit_max_attempts) break;
 	} while (i < d->size);
-
-	/* Safe write for local generation */
-	write_fruit(d, fruit_x, fruit_y, fruit_color(d));
+	set_fruit_state(d, fruit_x, fruit_y, fruit_color(d));
 }
 
 static void	update_game(t_data *d) {
 	if (!d->dir[0]) return;
 
+	/* 1. Track movement history for server validation and apply penalties */
 	const char *moves = " LRUD";
 	if (d->path_steps < MAX_SIZE) {
 		d->path[d->path_steps] = moves[d->dir[0]];
@@ -157,40 +164,44 @@ static void	update_game(t_data *d) {
 	if (d->penalty_interval > 0 && d->steps % d->penalty_interval == 0)
 		d->score -= d->penalty_amount;
 	d->score = MAX(d->score, 0);
+
+	/* 2. Apply movement mechanics, shift body segments, and consume growth charges */
 	if (d->grow && d->grow--)
 		d->size++;
-	memmove(d->x + 1, d->x, d->size * sizeof(*d->x));
-	memmove(d->y + 1, d->y, d->size * sizeof(*d->y));
-	d->x[0] += (d->dir[0] == RIGHT) - (d->dir[0] == LEFT);
-	d->y[0] += (d->dir[0] == DOWN) - (d->dir[0] == UP);
-	
-	if (d->x[0] < 0 || d->x[0] == d->width || d->y[0] < 0 || d->y[0] == d->height)
+	memmove(d->body_x + 1, d->body_x, d->size * sizeof(*d->body_x));
+	memmove(d->body_y + 1, d->body_y, d->size * sizeof(*d->body_y));
+	d->body_x[0] += (d->dir[0] == RIGHT) - (d->dir[0] == LEFT);
+	d->body_y[0] += (d->dir[0] == DOWN) - (d->dir[0] == UP);
+
+	/* 3. Handle boundary collisions and self-intersections */
+	if (d->body_x[0] < 0 || d->body_x[0] == d->width || d->body_y[0] < 0 || d->body_y[0] == d->height)
 		d->game_over = 1;
 	for (int i = 1; i < d->size; i++)
-		if (d->x[i] == d->x[0] && d->y[i] == d->y[0])
+		if (d->body_x[i] == d->body_x[0] && d->body_y[i] == d->body_y[0])
 			d->game_over = 1;
 
-	/* Safe read */
+	/* 4. Process fruit consumption and apply game rule progression */
 	int fruit_x, fruit_y;
-	read_fruit(d, &fruit_x, &fruit_y, NULL);
+	get_fruit_state(d, &fruit_x, &fruit_y, NULL);
 
-	if (d->x[0] != fruit_x || d->y[0] != fruit_y)
+	if (d->body_x[0] != fruit_x || d->body_y[0] != fruit_y)
 		return ;
 
 	d->grow = 1;
 	d->score += d->points_per_fruit;
 	d->delay *= d->speedup_factor;
 
-	/* Notify the server with the true coordinates before resetting the path */
+	/* 5. Synchronize state with network backend and clear buffer */
 	d->seq++;
 	notify_server(d, "eat", fruit_x, fruit_y);
 
 	d->path_steps = 0;
 	memset(d->path, 0, sizeof(d->path));
 
-	/* Safe hide */
-	write_fruit(d, -1, -1, NULL);
+	/* 6. Hide eaten fruit instantly to mask latency and prevent phantom fruit glitches */
+	set_fruit_state(d, -1, -1, NULL);
 
+	/* 7. Acknowledge and request next spawn securely via mutex */
 	if (d->size >= d->width * d->height)
 		return;
 		
@@ -199,9 +210,8 @@ static void	update_game(t_data *d) {
 }
 
 const char *fruit_color(t_data *d) {
-	/* Array of allowed fruit color indices */
-	static const t_color fruits[] = { C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE };
-	return d->theme[fruits[sys_rand() % ARR_SIZE(fruits)]];
+	static const int colors[] = { C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE };
+	return d->theme[colors[sys_rand() % ARR_SIZE(colors)]];
 }
 
 static void	render(t_data *d) {
@@ -209,33 +219,39 @@ static void	render(t_data *d) {
 	static const char	*bends[] = SNAKE_BENDS;
 	int					fruit_hidden = 0;
 
+	/* 1. Fetch live external fruit map references */
 	if (!d->dir[0]) return;
 
 	int fruit_x, fruit_y;
-	read_fruit(d, &fruit_x, &fruit_y, NULL);
+	get_fruit_state(d, &fruit_x, &fruit_y, NULL);
 
-	if ((d->x[d->size] != fruit_x || d->y[d->size] != fruit_y) &&
-		(d->x[d->size] != d->x[d->size - 1] || d->y[d->size] != d->y[d->size - 1]))
-		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
+	/* 2. Erase the visual tail segment if not currently generating growth overlap */
+	if ((d->body_x[d->size] != fruit_x || d->body_y[d->size] != fruit_y) &&
+		(d->body_x[d->size] != d->body_x[d->size - 1] || d->body_y[d->size] != d->body_y[d->size - 1]))
+		printf(CURSOR_POS " ", d->body_y[d->size] + 2, d->body_x[d->size] + 2);
 		
+	/* 3. Paint procedural body joints taking sharp graphical curves into account */
 	if (d->size > 1)
-		printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->y[1] + 2, d->x[1] + 2,
+		printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->body_y[1] + 2, d->body_x[1] + 2,
 			(d->dir[0] + d->dir[1] == BEND_TURN_SUM) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);		
 
+	/* 4. O(N) array occlusion check to securely hide underlying eaten fruit graphics */
 	if (fruit_x >= 0 && fruit_y >= 0) {
 		for (int i = 0; i < d->size; i++) {
-			if (d->x[i] == fruit_x && d->y[i] == fruit_y) {
+			if (d->body_x[i] == fruit_x && d->body_y[i] == fruit_y) {
 				fruit_hidden = 1;
 				break;
 			}
 		}
 	}
 
+	/* 5. Render visible active target tokens */
 	if (fruit_x >= 0 && fruit_y >= 0 && !fruit_hidden)
 		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD "%s",
 			fruit_y + 2, fruit_x + 2, d->fruit_color ? d->fruit_color : d->theme[C_RED], d->theme[C_WHITE]);
 			
-	printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
+	/* 6. Overpaint the active head node and refresh GUI score headers */
+	printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->body_y[0] + 2, d->body_x[0] + 2, heads[d->dir[0] - 1]);
 	printf("%s" CURSOR_POS "%d \n", d->theme[C_WHITE], d->height + 3, 8, d->score);
 }
 

@@ -3,7 +3,7 @@
 #ifndef ONLINE_BUILD
 
 int		check_client_version(void) { return (0); }
-int		server_sync_rules(t_data *d) { (void)d; return (0); }
+int		fetch_server_rules(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
 void	notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
 void	handle_leaderboard(t_data *d) { (void)d; }
@@ -106,6 +106,7 @@ void	net_wait_all(void) {}
 #  error "NET_WAIT_DELAY must be strictly positive"
 # endif
 
+/* 1. Abstract structural layout for background HTTP threading */
 typedef struct s_req {
 	char	path[BUF_PATH];
 	char	body[BUF_JSON_PAYLOAD];
@@ -124,20 +125,26 @@ static int server_connect(void) {
 	int					fd;
 	struct timeval		tv;
 
+	/* 1. Resolve host and establish address */
 	if (!(he = gethostbyname(HOST)))
 		return (-1);
+
+	/* 2. Initialize TCP Socket */
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 		return (-1);
 
-	/* Set socket timeouts to prevent infinite blocking on dead networks */
+	/* 3. Configure socket timeouts to prevent dead network blocking */
 	tv.tv_sec = 2; /* 2 seconds timeout */
 	tv.tv_usec = 0;
 	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
 	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
 
+	/* 4. Initiate remote connection parameters */
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(atoi(PORT)); 
 	addr.sin_addr = *(struct in_addr *)he->h_addr;
+	
+	/* 5. Connect and return descriptor */
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 		return (close(fd), -1);
 	return (fd);
@@ -208,7 +215,7 @@ static void *async_http_worker(void *arg) {
 	int		retries = 0;
 	int		delay = req->d ? MAX(BACKOFF_MIN_DELAY, (int)(req->d->delay * 0.66f)) : BACKOFF_MIN_DELAY;
 
-	/* Exponential Backoff Retry with graceful cancellation */
+	/* 1. Background Network transmission loop utilizing exponential fallback strategy */
 	while (1) {
 		ret = req->has_body ? http_post(req->path, req->body, resp, sizeof(resp)) 
 							: http_get(req->path, resp, sizeof(resp));
@@ -219,19 +226,25 @@ static void *async_http_worker(void *arg) {
 
 		/* Sleep in small increments to quickly detect shutdown signals */
 		int slept = 0;
+		int is_shutting_down = 0;
 		while (slept < delay) {
 			pthread_mutex_lock(&g_pool_mutex);
-			int is_shutting_down = g_shutting_down;
+			is_shutting_down = g_shutting_down;
 			pthread_mutex_unlock(&g_pool_mutex);
 
 			if (is_shutting_down) {
-				goto cleanup;
+				break;
 			}
-			
+
 			usleep(10000); /* 10ms polling interval */
 			slept += 10000;
 		}
-		
+
+		if (is_shutting_down) {
+			/* Break out of the loop early if a shutdown signal is intercepted */
+			break;
+		}
+
 		retries++;
 		
 		/* Double the delay each time, capping at a maximum threshold */
@@ -240,7 +253,8 @@ static void *async_http_worker(void *arg) {
 
 	if (!ret) {
 		/* Parse coordinates for both /eat and /sync responses */
-		if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
+		/* 2. Explicitly intercept asynchronous fruit generation boundaries from backend */
+				if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
 			char	*body = skip_headers(resp);
 			char	*sep = strchr(body, '|');
 			
@@ -252,14 +266,13 @@ static void *async_http_worker(void *arg) {
 				
 				/* The server now guarantees it will never return a phantom fruit due to 
 				   idempotency checks (LastSeq). We can blindly trust the coordinates. */
-				write_fruit(req->d, fruit_x, fruit_y, fruit_color(req->d));
+				set_fruit_state(req->d, fruit_x, fruit_y, fruit_color(req->d));
 			}
 		}
 	}
 
-cleanup:
+	/* 3. Purge operational thread dependencies and formally clear lock bounds */
 	pthread_mutex_lock(&g_pool_mutex);
-	req->has_body = 0; 
 	req->in_use = 0;
 	pthread_mutex_unlock(&g_pool_mutex);
 	
@@ -270,6 +283,7 @@ static void fire_and_forget(const char *path, const char *body, t_data *d) {
 	pthread_t	tid;
 	t_req		*req = NULL;
 	
+	/* 1. Lock asynchronous pipeline boundary seeking active array targets */
 	pthread_mutex_lock(&g_pool_mutex);
 	for (int i = 0; i < REQ_POOL_SIZE; i++) {
 		if (g_req_pool[i].in_use == 0) {
@@ -295,6 +309,7 @@ static void fire_and_forget(const char *path, const char *body, t_data *d) {
 	
 	req->d = d;
 	
+	/* 2. Fork dispatch operation assigning target payload to independent detatched listener */
 	if (pthread_create(&tid, NULL, async_http_worker, req) == 0)
 		pthread_detach(tid);
 	else {
@@ -317,9 +332,10 @@ int check_client_version(void) {
 	return (1);
 }
 
-int server_sync_rules(t_data *d) {
+int fetch_server_rules(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
 
+	/* 1. Establish HTTP GET stream to resolve external game configurations */
 	if (http_get("/rules", resp, sizeof(resp)) != 0)
 		return (0);
 
@@ -337,6 +353,7 @@ int server_sync_rules(t_data *d) {
 		if (!fields[i]) return (0);
 	}
 
+	/* 2. Map and cast securely evaluated arrays bypassing memory limitations */
 	d->width = MIN(MAX_WIDTH, MAX(MIN_WIDTH, atoi(fields[0])));
 	d->height = MIN(MAX_HEIGHT, MAX(MIN_HEIGHT, atoi(fields[1])));
 	d->delay = atof(fields[2]);
@@ -357,6 +374,7 @@ int start_session(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
 	
 	d->token[0] = '\0';
+	/* 1. Procure unassociated 32-bit auth validation token bridging initial network boundaries */
 	if (http_get("/token", resp, sizeof(resp)) != 0)
 		return (0);
 	char *body = skip_headers(resp);
@@ -367,15 +385,15 @@ int start_session(t_data *d) {
 	strncpy(d->token, token_str, BUF_TOKEN - 1);
 	d->token[BUF_TOKEN - 1] = '\0';
 	
-	/* Server Authority: The server directly provides the starting head coordinates AND the first fruit coordinates */
+	/* 2. Assign Server Authority coordinates to override default local limits */
 	char *hx_str = strtok_r(NULL, "|", &saveptr);
 	char *hy_str = strtok_r(NULL, "|", &saveptr);
 	char *fx_str = strtok_r(NULL, "|", &saveptr);
 	char *fy_str = strtok_r(NULL, "|", &saveptr);
 	
 	if (hx_str && hy_str && fx_str && fy_str) {
-		d->x[0] = atoi(hx_str);
-		d->y[0] = atoi(hy_str);
+		d->body_x[0] = atoi(hx_str);
+		d->body_y[0] = atoi(hy_str);
 		d->fruit_x = atoi(fx_str);
 		d->fruit_y = atoi(fy_str);
 		d->fruit_color = fruit_color(d);
@@ -384,6 +402,7 @@ int start_session(t_data *d) {
 }
 
 void notify_server(t_data *d, const char *action, int fx, int fy) {
+	/* 1. Pre-format asynchronous HTTP submission targets given active tokens */
 	if (!IS_SESSION_ACTIVE(d)) return;
 
 	char path[BUF_PATH];
@@ -392,6 +411,7 @@ void notify_server(t_data *d, const char *action, int fx, int fy) {
 	if (strcmp(action, "eat") == 0) {
 		snprintf(path, sizeof(path), "/eat/%s", d->token); 
 		snprintf(body, sizeof(body), "{\"seq\":%d,\"steps\":%d,\"fx\":%d,\"fy\":%d,\"path\":\"%s\"}", d->seq, d->steps, fx, fy, d->path);
+		/* 2. Queue operational data targeting active detached worker instances */
 		fire_and_forget(path, body, d);
 	} else {
 		snprintf(path, sizeof(path), "/%s/%s", action, d->token);
@@ -414,6 +434,7 @@ static int end_session(t_data *d, const char *name) {
 static int show_leaderboard(t_data *d) {
 	char	path[BUF_PATH], resp[BUF_RESP_SCORES];
 
+	/* 1. Formulate sequential GET targeting sorted backend ranking */
 	snprintf(path, sizeof(path), "/scores/%d", LB_MAX_SCORES);
 	if (http_get(path, resp, sizeof(resp)) < 0)
 		return (-1);
@@ -421,6 +442,7 @@ static int show_leaderboard(t_data *d) {
 	const char	title[] = LB_TITLE;
 	const int	title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 
+	/* 2. Disseminate graphical matrix to console parsing piped string outputs */
 	printf(CLEAR_SCREEN CURSOR_POS "%s" STYLE_BOLD "%s" STYLE_NO_BOLD "%s", 
 		LB_TITLE_ROW, title_col, d->theme[C_MAGENTA], title, d->theme[C_WHITE]);
 	char *body = skip_headers(resp);
@@ -442,7 +464,7 @@ static int show_leaderboard(t_data *d) {
 	return (0);
 }
 
-/* Prompts the user for an alphanumeric name, loops until valid or EOF */
+/* 1. Prompt interactive terminal logic reading canonical alphanumeric player submissions */
 static void get_player_name(t_data *d, char *name, size_t size) {
 	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
 	
@@ -470,7 +492,7 @@ static void get_player_name(t_data *d, char *name, size_t size) {
 void handle_leaderboard(t_data *d) {
 	if (!d->online) return;
 
-	char	name[MAX_NAME_LEN + 1] = {0}; // 8 chars + 1 null terminator
+	char	name[MAX_NAME_LEN + 1] = {0}; /* 8 chars + 1 null terminator */
 
 	get_player_name(d, name, sizeof(name));
 	show_loading();
