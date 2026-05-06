@@ -1,5 +1,27 @@
 #include "minisnake.h"
 
+/* Modern TrueColor GNOME Adwaita Palette */
+const char *PALETTE_MODERN[C_MAX] = {
+	"\033[38;2;224;27;36m",   /* C_RED */
+	"\033[38;2;46;194;126m",  /* C_GREEN */
+	"\033[38;2;246;211;45m",  /* C_YELLOW */
+	"\033[38;2;192;97;203m",  /* C_MAGENTA */
+	"\033[38;2;51;209;122m",  /* C_CYAN */
+	"\033[38;2;255;255;255m", /* C_WHITE */
+	"\033[48;2;30;30;30m"     /* C_BG */
+};
+
+/* Universal ANSI 16-color Fallback Palette */
+const char *PALETTE_LEGACY[C_MAX] = {
+	"\033[31m", /* C_RED */
+	"\033[32m", /* C_GREEN */
+	"\033[33m", /* C_YELLOW */
+	"\033[35m", /* C_MAGENTA */
+	"\033[36m", /* C_CYAN */
+	"\033[39m", /* C_WHITE (Default foreground) */
+	""          /* C_BG (Transparent/Native background) */
+};
+
 static int	parse_dimension(const char *str, int min, int max, int *out, const char *name) {
 	char	*endptr;
 	long	val = strtol(str, &endptr, 10);
@@ -203,10 +225,12 @@ static void	clean_exit(int status) {
 	exit(status);
 }
 
-static void	setup_terminal(void) {
-	/* 1. Visual: Apply game colors only if we are in a spawned terminal */
-	if (getenv(ENV_VAR)) printf(COLOR_BG_ADWAITA_DARK COLOR_WHITE);
-	printf(CLEAR_SCREEN);
+static void	setup_terminal(t_data *d) {
+	/* 1. Select Theme and apply Background color */
+	d->theme = getenv(ENV_VAR) ? PALETTE_MODERN : PALETTE_LEGACY;
+
+	/* 2. Visual: Apply background. If legacy, this paints nothing */
+	printf("%s" CLEAR_SCREEN, d->theme[C_BG]);
 	fflush(stdout);
 
 	/* 2. TTY: Raw mode and cursor hiding (always needed) */
@@ -344,21 +368,23 @@ static void	setup_display(t_data *d) {
 
 	int fx, fy;
 	read_fruit(d, &fx, &fy, NULL);
-
 	if (fx >= 0 && fy >= 0)
-		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD COLOR_WHITE, 
-			fy + 2, fx + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
-
-	printf(CURSOR_POS SNAKE_COLOR SNAKE_IDLE WALL_COLOR, d->y[0] + 2, d->x[0] + 2);
+		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD "%s", 
+			fy + 2, fx + 2, d->fruit_color ? d->fruit_color : d->theme[C_RED], d->theme[C_WHITE]);
+	printf(CURSOR_POS "%s" SNAKE_IDLE "%s",
+		d->y[0] + 2, d->x[0] + 2, d->theme[C_GREEN], d->theme[C_WHITE]);
 	for (int y = 2; y <= d->height + 1; y++)
-		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, y, 1, y, d->width + 2);
+		printf(CURSOR_POS "%s" WALL_CHAR CURSOR_POS WALL_CHAR,
+			y, 1, d->theme[C_WHITE], y, d->width + 2);
 	for (int x = 1; x <= d->width + 2; x++)
-		printf(CURSOR_POS WALL_CHAR CURSOR_POS WALL_CHAR, 1, x, d->height + 2, x);
-	printf(COLOR_WHITE CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS, d->height + 3, 1, d->height + 4, 1);
+		printf(CURSOR_POS "%s" WALL_CHAR CURSOR_POS WALL_CHAR,
+			1, x, d->theme[C_WHITE], d->height + 2, x);
+	printf("%s" CURSOR_POS "Score: 0" CURSOR_POS INSTRUCTIONS,
+		d->theme[C_WHITE], d->height + 3, 1, d->height + 4, 1);
 }
 
 static void	initialize(t_data *d) {
-	setup_terminal();
+	setup_terminal(d);
 	setup_sig();
 	splash_screen(d);
 	show_loading();
@@ -372,15 +398,16 @@ static void	finalize(t_data *d) {
 	const int	col = MAX(d->width - (int)strlen(outcome) + 3,
 					(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
-	printf(CURSOR_POS "%s%s" COLOR_WHITE, d->height + 3, col, d->game_over
-		? COLOR_RED : COLOR_GREEN, outcome);
+	/* Use dynamic colors for win/loss message */
+	printf(CURSOR_POS "%s%s%s", d->height + 3, col, 
+		d->game_over ? d->theme[C_RED] : d->theme[C_GREEN], outcome, d->theme[C_WHITE]);
 
 	restore_terminal();
 	tcflush(STDIN_FILENO, TCIFLUSH);
 	handle_leaderboard(d);
 	printf(CURSOR_POS ERASE_LINE, d->height + 4, 1);
 
-	/* 2. Wait for async workers and gracefully destroy MUTEX */
+	/* Wait for async workers and gracefully destroy MUTEX */
 	net_wait_all();
 	pthread_mutex_destroy(&d->fruit_mutex);
 }

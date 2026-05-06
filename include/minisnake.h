@@ -161,7 +161,6 @@
 # define MSG_WIN				"YOU WON !"
 
 /* GRAPHICS: ANSI escape codes, colors, and unicode characters */
-# define COLOR_BG_ADWAITA_DARK	"\033[48;2;30;30;30m"
 # define CLEAR_SCREEN			"\033[2J\033[3J\033[H"
 # define ERASE_LINE				"\033[2K"
 # define CURSOR_HIDE			"\033[?25l"
@@ -169,25 +168,25 @@
 # define CURSOR_POS				"\033[%d;%dH"
 # define SCROLL_REGION			"\033[%d;%dr"
 # define SCROLL_RESET			"\033[r"
-# define COLOR_RED              "\033[38;2;224;27;36m"
-# define COLOR_GREEN            "\033[38;2;46;194;126m"
-# define COLOR_YELLOW           "\033[38;2;246;211;45m"
-# define COLOR_MAGENTA          "\033[38;2;192;97;203m"
-# define COLOR_CYAN             "\033[38;2;51;209;122m"
-# define COLOR_WHITE			"\033[38;2;255;255;255m"
+// # define COLOR_RED              "\033[38;2;224;27;36m"
+// # define COLOR_GREEN            "\033[38;2;46;194;126m"
+// # define COLOR_YELLOW           "\033[38;2;246;211;45m"
+// # define COLOR_MAGENTA          "\033[38;2;192;97;203m"
+// # define COLOR_CYAN             "\033[38;2;51;209;122m"
+// # define COLOR_WHITE			"\033[38;2;255;255;255m"
 # define STYLE_BOLD				"\033[1m"
 # define STYLE_NO_BOLD			"\033[22m"
 # define STYLE_RESET			"\033[0m"
 
 # define WALL_CHAR				"░"
-# define WALL_COLOR				COLOR_WHITE
+// # define WALL_COLOR				COLOR_WHITE
 # define SNAKE_IDLE				"🭎"
 # define SNAKE_HEADS			{ "🭨", "🭪", "🭩", "🭫" }
 # define SNAKE_BODY				"▚"
 # define SNAKE_BENDS			{ "▗", "▘" }
-# define SNAKE_COLOR			COLOR_GREEN
+// # define SNAKE_COLOR			COLOR_GREEN
 # define FRUIT_CHAR				"@"
-# define FRUIT_PALETTE			{ COLOR_RED, COLOR_GREEN, COLOR_YELLOW, COLOR_MAGENTA, COLOR_CYAN, COLOR_WHITE }
+// # define FRUIT_PALETTE			{ COLOR_RED, COLOR_GREEN, COLOR_YELLOW, COLOR_MAGENTA, COLOR_CYAN, COLOR_WHITE }
 
 /* MACROS & TYPES: Generic macros and structure definitions */
 # define ARR_SIZE(x)			(sizeof(x) / sizeof(x[0]))
@@ -215,6 +214,13 @@ typedef enum e_dir {
 	STOP, LEFT, RIGHT, UP, DOWN
 }	t_dir;
 
+typedef enum e_color {
+	C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE, C_BG, C_MAX
+}	t_color;
+
+extern const char *PALETTE_MODERN[C_MAX];
+extern const char *PALETTE_LEGACY[C_MAX];
+
 /* Main structure */
 typedef struct s_data {
 	/* Configuration & rules - keep this block first for default rules initialization */
@@ -228,6 +234,7 @@ typedef struct s_data {
 	t_dir			dir[2]; /* dir[0]: current, dir[1]: previous */
 	int				x[MAX_SIZE + 1], y[MAX_SIZE + 1]; /* Snake body */
 	int				input_q[INPUT_Q_SIZE + 1];
+	const char		**theme; /* Active color palette */
 	const char		*fruit_color;
 	pthread_mutex_t	fruit_mutex;
 
@@ -240,7 +247,7 @@ typedef struct s_data {
 void				read_fruit(t_data *d, int *x, int *y, const char **color);
 void				write_fruit(t_data *d, int x, int y, const char *color);
 void				spawn_fruit(t_data *d);
-const char			*fruit_color(void);
+const char			*fruit_color(t_data *d);
 void				game_loop(t_data *d);
 
 /* minisnake_sys - System functions */

@@ -128,8 +128,8 @@ You can customize graphical settings and input buffers purely for the client by 
 
 ### Terminal compatibility
 
-- **Truecolor required for best visuals:** The client now uses 24-bit (truecolor) ANSI color sequences for its palette (including orange, cyan, and gradients). Ensure your terminal supports truecolor (most modern terminals such as xfce4-terminal, gnome-terminal, Alacritty, Kitty, and recent versions of Konsole do).
-- **Spawned terminals receive enhanced styling:** When the game spawns a terminal (via the built-in launcher), it sets the environment variable `MINISNAKE_LAUNCHED` so the client applies the enhanced background/text color sequences automatically. Running the binary directly in a terminal that does not advertise truecolor or does not set this variable may fall back to simpler colors.
+- **Dynamic Color Palettes:** The client features a smart, dynamic theme system. Under normal execution, it gracefully defaults to a universal 16-color ANSI legacy palette, blending natively with your existing terminal background and color scheme.
+- **Modern TrueColor Mode:** When the game spawns a dedicated terminal (via the built-in launcher) or detects the `MINISNAKE_LAUNCHED` environment variable, it automatically switches to a beautiful 24-bit TrueColor modern palette (inspired by GNOME Adwaita) featuring a custom dark background and vibrant accents. Ensure your terminal supports TrueColor for the best visual experience.
 - **xfce4-terminal flags:** The launcher passes background/text color options to `xfce4-terminal` where available to better match the in-game theme. If your system's terminal does not accept these flags, visuals will still work but may appear different.
 
 

@@ -252,7 +252,7 @@ static void *async_http_worker(void *arg) {
 				
 				/* The server now guarantees it will never return a phantom fruit due to 
 				   idempotency checks (LastSeq). We can blindly trust the coordinates. */
-				write_fruit(req->d, fruit_x, fruit_y, fruit_color());
+				write_fruit(req->d, fruit_x, fruit_y, fruit_color(req->d));
 			}
 		}
 	}
@@ -378,7 +378,7 @@ int start_session(t_data *d) {
 		d->y[0] = atoi(hy_str);
 		d->fruit_x = atoi(fx_str);
 		d->fruit_y = atoi(fy_str);
-		d->fruit_color = fruit_color();
+		d->fruit_color = fruit_color(d);
 	}
 	return (1);
 }
@@ -421,7 +421,8 @@ static int show_leaderboard(t_data *d) {
 	const char	title[] = LB_TITLE;
 	const int	title_col = LB_COL_OFFSET + ((d->width - sizeof(title) + 1) >> 1);
 
-	printf(CLEAR_SCREEN CURSOR_POS COLOR_MAGENTA STYLE_BOLD "%s" STYLE_NO_BOLD COLOR_WHITE, LB_TITLE_ROW, title_col, title);
+	printf(CLEAR_SCREEN CURSOR_POS "%s" STYLE_BOLD "%s" STYLE_NO_BOLD "%s", 
+		LB_TITLE_ROW, title_col, d->theme[C_MAGENTA], title, d->theme[C_WHITE]);
 	char *body = skip_headers(resp);
 
 	int			rank = 1, row = LB_START_ROW;
@@ -444,7 +445,10 @@ static int show_leaderboard(t_data *d) {
 /* Prompts the user for an alphanumeric name, loops until valid or EOF */
 static void get_player_name(t_data *d, char *name, size_t size) {
 	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
-	if (getenv(ENV_VAR)) printf(COLOR_BG_ADWAITA_DARK COLOR_WHITE);
+	
+	/* Clean dynamic theme application. In legacy mode, C_BG_MAIN is empty string. */
+	printf("%s%s", d->theme[C_BG], d->theme[C_WHITE]);
+
 	while (printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL),
 		fflush(stdout),
 		!name[0] && fgets(name, size, stdin)) {

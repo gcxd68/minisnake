@@ -141,7 +141,7 @@ void spawn_fruit(t_data *d) {
 	} while (i < d->size);
 
 	/* Safe write for local generation */
-	write_fruit(d, fruit_x, fruit_y, fruit_color());
+	write_fruit(d, fruit_x, fruit_y, fruit_color(d));
 }
 
 static void	update_game(t_data *d) {
@@ -198,9 +198,10 @@ static void	update_game(t_data *d) {
 		spawn_fruit(d);
 }
 
-const char *fruit_color(void) {
-	static const char *palette[] = FRUIT_PALETTE;
-	return palette[sys_rand() % ARR_SIZE(palette)];
+const char *fruit_color(t_data *d) {
+	/* Array of allowed fruit color indices */
+	static const t_color fruits[] = { C_RED, C_GREEN, C_YELLOW, C_MAGENTA, C_CYAN, C_WHITE };
+	return d->theme[fruits[sys_rand() % ARR_SIZE(fruits)]];
 }
 
 static void	render(t_data *d) {
@@ -218,9 +219,9 @@ static void	render(t_data *d) {
 		printf(CURSOR_POS " ", d->y[d->size] + 2, d->x[d->size] + 2);
 		
 	if (d->size > 1)
-		printf(SNAKE_COLOR CURSOR_POS "%s", d->y[1] + 2, d->x[1] + 2,
-			(d->dir[0] + d->dir[1] == BEND_TURN_SUM) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);
-			
+		printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->y[1] + 2, d->x[1] + 2,
+			(d->dir[0] + d->dir[1] == BEND_TURN_SUM) ? bends[(d->dir[0] % 2)] : SNAKE_BODY);		
+
 	if (fruit_x >= 0 && fruit_y >= 0) {
 		for (int i = 0; i < d->size; i++) {
 			if (d->x[i] == fruit_x && d->y[i] == fruit_y) {
@@ -231,11 +232,11 @@ static void	render(t_data *d) {
 	}
 
 	if (fruit_x >= 0 && fruit_y >= 0 && !fruit_hidden)
-		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD COLOR_WHITE,
-			fruit_y + 2, fruit_x + 2, d->fruit_color ? d->fruit_color : COLOR_RED);
+		printf(CURSOR_POS "%s" STYLE_BOLD FRUIT_CHAR STYLE_NO_BOLD "%s",
+			fruit_y + 2, fruit_x + 2, d->fruit_color ? d->fruit_color : d->theme[C_RED], d->theme[C_WHITE]);
 			
-	printf(SNAKE_COLOR CURSOR_POS "%s", d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
-	printf(COLOR_WHITE CURSOR_POS "%d \n", d->height + 3, 8, d->score);
+	printf("%s" CURSOR_POS "%s", d->theme[C_GREEN], d->y[0] + 2, d->x[0] + 2, heads[d->dir[0] - 1]);
+	printf("%s" CURSOR_POS "%d \n", d->theme[C_WHITE], d->height + 3, 8, d->score);
 }
 
 void	game_loop(t_data *d) {
