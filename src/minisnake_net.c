@@ -117,7 +117,7 @@ typedef struct s_req {
 
 static t_req g_req_pool[REQ_POOL_SIZE];
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
-static int g_shutting_down = 0;
+static int g_shutting_down = 0; /* Signals workers to abort their backoff loops on teardown */
 
 static int server_connect(void) {
 	struct sockaddr_in	addr;
@@ -125,26 +125,19 @@ static int server_connect(void) {
 	int					fd;
 	struct timeval		tv;
 
-	/* 1. Resolve host and establish address */
-	if (!(he = gethostbyname(HOST)))
-		return (-1);
+	if (!(he = gethostbyname(HOST))) return (-1);
+	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) return (-1);
 
-	/* 2. Initialize TCP Socket */
-	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-		return (-1);
-
-	/* 3. Configure socket timeouts to prevent dead network blocking */
-	tv.tv_sec = 2; /* 2 seconds timeout */
+	/* Configure socket timeouts to prevent dead network blocking */
+	tv.tv_sec = 2;
 	tv.tv_usec = 0;
 	setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
 	setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
 
-	/* 4. Initiate remote connection parameters */
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(atoi(PORT)); 
 	addr.sin_addr = *(struct in_addr *)he->h_addr;
 	
-	/* 5. Connect and return descriptor */
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
 		return (close(fd), -1);
 	return (fd);
@@ -357,6 +350,8 @@ int start_session(t_data *d) {
 		return (0);
 	char *body = skip_headers(resp);
 	
+	/* Server Authority: The backend dictates the initial coordinates 
+	   (token|head_x|head_y|fruit_x|fruit_y) to prevent client-side RNG tampering */
 	char *saveptr, *token_str = strtok_r(body, "|", &saveptr);
 	if (!token_str) return (0);
 
