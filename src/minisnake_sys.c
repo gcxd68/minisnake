@@ -332,7 +332,7 @@ static void	init_game(t_data *d) {
 
 	pthread_mutex_init(&d->fruit_mutex, NULL);
 
-	d->online = (check_rules_sync(d) && start_session(d));
+	d->online = (d->online && check_rules_sync(d) && start_session(d));
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	if (!d->online) {
 		d->seed = sys_rand();
