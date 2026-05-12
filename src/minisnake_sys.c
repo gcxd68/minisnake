@@ -328,14 +328,11 @@ static void	init_game(t_data *d) {
 
 	if (!save_state.size)
 		save_state = *d;
-	if (!d->online && save_state.online)
-		save_state.online = 0;
 	*d = save_state;
 
 	pthread_mutex_init(&d->fruit_mutex, NULL);
 
-	if (d->online && !start_session(d))
-		d->online = 0;
+	d->online = (check_rules_sync(d) && start_session(d));
 	memset(d->input_q, EOF, sizeof(d->input_q));
 	if (!d->online) {
 		d->seed = sys_rand();

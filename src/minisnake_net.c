@@ -4,6 +4,7 @@
 
 int		check_client_version(void) { return (0); }
 int		fetch_server_rules(t_data *d) { (void)d; return (0); }
+int		check_rules_sync(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
 void	notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
 void	handle_leaderboard(t_data *d) { (void)d; }
@@ -340,9 +341,30 @@ int fetch_server_rules(t_data *d) {
 	return (1);
 }
 
-int start_session(t_data *d) {
-	if (!d->online) return (0);
+int	check_rules_sync(t_data *d) {
+	t_data tmp; /* Disposable structure to store the server's response */
 
+	/* 1. Fetch the rules into the temporary structure */
+	if (!fetch_server_rules(&tmp))
+		return (0);
+
+	/* 2. Field-by-field comparison */
+	if (d->width != tmp.width ||
+		d->height != tmp.height ||
+		d->delay != tmp.delay ||
+		d->speedup_factor != tmp.speedup_factor ||
+		d->points_per_fruit != tmp.points_per_fruit ||
+		d->cheat_timeout != tmp.cheat_timeout ||
+		d->grow != tmp.grow ||
+		d->penalty_interval != tmp.penalty_interval ||
+		d->penalty_amount != tmp.penalty_amount ||
+		d->spawn_fruit_max_attempts != tmp.spawn_fruit_max_attempts)
+		return (0); /* Desynchronization detected! */
+
+	return (1); /* Everything is perfectly synced */
+}
+
+int start_session(t_data *d) {
 	char	resp[BUF_RESP_SUBMIT];
 	
 	d->token[0] = '\0';

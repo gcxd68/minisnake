@@ -249,6 +249,7 @@ uint32_t			lcg_rand(uint32_t *seed);
 /* minisnake_net.c - Network functions */
 int					check_client_version(void);
 int					fetch_server_rules(t_data *d);
+int					check_rules_sync(t_data *d);
 int					start_session(t_data *d);
 void				notify_server(t_data *d, const char *action, int fx, int fy);
 void				handle_leaderboard(t_data *d);
