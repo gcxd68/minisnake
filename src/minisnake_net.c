@@ -7,7 +7,7 @@ int		check_client_version(void) { return (0); }
 int		fetch_server_rules(t_data *d) { (void)d; return (0); }
 int		check_rules_sync(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
-int		notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; return (0); }
+void	notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; return (0); }
 void	handle_leaderboard(t_data *d) { (void)d; }
 void	net_wait_all(void) {}
 
@@ -242,7 +242,7 @@ static void *async_http_worker(void *arg) {
 	if (ret != 0 && req->d && req->d->online) {
 		req->d->online = 0;
 		req->d->seed = sys_rand();
-		spawn_fruit(req->d);
+		set_fruit_state(req->d, -1, -1, NULL);
 		refresh_network_status(req->d);
 	}
 
@@ -409,8 +409,9 @@ int start_session(t_data *d) {
 		d->fruit_x = atoi(fx_str);
 		d->fruit_y = atoi(fy_str);
 		d->fruit_color = fruit_color(d);
+		return (1);
 	}
-	return (1);
+	return (0);
 }
 
 void	notify_server(t_data *d, const char *action, int fx, int fy) {

@@ -183,6 +183,11 @@ static void	update_game(t_data *d) {
 	int fruit_x, fruit_y;
 	get_fruit_state(d, &fruit_x, &fruit_y, NULL);
 
+	if (!d->online && fruit_x == -1) {
+		spawn_fruit(d);
+		get_fruit_state(d, &fruit_x, &fruit_y, NULL);
+	}
+
 	if (d->body_x[0] != fruit_x || d->body_y[0] != fruit_y) return;
 
 	d->grow = 1;

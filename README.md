@@ -31,7 +31,8 @@ If you want to customize the game or run your own server:
     - **Latency-Aware Spawning:** A probability cloud algorithm ensures fruits never spawn where you are locally, compensating for network lag.
     - **Behavioral Telemetry:** Heuristics auto-calibrate dynamically from early player data to analyze movement variance and shadowban bots with high accuracy.
 - 🎨 **Modern TUI:** Features VT100 scrolling regions, Unicode graphics, and real-time network status indicators (ONLINE/OFFLINE).
-- ⚙️ **Dynamic Rules:** Game mechanics (speed, grid size, and related limits) are synced from the server on startup in Online Mode.
+- ⚙️ **Dynamic Rules:** Game mechanics (speed, grid size, and related limits) are synced from the server on startup.
+- 🔌 **Graceful Fallback:** Seamlessly switches to offline mode with local RNG seeding if the connection is lost during a session.
 
 ---
 

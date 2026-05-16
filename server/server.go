@@ -175,7 +175,7 @@ func getRemoteIP(r *http.Request) string {
 }
 
 func applyPenalties(session *Session, newSteps int) {
-	if Rules.PenaltyInterval <= 0 {
+	if Rules.PenaltyInterval <= 0 || newSteps-session.LastSteps > 10000 {
 		return
 	}
 	for step := session.LastSteps + 1; step <= newSteps; step++ {
@@ -247,25 +247,31 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func flagIfBotFingerprint(r *http.Request, session *Session, ip, token string) bool {
-	if r.Proto != "HTTP/1.0" || r.Header.Get("User-Agent") != "" || r.Header.Get("Accept") != "" {
-		session.Cheated = true
-		log.Printf("[%s] [%s...] [SHADOWBAN_FINGERPRINT]", ip, token[:8])
-		return true
-	}
-	return false
-}
-
 func cleanupStaleData() {
 	sessionMutex.Lock()
 	for token, session := range activeSessions {
-		// No need to lock the individual session here as we are deleting it,
-		// and the map lock prevents new requests from acquiring it.
-		if time.Since(session.LastPing).Seconds() > 900 {
+		session.Lock()
+		isStale := time.Since(session.LastPing).Seconds() > 900
+		session.Unlock()
+
+		if isStale {
 			delete(activeSessions, token)
 		}
 	}
 	sessionMutex.Unlock()
+}
+
+// Garbage collects stale IP tracking data to prevent memory leaks
+// from unbound map growth during extended high-traffic uptimes.
+func cleanupStaleIPs() {
+	ipMutex.Lock()
+	defer ipMutex.Unlock()
+
+	for ip, data := range ipDataMap {
+		if time.Since(data.WindowStart) > time.Minute {
+			delete(ipDataMap, ip)
+		}
+	}
 }
 
 // SimulatePath safely replays the client's path instantly.
@@ -427,7 +433,7 @@ func (session *Session) CheckBehavioralAnalytics(fx, fy, deltaSteps int, ip, tok
 
 				if len(baselinePathingInefficiency) < CalibrationLimit {
 					isCalibrating = true
-					if !session.Calibrated && variance > 0.5 {
+					if !session.Calibrated {
 						baselinePathingInefficiency = append(baselinePathingInefficiency, variance)
 						session.Calibrated = true
 						log.Printf("[%s] [%s...] [CALIBRATION] Learning... %d/%d (inefficiency variance: %.2f)", ip, token[:8], len(baselinePathingInefficiency), CalibrationLimit, variance)
@@ -587,7 +593,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 	session.Lock()
 	defer session.Unlock()
 
-	if session.Cheated || flagIfBotFingerprint(r, session, ip, token) {
+	if session.Cheated {
 		sendFakeFruit()
 		return
 	}
@@ -696,7 +702,9 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 	sessionMutex.Unlock()
 
 	if exists {
-		// Log safely since the session object itself is now detached from the map
+		session.Lock()
+		defer session.Unlock()
+
 		log.Printf("[%s] [%s...] [SCORE_IGNORED] reason=no_name score=%d fruits=%d",
 			ip, token[:8], session.Score, session.FruitsEaten)
 	}
@@ -746,7 +754,9 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// We own this detached session now, no need to lock it internally
+	session.Lock()
+	defer session.Unlock()
+
 	if len(name) == 0 || len(name) > 8 || !isAlphanumeric(name) {
 		fmt.Fprint(w, "OK")
 		return
@@ -840,11 +850,13 @@ func main() {
 	initDB()
 	defer db.Close()
 
+	// Background garbage collection worker to ensure memory stability
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for range ticker.C {
 			cleanupStaleData()
+			cleanupStaleIPs()
 		}
 	}()
 
