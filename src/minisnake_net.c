@@ -2,11 +2,12 @@
 
 #ifndef ONLINE_BUILD
 
+void	refresh_network_status(t_data *d) { (void)d; }
 int		check_client_version(void) { return (0); }
 int		fetch_server_rules(t_data *d) { (void)d; return (0); }
 int		check_rules_sync(t_data *d) { (void)d; return (0); }
 int		start_session(t_data *d) { (void)d; return (0); }
-void	notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; }
+int		notify_server(t_data *d, const char *action, int fx, int fy) { (void)d; (void)action; (void)fx; (void)fy; return (0); }
 void	handle_leaderboard(t_data *d) { (void)d; }
 void	net_wait_all(void) {}
 
@@ -201,6 +202,16 @@ static char *skip_headers(char *response) {
 	return (response);
 }
 
+void	refresh_network_status(t_data *d) {
+	const char	*net_msg = d->online ? "ONLINE" : "OFFLINE";
+	const char	*net_col = d->online ? d->theme[C_GREEN] : d->theme[C_RED];
+	const int	net_x = MAX(15, (d->width + 2) - (int)strlen(net_msg) + 1);
+
+	printf(CURSOR_POS "       ", d->height + 3, net_x); 
+	printf(CURSOR_POS "%s%s%s", d->height + 3, net_x, net_col, net_msg, d->theme[C_WHITE]);
+	fflush(stdout);
+}
+
 static void *async_http_worker(void *arg) {
 	t_req	*req = (t_req *)arg;
 	char	resp[BUF_RESP_SUBMIT];
@@ -228,8 +239,15 @@ static void *async_http_worker(void *arg) {
 		delay = MIN(delay * 2, BACKOFF_MAX_DELAY);
 	}
 
+	if (ret != 0 && req->d && req->d->online) {
+		req->d->online = 0;
+		req->d->seed = sys_rand();
+		spawn_fruit(req->d);
+		refresh_network_status(req->d);
+	}
+
 	/* 2. Parse new fruit coordinates from response */
-	if (!ret) {
+	else if (!ret) {
 		if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
 			char	*body = skip_headers(resp);
 			char	*sep = strchr(body, '|');
@@ -395,7 +413,7 @@ int start_session(t_data *d) {
 	return (1);
 }
 
-void notify_server(t_data *d, const char *action, int fx, int fy) {
+void	notify_server(t_data *d, const char *action, int fx, int fy) {
 	if (!IS_SESSION_ACTIVE(d)) return;
 
 	char path[BUF_PATH];
@@ -408,7 +426,9 @@ void notify_server(t_data *d, const char *action, int fx, int fy) {
 	} else {
 		snprintf(path, sizeof(path), "/%s/%s", action, d->token);
 		fire_and_forget(path, NULL, d);
-	}}
+	}
+}
+
 
 static int end_session(t_data *d, const char *name) {
 	if (!IS_SESSION_ACTIVE(d)) return (-1);
@@ -454,7 +474,6 @@ static int show_leaderboard(t_data *d) {
 
 static void get_player_name(t_data *d, char *name, size_t size) {
 	printf(SCROLL_REGION, d->height + UI_PROMPT_ROW_OFF, d->height + UI_PROMPT_ROW_OFF + 1);
-	printf("%s%s", d->theme[C_BG], d->theme[C_WHITE]);
 	while (printf(CURSOR_POS ERASE_LINE "Name: ", d->height + UI_PROMPT_ROW_OFF, UI_PROMPT_COL),
 		fflush(stdout),
 		!name[0] && fgets(name, size, stdin)) {
