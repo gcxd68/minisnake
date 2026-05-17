@@ -22,7 +22,7 @@
 # endif
 
 /* Client software version for backend synchronization and update enforcement */
-# define CLIENT_VERSION					"v0.88"
+# define CLIENT_VERSION					"v0.89"
 
 /* GAME CONFIGURATION: Dimensions, speeds, and rules */
 # define MIN_WIDTH						2
@@ -232,7 +232,7 @@ typedef struct s_data {
 
 	/* Network & telemetry */
 	char			token[33], path[MAX_SIZE + 1];
-	int				seq, path_steps, missing_fruit_frames;
+	int				seq, path_steps, missing_fruit_frames, last_applied_seq;
 }	t_data;
 
 /* minisnake_game - Gameplay functions */

@@ -28,10 +28,10 @@ If you want to customize the game or run your own server:
 - 🌐 **Authoritative Online Mode:** Global leaderboards powered by a Go backend that validates every move, resilient against latency shifts and micro-disconnects.
 - 🛡️ **Advanced Anti-Cheat:**
     - **Server-Side Physics:** Every move is replayed on the server using O(1) Spatial Hashing.
-    - **Latency-Aware Spawning:** A probability cloud algorithm ensures fruits never spawn where you are locally, compensating for network lag.
+    - **Latency-Aware Spawning & Idempotency:** A probability cloud algorithm ensures fruits never spawn where you are locally, while a sequence-based idempotency layer prevents stale or duplicate updates from impacting the local state.
     - **Behavioral Telemetry:** Heuristics auto-calibrate dynamically from early player data to analyze movement variance and shadowban bots with high accuracy.
 - 🎨 **Modern TUI:** Features VT100 scrolling regions, Unicode graphics, and real-time network status indicators (ONLINE/OFFLINE).
-- ⚙️ **Dynamic Rules:** Game mechanics (speed, grid size, and related limits) are synced from the server on startup.
+- ⚙️ **Synchronized State:** Game mechanics (speed, grid size, and related limits) and fruit synchronization are managed through a robust sequence-tracked protocol.
 - 🔌 **Graceful Fallback:** Seamlessly switches to offline mode with local RNG seeding if the connection is lost during a session.
 
 ---

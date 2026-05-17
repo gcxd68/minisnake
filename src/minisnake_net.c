@@ -213,6 +213,21 @@ void	refresh_network_status(t_data *d) {
 	fflush(stdout);
 }
 
+static void apply_fruit_response(t_data *d, int resp_seq, int x, int y) {
+	if (x < 0 || y < 0) return; /* Stale / cheated / missing session */
+
+	const char *color = fruit_color(d); /* Outside of mutex (uses rand()) */
+
+	pthread_mutex_lock(&d->fruit_mutex);
+	if (resp_seq >= d->last_applied_seq) {
+		d->last_applied_seq = resp_seq;
+		d->fruit_x = x;
+		d->fruit_y = y;
+		d->fruit_color = color;
+	}
+	pthread_mutex_unlock(&d->fruit_mutex);
+}
+
 static void *async_http_worker(void *arg) {
 	t_req	*req = (t_req *)arg;
 	char	resp[BUF_RESP_SUBMIT];
@@ -250,18 +265,22 @@ static void *async_http_worker(void *arg) {
 	/* 2. Parse new fruit coordinates from response */
 	else if (!ret) {
 		if ((strncmp(req->path, "/eat", 4) == 0 || strncmp(req->path, "/sync", 5) == 0) && req->d) {
-			char	*body = skip_headers(resp);
-			char	*sep = strchr(body, '|');
-			
-			/* Custom safety check to avoid silent "0" on garbage data */
-			if (sep && (isdigit(body[0]) || body[0] == '-') && (isdigit(*(sep + 1)) || *(sep + 1) == '-')) {
-				*sep = '\0';
-				int fruit_x = atoi(body);
-				int fruit_y = atoi(sep + 1);
-				
-				/* The server now guarantees it will never return a phantom fruit due to 
-				   idempotency checks (LastSeq). We can blindly trust the coordinates. */
-				set_fruit_state(req->d, fruit_x, fruit_y, fruit_color(req->d));
+			char *body = skip_headers(resp);
+			char *p1 = strchr(body, '|');
+			char *p2 = p1 ? strchr(p1 + 1, '|') : NULL;
+
+			/* Expected format: "seq|fx|fy". We validate each segment begins
+			   with a digit or '-' before calling atoi to avoid silent "0"s. */
+			if (p1 && p2 &&
+				(isdigit((unsigned char)body[0])   || body[0]   == '-') &&
+				(isdigit((unsigned char)p1[1])     || p1[1]     == '-') &&
+				(isdigit((unsigned char)p2[1])     || p2[1]     == '-')) {
+				*p1 = '\0';
+				*p2 = '\0';
+				int resp_seq = atoi(body);
+				int fruit_x  = atoi(p1 + 1);
+				int fruit_y  = atoi(p2 + 1);
+				apply_fruit_response(req->d, resp_seq, fruit_x, fruit_y);
 			}
 		}
 	}
@@ -422,9 +441,14 @@ void	notify_server(t_data *d, const char *action, int fx, int fy) {
 	char body[BUF_JSON_PAYLOAD];
 
 	if (strcmp(action, "eat") == 0) {
-		snprintf(path, sizeof(path), "/eat/%s", d->token); 
-		snprintf(body, sizeof(body), "{\"seq\":%d,\"steps\":%d,\"fx\":%d,\"fy\":%d,\"path\":\"%s\"}", d->seq, d->steps, fx, fy, d->path);
+		snprintf(path, sizeof(path), "/eat/%s", d->token);
+		snprintf(body, sizeof(body),
+			"{\"seq\":%d,\"steps\":%d,\"fx\":%d,\"fy\":%d,\"path\":\"%s\"}",
+			d->seq, d->steps, fx, fy, d->path);
 		fire_and_forget(path, body, d);
+	} else if (strcmp(action, "sync") == 0) {
+		snprintf(path, sizeof(path), "/sync/%s/%d", d->token, d->seq);
+		fire_and_forget(path, NULL, d);
 	} else {
 		snprintf(path, sizeof(path), "/%s/%s", action, d->token);
 		fire_and_forget(path, NULL, d);

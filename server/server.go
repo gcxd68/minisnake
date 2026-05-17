@@ -25,7 +25,7 @@ const (
 	DBPath                = "scores.db"
 	MaxActiveSessions     = 5000
 	MaxReqPerSec          = 20
-	RequiredClientVersion = "v0.88"
+	RequiredClientVersion = "v0.89"
 )
 
 // --- Structures ---
@@ -581,11 +581,12 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 		fakeX := int((fakeSeed >> 16) % uint32(Rules.GameWidth))
 		fakeSeed = lcgRand(fakeSeed)
 		fakeY := int((fakeSeed >> 16) % uint32(Rules.GameHeight))
-		fmt.Fprintf(w, "%d|%d", fakeX, fakeY)
+		// We stamp with the client seq to stay consistent with the rest of the protocol.
+		fmt.Fprintf(w, "%d|%d|%d", payload.Seq, fakeX, fakeY)
 	}
 
 	if !exists {
-		fmt.Fprint(w, "0|0")
+		fmt.Fprint(w, "-1|-1|-1") // missing session: stale, the client will not apply
 		return
 	}
 
@@ -600,10 +601,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	// --- IDEMPOTENCY CHECK (Absolute protection against retries) ---
 	if payload.Seq <= session.LastSeq {
-		// The client has already eaten this fruit (request replayed by backoff).
-		// We don't punish them; we just return the current target
-		// so they can resynchronize.
-		fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
+		fmt.Fprintf(w, "%d|%d|%d", session.LastSeq, session.TargetFruit.X, session.TargetFruit.Y)
 		return
 	}
 
@@ -671,7 +669,7 @@ func handleEat(w http.ResponseWriter, r *http.Request) {
 
 	spawnFruit(session, payload.Fx, payload.Fy, session.VacatedTailX, session.VacatedTailY, latencySteps)
 
-	fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
+	fmt.Fprintf(w, "%d|%d|%d", session.LastSeq, session.TargetFruit.X, session.TargetFruit.Y)
 }
 
 func handleCheat(w http.ResponseWriter, r *http.Request) {
@@ -714,13 +712,18 @@ func handleQuit(w http.ResponseWriter, r *http.Request) {
 
 func handleSync(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
+	clientSeq, err := strconv.Atoi(r.PathValue("client_seq"))
+	if err != nil {
+		fmt.Fprint(w, "-1|-1|-1")
+		return
+	}
 
 	sessionMutex.RLock()
 	session, exists := activeSessions[token]
 	sessionMutex.RUnlock()
 
 	if !exists {
-		fmt.Fprint(w, "-1|-1")
+		fmt.Fprint(w, "-1|-1|-1")
 		return
 	}
 
@@ -728,11 +731,20 @@ func handleSync(w http.ResponseWriter, r *http.Request) {
 	defer session.Unlock()
 
 	if session.Cheated {
-		fmt.Fprint(w, "-1|-1")
+		fmt.Fprint(w, "-1|-1|-1")
 		return
 	}
 
-	fmt.Fprintf(w, "%d|%d", session.TargetFruit.X, session.TargetFruit.Y)
+	// STALE GUARD: the client has already issued an /eat (seq higher than what
+	// the server has processed). TargetFruit therefore still points to the old fruit
+	// already eaten by the client. We refuse to answer to avoid
+	// making a ghost fruit reappear.
+	if clientSeq > session.LastSeq {
+		fmt.Fprint(w, "-1|-1|-1")
+		return
+	}
+
+	fmt.Fprintf(w, "%d|%d|%d", session.LastSeq, session.TargetFruit.X, session.TargetFruit.Y)
 }
 
 func handleSubmit(w http.ResponseWriter, r *http.Request) {
@@ -866,7 +878,7 @@ func main() {
 	mux.HandleFunc("POST /eat/{token}", handleEat)
 	mux.HandleFunc("GET /cheat/{token}", handleCheat)
 	mux.HandleFunc("GET /quit/{token}", handleQuit)
-	mux.HandleFunc("GET /sync/{token}", handleSync)
+	mux.HandleFunc("GET /sync/{token}/{client_seq}", handleSync)
 	mux.HandleFunc("GET /submit/{token}/{name}/{steps}", handleSubmit)
 	mux.HandleFunc("GET /scores/{limit}", handleScores)
 
