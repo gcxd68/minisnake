@@ -159,6 +159,8 @@
 # define INSTRUCTIONS			"Use " MOVE_KEYS " to move, " EXIT_KEY " to quit"
 # define MSG_LOSS				"GAME OVER"
 # define MSG_WIN				"YOU WON !"
+# define ONLINE					"ONLINE"
+# define OFFLINE				"OFFLINE"
 
 /* GRAPHICS: ANSI escape codes, colors, and unicode characters */
 # define CLEAR_SCREEN			"\033[2J\033[3J\033[H"

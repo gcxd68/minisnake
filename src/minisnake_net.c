@@ -203,11 +203,12 @@ static char *skip_headers(char *response) {
 }
 
 void	refresh_network_status(t_data *d) {
-	const char	*net_msg = d->online ? "ONLINE" : "OFFLINE";
+	const char	*net_msg = d->online ? ONLINE : OFFLINE;
 	const char	*net_col = d->online ? d->theme[C_GREEN] : d->theme[C_RED];
 	const int	net_x = MAX(15, (d->width + 2) - (int)strlen(net_msg) + 1);
 
-	printf(CURSOR_POS "       ", d->height + 3, net_x); 
+	printf(CURSOR_POS ERASE_LINE, d->height + 3, 1);
+	printf(CURSOR_POS "%sScore: %d", d->height + 3, 1, d->theme[C_WHITE], d->score);
 	printf(CURSOR_POS "%s%s%s", d->height + 3, net_x, net_col, net_msg, d->theme[C_WHITE]);
 	fflush(stdout);
 }

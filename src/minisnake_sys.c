@@ -384,6 +384,9 @@ static void	finalize(t_data *d) {
 	const int	col = MAX(d->width - (int)strlen(outcome) + 3,
 					(int)strlen(INSTRUCTIONS) - (int)strlen(outcome) + 1);
 
+	printf(CURSOR_POS ERASE_LINE, d->height + 3, 1);
+	printf(CURSOR_POS "%sScore: %d", d->height + 3, 1, d->theme[C_WHITE], d->score);
+	
 	/* Use dynamic colors for win/loss message */
 	printf(CURSOR_POS "%s%s%s", d->height + 3, col, 
 		d->game_over ? d->theme[C_RED] : d->theme[C_GREEN], outcome, d->theme[C_WHITE]);
