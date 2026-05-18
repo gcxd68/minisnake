@@ -85,12 +85,28 @@ static void sync_fruit_state(t_data *d) {
 	if (fruit_x == -1 || fruit_y == -1) {
 		d->missing_fruit_frames++;
 
-		if (d->missing_fruit_frames > MAX_MISSING_FRUIT_FRAMES) {
-			notify_server(d, "sync", 0, 0);
-			d->missing_fruit_frames = 0;
+		/* 1. Start the wall-clock timer on the first missing frame */
+		if (d->missing_fruit_frames == 1) {
+			struct timespec ts;
+			clock_gettime(CLOCK_MONOTONIC, &ts);
+			d->fruit_hidden_at_ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 		}
-	} else
+
+		/* 2. Hard UX timeout: signal workers to abort backoff immediately */
+		struct timespec ts;
+		clock_gettime(CLOCK_MONOTONIC, &ts);
+		long now_ms = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+		if (now_ms - d->fruit_hidden_at_ms > OFFLINE_FALLBACK_MS)
+			d->ux_offline_requested = 1;
+
+		/* 3. Keep polling the server every MAX_MISSING_FRUIT_FRAMES */
+		if (d->missing_fruit_frames % MAX_MISSING_FRUIT_FRAMES == 0)
+			notify_server(d, "sync", 0, 0);
+	} else {
 		d->missing_fruit_frames = 0;
+		d->fruit_hidden_at_ms = 0;
+		d->ux_offline_requested = 0;
+	}
 }
 
 #endif

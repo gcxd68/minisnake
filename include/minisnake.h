@@ -72,6 +72,10 @@
 # define EXT_KEY_OFFSET					256
 # define BEND_TURN_SUM					5
 
+/* NETWORK TIMING & SYNC: Frame counts and timeouts */
+# define MAX_MISSING_FRUIT_FRAMES	20
+# define OFFLINE_FALLBACK_MS		3000
+
 /* PREPROCESSOR CHECKS: Compile-time safety validation */
 # if MIN_WIDTH < 2
 #  error "MIN_WIDTH must be >= 2"
@@ -232,7 +236,8 @@ typedef struct s_data {
 
 	/* Network & telemetry */
 	char			token[33], path[MAX_SIZE + 1];
-	int				seq, path_steps, missing_fruit_frames, last_applied_seq;
+	int				seq, path_steps, missing_fruit_frames, last_applied_seq, ux_offline_requested;
+	long			fruit_hidden_at_ms;
 }	t_data;
 
 /* minisnake_game - Gameplay functions */

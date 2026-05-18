@@ -214,7 +214,8 @@ void	refresh_network_status(t_data *d) {
 }
 
 static void apply_fruit_response(t_data *d, int resp_seq, int x, int y) {
-	if (x < 0 || y < 0) return; /* Stale / cheated / missing session */
+	/* Reject zombie packets if we have already fallen back to offline */
+	if (!d->online || x < 0 || y < 0) return;
 
 	const char *color = fruit_color(d); /* Outside of mutex (uses rand()) */
 
@@ -241,22 +242,28 @@ static void *async_http_worker(void *arg) {
 		
 		if (!ret || retries >= BACKOFF_MAX_RETRIES) break;
 
-		/* Sleep in small increments to quickly detect shutdown signals */
+		/* Sleep in small increments to quickly detect shutdown or UX abort signals */
 		int slept = 0;
 		while (slept < delay) {
 			pthread_mutex_lock(&g_pool_mutex);
 			is_shutting_down = g_shutting_down;
 			pthread_mutex_unlock(&g_pool_mutex);
 			if (is_shutting_down) break;
+
+			/* UX abort: game loop timed out waiting for this response */
+			if (req->d && req->d->ux_offline_requested) break;
+
 			usleep(NET_POLL_INTERVAL);
 			slept += NET_POLL_INTERVAL;
 		}
+		if (req->d && req->d->ux_offline_requested) break;
 		retries++;
 		delay = MIN(delay * 2, BACKOFF_MAX_DELAY);
 	}
 
 	if (ret != 0 && req->d && req->d->online) {
 		req->d->online = 0;
+		req->d->ux_offline_requested = 0; /* Reset for next session if any */
 		req->d->seed = sys_rand();
 		set_fruit_state(req->d, -1, -1, NULL);
 		refresh_network_status(req->d);
