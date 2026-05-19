@@ -2,7 +2,7 @@
 
 A terminal-based Snake game written in C, featuring a robust Go backend for authoritative online scoring and anti-cheat protection.
 
-*For the best visual experience, **xfce4-terminal** is highly recommended. However, **gnome-terminal** natively does an excellent job too.*
+*For the best visual experience, **xfce4-terminal** is highly recommended. However, **gnome-terminal** natively does a good job too.*
 
 ## 🚀 Quick Start
 
