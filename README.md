@@ -86,7 +86,7 @@ To connect your manual build to a server:
 
 ## Server Setup
 
-The online leaderboard is handled by the Go backend, which validates the client version, synchronizes rules, and checks submitted scores before accepting them:
+The online leaderboard is handled by the Go backend (AI-assisted, fully understood and maintained). Go was chosen for its concurrency model and fast iteration, while acknowledging its GC introduces non-deterministic latency — acceptable for this use case, but a known tradeoff in latency-sensitive game servers. It validates the client version, synchronizes rules, and checks submitted scores before accepting them:
 
 - **Authoritative Physics & Anti-Cheat:** Evaluates game state strictly. Integrates O(1) Spatial Hashing to prevent wall-phasing and self-collision cheats. Behavioral telemetry algorithms flag impossible speedhacks and bots.
 - **Latency & Time Algorithms:** Uses a dynamic sliding window to absorb network jitter while ensuring total game duration stays within theoretical minimum limits.
