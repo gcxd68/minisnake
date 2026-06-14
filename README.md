@@ -97,9 +97,30 @@ The online leaderboard is handled by the Go backend (AI-assisted, fully understo
 
 The high-performance backend is compiled as a single static binary.
 
+#### Manual Execution
 1. Ensure Go 1.22+ is installed.
 2. Build the server: `make server`.
 3. Start the server: `./bin/server`.
+
+#### Production Deployment (Linux)
+For production environments, you can automatically deploy the backend as a hardened `systemd` service. 
+
+Ensure your production environment respects the following directory structure:
+```text
+/minisnake/
+├── deploy.sh
+├── bin/
+│   └── server
+└── server/
+    ├── .env
+    └── scores.db
+```
+
+Deploy the service by running:
+```bash
+sudo ./deploy.sh
+```
+This automates the build process, applies security sandboxing (`systemd` hardening), maps the service to a non-root user, and resolves database permissions.
 
 ### Dynamic Server Configuration
 
