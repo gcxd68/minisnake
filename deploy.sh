@@ -69,6 +69,9 @@ cat > "${UNIT_PATH}" <<EOF
 [Unit]
 Description=Minisnake Backend Server
 After=network.target
+# On déplace les limites anti-crash ici !
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -80,11 +83,9 @@ Environment=PORT=${PORT}
 # Inject hidden environment variables from .env if present
 EnvironmentFile=-${SERVER_DIR}/.env
 
-# Resilience: restart only on abnormal exit, with an anti-crash-loop guard.
+# Resilience: restart only on abnormal exit
 Restart=on-failure
 RestartSec=3
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # Security hardening: sandbox the service.
 NoNewPrivileges=true
